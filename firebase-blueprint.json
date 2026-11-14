@@ -1,0 +1,632 @@
+{
+  "entities": {
+    "UserProfilePublic": {
+      "title": "UserProfilePublic",
+      "description": "Non-PII public profile displayed in project member rosters and spec authorship.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "role": {
+          "type": "string",
+          "enum": ["PM", "FUNC", "ABAP", "QA", "ADMIN"]
+        },
+        "department": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "role", "updatedAt"]
+    },
+    "UserProfilePrivate": {
+      "title": "UserProfilePrivate",
+      "description": "PII-isolated private user record restricted to owner and admin.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Verified platform administrator record.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "SapProjectDoc": {
+      "title": "SapProjectDoc",
+      "description": "Collaborative SAP ERP implementation project workspace with ABAP standards and membership.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 4,
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["common", "project", "temp"]
+        },
+        "target_sap_release": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "start_date": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "end_date": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "memberUids": {
+          "type": "array",
+          "description": "Bounded list of member UIDs (max 50)."
+        },
+        "memberNames": {
+          "type": "array",
+          "description": "Bounded list of member display names (max 50)."
+        },
+        "modules": {
+          "type": "array",
+          "description": "Bounded list of SAP modules (max 10)."
+        },
+        "abap_standards": {
+          "type": "object",
+          "description": "Project-wide ABAP code standards (common TOP/F01 includes, grid class, message class, syntax mode)."
+        },
+        "is_system": {
+          "type": "boolean"
+        },
+        "created_date": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "visibility",
+        "ownerId",
+        "ownerName",
+        "memberUids",
+        "modules",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ProgramSpecDoc": {
+      "title": "ProgramSpecDoc",
+      "description": "SAP ABAP Program Functional & Technical Specification document with lifecycle status.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "project_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "projectVisibility": {
+          "type": "string",
+          "enum": ["common", "project", "temp"]
+        },
+        "projectMemberUids": {
+          "type": "array",
+          "description": "Synced member UIDs from parent project for query-enforced list security (max 50)."
+        },
+        "program_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "tcode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "module": {
+          "type": "string",
+          "enum": ["SD", "MM", "FI", "CO", "PP", "HR", "QM", "PM", "BC", "CM"]
+        },
+        "sample_type": {
+          "type": "string",
+          "enum": ["01", "02", "03", "04"]
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "in_review", "approved", "developed", "qa_passed"]
+        },
+        "approvedBy": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "approvedAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "specData": {
+          "type": "object",
+          "description": "Native Map representation of the full ProgramSpec."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "project_code",
+        "projectVisibility",
+        "projectMemberUids",
+        "program_id",
+        "title",
+        "module",
+        "authorId",
+        "author",
+        "status",
+        "specData",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SpecSnapshotDoc": {
+      "title": "SpecSnapshotDoc",
+      "description": "Immutable full snapshot of a ProgramSpec captured at a named revision milestone.",
+      "type": "object",
+      "properties": {
+        "snapshotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "project_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "projectVisibility": {
+          "type": "string",
+          "enum": ["common", "project", "temp"]
+        },
+        "projectMemberUids": {
+          "type": "array",
+          "description": "Synced member UIDs from parent project (max 50)."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 20
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "comment": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "in_review", "approved", "developed", "qa_passed"]
+        },
+        "specSnapshot": {
+          "type": "object",
+          "description": "Native Map containing full snapshot of ProgramSpec."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "snapshotId",
+        "project_code",
+        "projectVisibility",
+        "projectMemberUids",
+        "version",
+        "authorId",
+        "author",
+        "status",
+        "specSnapshot",
+        "createdAt"
+      ]
+    },
+    "SpecReviewCommentDoc": {
+      "title": "SpecReviewCommentDoc",
+      "description": "Section-level review comment thread with replies and resolution state.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "project_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "spec_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "projectVisibility": {
+          "type": "string",
+          "enum": ["common", "project", "temp"]
+        },
+        "projectMemberUids": {
+          "type": "array",
+          "description": "Synced member UIDs from parent project (max 50)."
+        },
+        "section": {
+          "type": "string",
+          "enum": ["general", "selection", "field_catalog", "data_logic", "governance"]
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "authorRole": {
+          "type": "string",
+          "enum": ["PM", "FUNC", "ABAP", "QA", "ADMIN"]
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "resolvedBy": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "resolvedAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "replies": {
+          "type": "array",
+          "description": "Bounded list of threaded replies (max 50)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "project_code",
+        "spec_id",
+        "projectVisibility",
+        "projectMemberUids",
+        "section",
+        "authorId",
+        "authorName",
+        "authorRole",
+        "body",
+        "resolved",
+        "replies",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MeetingMinuteDoc": {
+      "title": "MeetingMinuteDoc",
+      "description": "Recorded SAP requirements meeting minutes and AI recommendation state.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "project_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "projectVisibility": {
+          "type": "string",
+          "enum": ["common", "project", "temp"]
+        },
+        "projectMemberUids": {
+          "type": "array",
+          "description": "Synced member UIDs from parent project (max 50)."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "status": {
+          "type": "string",
+          "enum": ["recording", "minutes_ready", "recommended", "spec_generated"]
+        },
+        "minuteData": {
+          "type": "object",
+          "description": "Native Map representation of meeting transcript, notes, and AI recommendations."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "project_code",
+        "projectVisibility",
+        "projectMemberUids",
+        "title",
+        "authorId",
+        "author",
+        "status",
+        "minuteData",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CustomDdicTableDoc": {
+      "title": "CustomDdicTableDoc",
+      "description": "Custom SAP DDIC Z*/Y* table metadata shared across team workspaces and AI prompts.",
+      "type": "object",
+      "properties": {
+        "tabname": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 30,
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "ddtext": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "module": {
+          "type": "string",
+          "enum": ["SD", "MM", "FI", "CO", "PP", "PM", "QM", "COMMON", "CUSTOM"]
+        },
+        "tabclass": {
+          "type": "string",
+          "enum": ["TRANSP", "INTTAB", "CLUSTER", "POOL", "VIEW"]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "is_custom": {
+          "type": "boolean"
+        },
+        "fields": {
+          "type": "array",
+          "description": "List of DD03L field definitions (max 200)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "tabname",
+        "ddtext",
+        "module",
+        "ownerId",
+        "fields",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfilePublic"
+      },
+      "description": "Public user profile (no PII) visible to authenticated workspace collaborators."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfilePrivate"
+      },
+      "description": "Private user PII document (email), strictly readable/writable only by owner or verified admin."
+    },
+    "/admins/{userId}": {
+      "schema": {
+        "$ref": "#/entities/AdminRecord"
+      },
+      "description": "Admin role registry; writable only by existing verified admin."
+    },
+    "/projects/{projectId}": {
+      "schema": {
+        "$ref": "#/entities/SapProjectDoc"
+      },
+      "description": "SAP ERP projects (source of truth for membership and ABAP development standards)."
+    },
+    "/projects/{projectId}/specs/{specId}": {
+      "schema": {
+        "$ref": "#/entities/ProgramSpecDoc"
+      },
+      "description": "Program specifications inside a project, protected by parent project membership and lifecycle status lock."
+    },
+    "/projects/{projectId}/specs/{specId}/snapshots/{snapshotId}": {
+      "schema": {
+        "$ref": "#/entities/SpecSnapshotDoc"
+      },
+      "description": "Append-only revision snapshots for diffing and restoration."
+    },
+    "/projects/{projectId}/specs/{specId}/comments/{commentId}": {
+      "schema": {
+        "$ref": "#/entities/SpecReviewCommentDoc"
+      },
+      "description": "Section-level review comment threads for spec collaboration."
+    },
+    "/projects/{projectId}/meetings/{minuteId}": {
+      "schema": {
+        "$ref": "#/entities/MeetingMinuteDoc"
+      },
+      "description": "Project meeting minutes and AI requirements extraction records."
+    },
+    "/ddic_tables/{tableId}": {
+      "schema": {
+        "$ref": "#/entities/CustomDdicTableDoc"
+      },
+      "description": "Shared custom SAP Data Dictionary (DD02L/DD03L) definitions."
+    }
+  }
+}

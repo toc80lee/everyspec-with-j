@@ -1,0 +1,595 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Shared Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'toc80.lee@gmail.com' ||
+        request.auth.token.email == 'toc50.park@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isStringList(arr, maxItems) {
+      return arr is list && arr.size() <= maxItems && (arr.size() == 0 || arr[0] is string);
+    }
+
+    // Parent project lookups for single-doc Master Gate checks (never used inside allow list)
+    function projectExists(projectId) {
+      return exists(/databases/$(database)/documents/projects/$(projectId));
+    }
+
+    function getProject(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)).data;
+    }
+
+    function isProjectCollaborator(projectId) {
+      return projectExists(projectId) && (
+        getProject(projectId).visibility == 'common' ||
+        getProject(projectId).ownerId == request.auth.uid ||
+        request.auth.uid in getProject(projectId).memberUids
+      );
+    }
+
+    function isProjectWriter(projectId) {
+      return projectExists(projectId) && (
+        getProject(projectId).ownerId == request.auth.uid ||
+        (getProject(projectId).visibility != 'common' && request.auth.uid in getProject(projectId).memberUids)
+      );
+    }
+
+    // 3. Entity Validators (Synced with firebase-blueprint.json)
+    function isValidUserPublic(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'role', 'department', 'updatedAt']) &&
+        data.uid == userId &&
+        isValidId(data.uid) &&
+        isValidString(data.displayName, 1, 80) &&
+        data.role in ['PM', 'FUNC', 'ABAP', 'QA'] &&
+        (!('department' in data) || isValidString(data.department, 0, 80)) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivate(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'createdAt', 'updatedAt']) &&
+        data.uid == userId &&
+        isValidId(data.uid) &&
+        isValidString(data.email, 3, 200) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdmin(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'createdAt']) &&
+        data.uid == userId &&
+        isValidId(data.uid) &&
+        isValidString(data.email, 3, 200) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidProject(data, projectId) {
+      return data.keys().hasAll([
+          'code', 'name', 'visibility', 'ownerId', 'ownerName',
+          'memberUids', 'modules', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'code', 'name', 'description', 'visibility', 'target_sap_release',
+          'start_date', 'end_date',
+          'ownerId', 'ownerName', 'memberUids', 'memberNames', 'modules',
+          'abap_standards', 'is_system', 'created_date', 'createdAt', 'updatedAt'
+        ]) &&
+        data.code == projectId &&
+        isValidString(data.code, 4, 4) &&
+        data.code.matches('^[A-Z0-9_]+$') &&
+        isValidString(data.name, 1, 120) &&
+        (!('description' in data) || isValidString(data.description, 0, 1000)) &&
+        data.visibility in ['common', 'project', 'temp'] &&
+        (!('target_sap_release' in data) || isValidString(data.target_sap_release, 0, 80)) &&
+        (!('start_date' in data) || isValidString(data.start_date, 0, 20)) &&
+        (!('end_date' in data) || isValidString(data.end_date, 0, 20)) &&
+        isValidId(data.ownerId) &&
+        isValidString(data.ownerName, 1, 80) &&
+        isStringList(data.memberUids, 50) &&
+        (!('memberNames' in data) || isStringList(data.memberNames, 50)) &&
+        isStringList(data.modules, 10) &&
+        (!('abap_standards' in data) || data.abap_standards is map) &&
+        (!('is_system' in data) || data.is_system is bool) &&
+        (!('created_date' in data) || isValidString(data.created_date, 0, 30)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSpec(data, projectId, specId) {
+      return data.keys().hasAll([
+          'id', 'project_code', 'projectVisibility', 'projectMemberUids',
+          'program_id', 'title', 'module', 'authorId', 'author',
+          'status', 'specData', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'project_code', 'projectVisibility', 'projectMemberUids',
+          'program_id', 'tcode', 'title', 'module', 'sample_type',
+          'authorId', 'author', 'status', 'approvedBy', 'approvedAt',
+          'specData', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == specId &&
+        data.project_code == projectId &&
+        data.projectVisibility in ['common', 'project', 'temp'] &&
+        isStringList(data.projectMemberUids, 50) &&
+        isValidString(data.program_id, 2, 40) &&
+        data.program_id.matches('^[A-Z0-9_]+$') &&
+        (!('tcode' in data) || isValidString(data.tcode, 1, 20)) &&
+        isValidString(data.title, 1, 200) &&
+        data.module in ['SD', 'MM', 'FI', 'CO', 'PP', 'HR', 'QM', 'PM', 'BC', 'CM'] &&
+        (!('sample_type' in data) || data.sample_type in ['01', '02', '03', '04']) &&
+        isValidId(data.authorId) &&
+        isValidString(data.author, 1, 80) &&
+        data.status in ['draft', 'in_review', 'approved', 'developed', 'qa_passed'] &&
+        (!('approvedBy' in data) || isValidString(data.approvedBy, 0, 80)) &&
+        (!('approvedAt' in data) || isValidString(data.approvedAt, 0, 40)) &&
+        data.specData is map &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSnapshot(data, projectId, snapshotId) {
+      return data.keys().hasAll([
+          'snapshotId', 'project_code', 'projectVisibility', 'projectMemberUids',
+          'version', 'authorId', 'author', 'status', 'specSnapshot', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'snapshotId', 'project_code', 'projectVisibility', 'projectMemberUids',
+          'version', 'authorId', 'author', 'comment', 'status', 'specSnapshot', 'createdAt'
+        ]) &&
+        data.snapshotId == snapshotId &&
+        data.project_code == projectId &&
+        data.projectVisibility in ['common', 'project', 'temp'] &&
+        isStringList(data.projectMemberUids, 50) &&
+        isValidString(data.version, 2, 20) &&
+        isValidId(data.authorId) &&
+        isValidString(data.author, 1, 80) &&
+        (!('comment' in data) || isValidString(data.comment, 0, 400)) &&
+        data.status in ['draft', 'in_review', 'approved', 'developed', 'qa_passed'] &&
+        data.specSnapshot is map &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidReviewComment(data, projectId, specId, commentId) {
+      return data.keys().hasAll([
+          'id', 'project_code', 'spec_id', 'projectVisibility', 'projectMemberUids',
+          'section', 'authorId', 'authorName', 'authorRole', 'body',
+          'resolved', 'replies', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'project_code', 'spec_id', 'projectVisibility', 'projectMemberUids',
+          'section', 'authorId', 'authorName', 'authorRole', 'body',
+          'resolved', 'resolvedBy', 'resolvedAt', 'replies', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == commentId &&
+        isValidId(data.id) &&
+        data.project_code == projectId &&
+        data.spec_id == specId &&
+        data.projectVisibility in ['common', 'project', 'temp'] &&
+        isStringList(data.projectMemberUids, 50) &&
+        data.section in ['general', 'selection', 'field_catalog', 'data_logic', 'governance'] &&
+        isValidId(data.authorId) &&
+        isValidString(data.authorName, 1, 80) &&
+        data.authorRole in ['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN'] &&
+        isValidString(data.body, 1, 1500) &&
+        data.resolved is bool &&
+        (!('resolvedBy' in data) || isValidString(data.resolvedBy, 0, 80)) &&
+        (!('resolvedAt' in data) || isValidString(data.resolvedAt, 0, 40)) &&
+        data.replies is list && data.replies.size() <= 50 && (data.replies.size() == 0 || data.replies[0] is map) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMeetingMinute(data, projectId, minuteId) {
+      return data.keys().hasAll([
+          'id', 'project_code', 'projectVisibility', 'projectMemberUids',
+          'title', 'authorId', 'author', 'status', 'minuteData', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'project_code', 'projectVisibility', 'projectMemberUids',
+          'title', 'authorId', 'author', 'status', 'minuteData', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == minuteId &&
+        data.project_code == projectId &&
+        data.projectVisibility in ['common', 'project', 'temp'] &&
+        isStringList(data.projectMemberUids, 50) &&
+        isValidString(data.title, 1, 200) &&
+        isValidId(data.authorId) &&
+        isValidString(data.author, 1, 80) &&
+        data.status in ['recording', 'minutes_ready', 'recommended', 'spec_generated'] &&
+        data.minuteData is map &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCustomDdicTable(data, tableId) {
+      return data.keys().hasAll([
+          'tabname', 'ddtext', 'module', 'ownerId', 'fields', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'tabname', 'ddtext', 'module', 'tabclass', 'description',
+          'ownerId', 'is_custom', 'fields', 'createdAt', 'updatedAt'
+        ]) &&
+        data.tabname == tableId &&
+        isValidString(data.tabname, 2, 30) &&
+        data.tabname.matches('^[A-Z0-9_]+$') &&
+        isValidString(data.ddtext, 1, 120) &&
+        data.module in ['SD', 'MM', 'FI', 'CO', 'PP', 'PM', 'QM', 'COMMON', 'CUSTOM'] &&
+        (!('tabclass' in data) || data.tabclass in ['TRANSP', 'INTTAB', 'CLUSTER', 'POOL', 'VIEW']) &&
+        (!('description' in data) || isValidString(data.description, 0, 500)) &&
+        isValidId(data.ownerId) &&
+        (!('is_custom' in data) || data.is_custom is bool) &&
+        data.fields is list && data.fields.size() <= 200 && (data.fields.size() == 0 || data.fields[0] is map) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Rules
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn();
+      allow list: if isSignedIn() && existing().uid == request.auth.uid;
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserPublic(incoming(), userId) &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserPublic(incoming(), userId) &&
+        (isOwner(userId) || isAdmin()) &&
+        incoming().uid == existing().uid &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'role', 'department', 'updatedAt']);
+      allow delete: if isValidId(userId) && isAdmin();
+
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && userId == request.auth.uid;
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          isOwner(userId) &&
+          isValidUserPrivate(incoming(), userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(docId) &&
+          isValidUserPrivate(incoming(), userId) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(docId) && isAdmin();
+      }
+    }
+
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isAdmin() &&
+        isValidId(userId) &&
+        isValidAdmin(incoming(), userId) &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    match /projects/{projectId} {
+      allow get: if isValidId(projectId) && isSignedIn() && (
+        existing().visibility == 'common' ||
+        existing().visibility == 'temp' ||
+        existing().ownerId == request.auth.uid ||
+        request.auth.uid in existing().memberUids ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        existing().visibility == 'common' ||
+        existing().ownerId == request.auth.uid ||
+        request.auth.uid in existing().memberUids
+      );
+      allow create: if isVerifiedUser() &&
+        isValidId(projectId) &&
+        isValidProject(incoming(), projectId) &&
+        incoming().ownerId == request.auth.uid &&
+        (incoming().visibility != 'common' || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(projectId) &&
+        isValidProject(incoming(), projectId) &&
+        incoming().code == existing().code &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().visibility == existing().visibility &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() ||
+          (existing().ownerId == request.auth.uid &&
+            existing().visibility == 'project' &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'description', 'target_sap_release', 'start_date', 'end_date', 'ownerName',
+              'memberUids', 'memberNames', 'modules', 'abap_standards', 'updatedAt'
+            ]))
+        );
+      allow delete: if isVerifiedUser() && isValidId(projectId) && (
+        isAdmin() ||
+        (existing().ownerId == request.auth.uid && existing().visibility == 'project')
+      );
+
+      // Subcollection: Specs
+      match /specs/{specId} {
+        allow get: if isValidId(projectId) && isValidId(specId) && isSignedIn() && (
+          isAdmin() ||
+          (isProjectCollaborator(projectId) && (
+            getProject(projectId).visibility != 'temp' ||
+            existing().authorId == request.auth.uid
+          ))
+        );
+        allow list: if isSignedIn() && (
+          existing().projectVisibility == 'common' ||
+          existing().authorId == request.auth.uid ||
+          (existing().projectVisibility == 'project' && request.auth.uid in existing().projectMemberUids)
+        );
+        allow create: if isVerifiedUser() &&
+          isValidId(projectId) &&
+          isValidId(specId) &&
+          isValidSpec(incoming(), projectId, specId) &&
+          incoming().authorId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          projectExists(projectId) && (
+            isAdmin() ||
+            (getProject(projectId).visibility == 'temp' && incoming().projectVisibility == 'temp') ||
+            (getProject(projectId).visibility == 'project' && isProjectWriter(projectId))
+          );
+        allow update: if isVerifiedUser() &&
+          isValidId(projectId) &&
+          isValidId(specId) &&
+          isValidSpec(incoming(), projectId, specId) &&
+          incoming().id == existing().id &&
+          incoming().project_code == existing().project_code &&
+          incoming().authorId == existing().authorId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          projectExists(projectId) && (
+            isAdmin() ||
+            (
+              (getProject(projectId).visibility == 'temp' && existing().authorId == request.auth.uid) ||
+              (getProject(projectId).visibility == 'project' && isProjectWriter(projectId))
+            ) && (
+              // Action 1: Edit spec content while not approved/qa_passed
+              (existing().status in ['draft', 'in_review', 'developed'] &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'program_id', 'tcode', 'title', 'module', 'sample_type',
+                  'author', 'status', 'approvedBy', 'approvedAt',
+                  'projectMemberUids', 'specData', 'updatedAt'
+                ])) ||
+              // Action 2: Lifecycle status transition only (allowed even on approved specs for PM/Lead reopening or QA completion)
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'approvedBy', 'approvedAt', 'updatedAt'
+              ])
+            )
+          );
+        allow delete: if isVerifiedUser() &&
+          isValidId(projectId) &&
+          isValidId(specId) &&
+          projectExists(projectId) && (
+            isAdmin() ||
+            (getProject(projectId).visibility != 'common' &&
+              existing().authorId == request.auth.uid &&
+              existing().status in ['draft', 'in_review'])
+          );
+
+        // Subcollection: Revision Snapshots (Append-only ledger)
+        match /snapshots/{snapshotId} {
+          allow get: if isValidId(projectId) && isValidId(specId) && isValidId(snapshotId) && isSignedIn() && (
+            isAdmin() ||
+            (isProjectCollaborator(projectId) && (
+              getProject(projectId).visibility != 'temp' ||
+              existing().authorId == request.auth.uid
+            ))
+          );
+          allow list: if isSignedIn() && (
+            existing().projectVisibility == 'common' ||
+            existing().authorId == request.auth.uid ||
+            (existing().projectVisibility == 'project' && request.auth.uid in existing().projectMemberUids)
+          );
+          allow create: if isVerifiedUser() &&
+            isValidId(projectId) &&
+            isValidId(specId) &&
+            isValidId(snapshotId) &&
+            isValidSnapshot(incoming(), projectId, snapshotId) &&
+            incoming().authorId == request.auth.uid &&
+            incoming().createdAt == request.time &&
+            exists(/databases/$(database)/documents/projects/$(projectId)/specs/$(specId)) && (
+              isAdmin() ||
+              getProject(projectId).visibility == 'temp' ||
+              isProjectWriter(projectId)
+            );
+          allow update: if false;
+          allow delete: if isAdmin() && isValidId(projectId) && isValidId(specId) && isValidId(snapshotId);
+        }
+
+        // Subcollection: Section Review Comments (Allowed even when parent spec is approved/qa_passed)
+        match /comments/{commentId} {
+          allow get: if isValidId(projectId) && isValidId(specId) && isValidId(commentId) && isSignedIn() && (
+            isAdmin() ||
+            (isProjectCollaborator(projectId) && (
+              getProject(projectId).visibility != 'temp' ||
+              existing().authorId == request.auth.uid
+            ))
+          );
+          allow list: if isSignedIn() && (
+            existing().projectVisibility == 'common' ||
+            existing().authorId == request.auth.uid ||
+            (existing().projectVisibility == 'project' && request.auth.uid in existing().projectMemberUids)
+          );
+          allow create: if isVerifiedUser() &&
+            isValidId(projectId) &&
+            isValidId(specId) &&
+            isValidId(commentId) &&
+            isValidReviewComment(incoming(), projectId, specId, commentId) &&
+            incoming().authorId == request.auth.uid &&
+            incoming().createdAt == request.time &&
+            incoming().updatedAt == request.time &&
+            exists(/databases/$(database)/documents/projects/$(projectId)/specs/$(specId)) && (
+              isAdmin() ||
+              (getProject(projectId).visibility == 'temp' && incoming().projectVisibility == 'temp') ||
+              (getProject(projectId).visibility == 'project' && isProjectCollaborator(projectId))
+            );
+          allow update: if isVerifiedUser() &&
+            isValidId(projectId) &&
+            isValidId(specId) &&
+            isValidId(commentId) &&
+            isValidReviewComment(incoming(), projectId, specId, commentId) &&
+            incoming().id == existing().id &&
+            incoming().project_code == existing().project_code &&
+            incoming().spec_id == existing().spec_id &&
+            incoming().authorId == existing().authorId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            projectExists(projectId) && (
+              isAdmin() ||
+              (isProjectCollaborator(projectId) && (
+                getProject(projectId).visibility != 'temp' ||
+                existing().authorId == request.auth.uid
+              ) && (
+                (existing().authorId == request.auth.uid &&
+                  incoming().diff(existing()).affectedKeys().hasOnly([
+                    'body', 'resolved', 'resolvedBy', 'resolvedAt', 'replies', 'projectMemberUids', 'updatedAt'
+                  ])) ||
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'resolved', 'resolvedBy', 'resolvedAt', 'replies', 'updatedAt'
+                ])
+              ))
+            );
+          allow delete: if isVerifiedUser() &&
+            isValidId(projectId) &&
+            isValidId(specId) &&
+            isValidId(commentId) &&
+            projectExists(projectId) && (
+              isAdmin() ||
+              (isProjectCollaborator(projectId) && existing().authorId == request.auth.uid)
+            );
+        }
+      }
+
+      // Subcollection: Meeting Minutes
+      match /meetings/{minuteId} {
+        allow get: if isValidId(projectId) && isValidId(minuteId) && isSignedIn() && (
+          isAdmin() ||
+          (isProjectCollaborator(projectId) && (
+            getProject(projectId).visibility != 'temp' ||
+            existing().authorId == request.auth.uid
+          ))
+        );
+        allow list: if isSignedIn() && (
+          existing().projectVisibility == 'common' ||
+          existing().authorId == request.auth.uid ||
+          (existing().projectVisibility == 'project' && request.auth.uid in existing().projectMemberUids)
+        );
+        allow create: if isVerifiedUser() &&
+          isValidId(projectId) &&
+          isValidId(minuteId) &&
+          isValidMeetingMinute(incoming(), projectId, minuteId) &&
+          incoming().authorId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          projectExists(projectId) && (
+            isAdmin() ||
+            getProject(projectId).visibility == 'temp' ||
+            isProjectWriter(projectId)
+          );
+        allow update: if isVerifiedUser() &&
+          isValidId(projectId) &&
+          isValidId(minuteId) &&
+          isValidMeetingMinute(incoming(), projectId, minuteId) &&
+          incoming().id == existing().id &&
+          incoming().project_code == existing().project_code &&
+          incoming().authorId == existing().authorId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          projectExists(projectId) && (
+            isAdmin() ||
+            ((getProject(projectId).visibility == 'temp' && existing().authorId == request.auth.uid) ||
+              (getProject(projectId).visibility == 'project' && isProjectWriter(projectId))) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'status', 'projectMemberUids', 'minuteData', 'updatedAt'
+            ])
+          );
+        allow delete: if isVerifiedUser() &&
+          isValidId(projectId) &&
+          isValidId(minuteId) &&
+          projectExists(projectId) && (
+            isAdmin() ||
+            (getProject(projectId).visibility != 'common' && existing().authorId == request.auth.uid)
+          );
+      }
+    }
+
+    // Shared Custom DDIC Tables (DD02L/DD03L)
+    match /ddic_tables/{tableId} {
+      allow get: if isValidId(tableId) && isSignedIn();
+      allow list: if isSignedIn() && (existing().is_custom == true || existing().ownerId == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(tableId) &&
+        isValidCustomDdicTable(incoming(), tableId) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(tableId) &&
+        isValidCustomDdicTable(incoming(), tableId) &&
+        incoming().tabname == existing().tabname &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (existing().ownerId == request.auth.uid || isAdmin()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'ddtext', 'module', 'tabclass', 'description', 'fields', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser() &&
+        isValidId(tableId) &&
+        (existing().ownerId == request.auth.uid || isAdmin());
+    }
+  }
+}
