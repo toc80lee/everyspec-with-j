@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { ProgramSpec } from '../types/sap';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export interface ParsedMermaidNode {
   id: string;
@@ -719,6 +720,7 @@ export const MermaidFlowChartSvg: React.FC<MermaidFlowChartSvgProps> = ({
   className = '',
   fitToWidth = false,
 }) => {
+  const { t } = useLanguage();
   const parsed = useMemo(() => parseMermaidCode(mermaidCode), [mermaidCode]);
   const layoutedNodes = useMemo(
     () => layoutMermaidDiagram(parsed.nodes, parsed.edges, parsed.direction),
@@ -744,7 +746,7 @@ export const MermaidFlowChartSvg: React.FC<MermaidFlowChartSvgProps> = ({
   if (layoutedNodes.length === 0) {
     return (
       <div className="py-12 text-center text-slate-400 text-xs italic">
-        Flowchart diagram code is empty.
+        {t('Flowchart diagram code is empty.', '흐름도 다이어그램 코드가 비어 있습니다.')}
       </div>
     );
   }

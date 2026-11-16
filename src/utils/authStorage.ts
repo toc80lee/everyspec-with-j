@@ -33,7 +33,7 @@ export function isLegacyRemovedUserName(name?: string): boolean {
 }
 
 export function isDefaultOperatorUser(
-  userOrIdentifier?: Pick<CurrentUser, 'id' | 'name' | 'email'> | string
+  userOrIdentifier?: Pick<CurrentUser, 'id' | 'name' | 'email'> | string | null
 ): boolean {
   if (!userOrIdentifier) return false;
   if (typeof userOrIdentifier === 'string') {
@@ -144,9 +144,10 @@ export const getRegisteredUsers = (): CurrentUser[] => {
 };
 
 /**
- * Register a new custom user added explicitly by the site operator.
+ * Ensure a user profile exists in the workspace directory (creates if new,
+ * or returns/updates the existing profile when assigning the same user to another project).
  */
-export const addRegisteredUser = (input: {
+export const ensureRegisteredUser = (input: {
   name: string;
   email?: string;
   role?: string;
@@ -183,26 +184,37 @@ export const addRegisteredUser = (input: {
     };
   }
 
-  if (
-    currentList.some((u) => u.name.toLowerCase() === cleanName.toLowerCase()) ||
-    isDefaultOperatorUser(cleanName)
-  ) {
+  if (isDefaultOperatorUser(cleanName) || (cleanEmail && isDefaultOperatorUser(cleanEmail))) {
     return {
-      success: false,
-      message: `User '${cleanName}' is already registered.`,
+      success: true,
+      user: DEFAULT_OPERATOR_USER,
       users: currentList,
     };
   }
 
-  if (
-    cleanEmail &&
-    currentList.some((u) => u.email && u.email.toLowerCase() === cleanEmail.toLowerCase())
-  ) {
-    return {
-      success: false,
-      message: `Email '${cleanEmail}' is already registered.`,
-      users: currentList,
+  const existingIdx = currentList.findIndex(
+    (u) =>
+      u.name.toLowerCase() === cleanName.toLowerCase() ||
+      (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail.toLowerCase())
+  );
+
+  if (existingIdx >= 0) {
+    const existing = currentList[existingIdx];
+    const updatedUser: CurrentUser = {
+      ...existing,
+      email: cleanEmail || existing.email,
+      role: input.role?.trim() ? cleanRole : existing.role,
+      department: input.department?.trim() ? cleanDept : existing.department,
     };
+    const nextUsers = [...currentList];
+    nextUsers[existingIdx] = updatedUser;
+    try {
+      localStorage.setItem(REGISTERED_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
+      emitUsersUpdated();
+    } catch {
+      // ignore
+    }
+    return { success: true, user: updatedUser, users: nextUsers };
   }
 
   const newUser: CurrentUser = {
@@ -226,6 +238,45 @@ export const addRegisteredUser = (input: {
       users: currentList,
     };
   }
+};
+
+/**
+ * Register a new custom user added explicitly by the site operator.
+ */
+export const addRegisteredUser = (input: {
+  name: string;
+  email?: string;
+  role?: string;
+  department?: string;
+}): { success: boolean; message?: string; user?: CurrentUser; users: CurrentUser[] } => {
+  const cleanName = (input.name || '').trim();
+  const cleanEmail = (input.email || '').trim();
+  const currentList = getRegisteredUsers();
+
+  if (
+    cleanName &&
+    (currentList.some((u) => u.name.toLowerCase() === cleanName.toLowerCase()) ||
+      isDefaultOperatorUser(cleanName))
+  ) {
+    return {
+      success: false,
+      message: `User '${cleanName}' is already registered.`,
+      users: currentList,
+    };
+  }
+
+  if (
+    cleanEmail &&
+    currentList.some((u) => u.email && u.email.toLowerCase() === cleanEmail.toLowerCase())
+  ) {
+    return {
+      success: false,
+      message: `Email '${cleanEmail}' is already registered.`,
+      users: currentList,
+    };
+  }
+
+  return ensureRegisteredUser(input);
 };
 
 /**
@@ -265,6 +316,32 @@ export const removeRegisteredUser = (
     console.error('Failed to remove registered user', err);
     return { success: false, message: 'Failed to remove user.', users: currentList };
   }
+};
+
+/**
+ * Keep registered users directory in sync with members actually assigned to projects.
+ * Any user (except Josh Lee) not present in activeMemberNames is pruned.
+ */
+export const pruneUnassignedRegisteredUsers = (activeMemberNames: Set<string>): CurrentUser[] => {
+  const lowerActive = new Set(Array.from(activeMemberNames).map((n) => n.trim().toLowerCase()));
+  const currentList = getRegisteredUsers();
+  const nextUsers = currentList.filter(
+    (u) => isDefaultOperatorUser(u) || lowerActive.has(u.name.trim().toLowerCase())
+  );
+
+  if (nextUsers.length !== currentList.length) {
+    try {
+      localStorage.setItem(REGISTERED_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
+      const active = getCurrentUser();
+      if (!isDefaultOperatorUser(active) && !lowerActive.has(active.name.trim().toLowerCase())) {
+        setCurrentUser(DEFAULT_OPERATOR_USER);
+      }
+      emitUsersUpdated();
+    } catch {
+      // ignore
+    }
+  }
+  return nextUsers;
 };
 
 /**

@@ -31,6 +31,7 @@ import {
   isTruthy,
 } from '../utils/spreadsheetClipboard';
 import { InspectableSelect } from './InspectableSelect';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SelectionScreenEditorProps {
   spec: ProgramSpec;
@@ -103,6 +104,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
   onOpenAiExtract,
   isReadOnly = false,
 }) => {
+  const { t } = useLanguage();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBoxModal, setShowBoxModal] = useState(false);
   const [showRadioGroupModal, setShowRadioGroupModal] = useState(false);
@@ -879,7 +881,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-blue-400" />
                 <h4 className="text-sm font-bold">
-                  Add Selection Field ({addForm.kind})
+                  {t(`Add Selection Field (${addForm.kind})`, `조회 조건 필드 추가 (${addForm.kind})`)}
                 </h4>
               </div>
               <button
@@ -894,7 +896,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
             <form onSubmit={handleFormSubmit} className="p-5 space-y-4 text-xs">
               {/* Kind Toggle (4 SAP Selection Kinds) */}
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Kind</label>
+                <label className="block font-semibold text-slate-700 mb-1">{t('Kind', '유형')}</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   <button
                     type="button"
@@ -978,7 +980,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Field Name <span className="text-red-500">*</span>
+                    {t('Field Name', '필드명')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -992,7 +994,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Data Type <span className="text-red-500">*</span>
+                    {t('Data Type', '데이터 타입')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={addForm.datatype}
@@ -1018,7 +1020,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Length <span className="text-red-500">*</span>
+                    {t('Length', '길이')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1038,14 +1040,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               {/* Screen Text */}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Screen Text (Label) <span className="text-red-500">*</span>
+                  {t('Screen Text (Label)', '화면 레이블 (텍스트)')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={addForm.text}
                   onChange={(e) => setAddForm({ ...addForm, text: e.target.value })}
-                  placeholder="e.g., Company Code, Document Date, Sales Order"
+                  placeholder={t('e.g., Company Code, Document Date, Sales Order', '예: 회사코드, 전표일자, 판매오더')}
                   className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 focus:bg-white focus:border-blue-500"
                 />
               </div>
@@ -1054,7 +1056,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Box Title (Optional)
+                    {t('Box Title (Optional)', '박스 제목 (선택 사항)')}
                   </label>
                   <input
                     type="text"
@@ -1071,7 +1073,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                         block_id: matched ? matched.blockId : '',
                       });
                     }}
-                      placeholder="e.g., Basic Criteria"
+                      placeholder={t('e.g., Basic Criteria', '예: 기본 조회 조건')}
                       className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 focus:bg-white focus:border-blue-500"
                     />
                   </div>
@@ -1079,7 +1081,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                   {addForm.kind === 'RADIOBUTTON' ? (
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">
-                        Radio Group ID <span className="text-red-500">*</span>
+                        {t('Radio Group ID', '라디오 그룹 ID')} <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
@@ -1097,13 +1099,13 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                   ) : (
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">
-                        Default Value
+                        {t('Default Value', '기본값')}
                       </label>
                       <input
                         type="text"
                         value={addForm.default_val}
                         onChange={(e) => setAddForm({ ...addForm, default_val: e.target.value })}
-                        placeholder={addForm.kind === 'CHECKBOX' ? 'X or blank' : 'e.g., 1000, 2026.01.01'}
+                        placeholder={addForm.kind === 'CHECKBOX' ? t('X or blank', 'X 또는 공백') : t('e.g., 1000, 2026.01.01', '예: 1000, 2026.01.01')}
                         className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 focus:bg-white focus:border-blue-500"
                       />
                     </div>
@@ -1114,14 +1116,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               {(addForm.kind === 'PARAMETER' || addForm.kind === 'SELECT_OPTION') && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold text-slate-700">Reference Table & Field</span>
+                    <span className="font-semibold text-slate-700">{t('Reference Table & Field', '참조 테이블 및 필드')}</span>
                     <button
                       type="button"
                       onClick={() => setSearchHelpTarget({ type: 'modal' })}
                       className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer"
                     >
                       <Search className="w-3 h-3 text-blue-600" />
-                      <span>Search Help (F4)</span>
+                      <span>{t('Search Help (F4)', '탐색 도움말 (F4)')}</span>
                     </button>
                   </div>
 
@@ -1132,7 +1134,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                       onChange={(e) =>
                         setAddForm({ ...addForm, ref_table: e.target.value.toUpperCase() })
                       }
-                      placeholder="Ref Table (e.g., VBAK)"
+                      placeholder={t('Ref Table (e.g., VBAK)', '참조 테이블 (예: VBAK)')}
                       className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase text-slate-800 focus:bg-white focus:border-blue-500"
                     />
                     <input
@@ -1141,7 +1143,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                       onChange={(e) =>
                         setAddForm({ ...addForm, ref_field: e.target.value.toUpperCase() })
                       }
-                      placeholder="Ref Field (e.g., VBELN)"
+                      placeholder={t('Ref Field (e.g., VBELN)', '참조 필드 (예: VBELN)')}
                       className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase text-slate-800 focus:bg-white focus:border-blue-500"
                     />
                   </div>
@@ -1154,7 +1156,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                         onChange={(e) => setAddForm({ ...addForm, obligatory: e.target.checked })}
                         className="w-4 h-4 accent-red-600 rounded"
                       />
-                      <span>OBLIGATORY (Required)</span>
+                      <span>{t('OBLIGATORY (Required)', 'OBLIGATORY (필수 입력)')}</span>
                     </label>
                     <input
                       type="text"
@@ -1162,7 +1164,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                       onChange={(e) =>
                         setAddForm({ ...addForm, matchcode_object: e.target.value.toUpperCase() })
                       }
-                      placeholder="MATCHCODE OBJECT (e.g., H_T001)"
+                      placeholder={t('MATCHCODE OBJECT (e.g., H_T001)', 'MATCHCODE OBJECT (예: H_T001)')}
                       className="w-52 bg-slate-50 border border-slate-300 rounded px-2.5 py-1 font-mono uppercase text-slate-800 focus:bg-white focus:border-blue-500"
                     />
                   </div>
@@ -1176,14 +1178,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                   onClick={() => setShowAddModal(false)}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold cursor-pointer"
                 >
-                  Cancel
+                  {t('Cancel', '취소')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Add Field</span>
+                  <span>{t('Add Field', '필드 추가')}</span>
                 </button>
               </div>
             </form>
@@ -1201,14 +1203,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div className="flex items-center gap-2">
                 <Box className="w-4 h-4 text-sky-400" />
                 <h4 className="text-sm font-bold">
-                  {boxForm.mode === 'edit' ? 'Edit Selection Box' : 'Group into Box'}
+                  {boxForm.mode === 'edit' ? t('Edit Selection Box', '선택 박스 편집') : t('Group into Box', '박스로 그룹화')}
                 </h4>
               </div>
               <button
                 type="button"
                 onClick={() => setShowBoxModal(false)}
-                aria-label="Close"
-                title="Close"
+                aria-label={t('Close', '닫기')}
+                title={t('Close', '닫기')}
                 className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1219,7 +1221,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Box Title <span className="text-red-500">*</span>
+                    {t('Box Title', '박스 제목')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1227,13 +1229,13 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                     autoFocus
                     value={boxForm.blockTitle}
                     onChange={(e) => setBoxForm({ ...boxForm, blockTitle: e.target.value })}
-                    placeholder="e.g., Basic Criteria"
+                    placeholder={t('e.g., Basic Criteria', '예: 기본 조회 조건')}
                     className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-900 font-medium focus:bg-white focus:border-blue-500"
                   />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Block ID
+                    {t('Block ID', '블록 ID')}
                   </label>
                   <input
                     type="text"
@@ -1254,7 +1256,10 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="font-semibold text-slate-700">
-                    Select Fields for Box ({boxForm.selectedParamIds.length} selected)
+                    {t(
+                      `Select Fields for Box (${boxForm.selectedParamIds.length} selected)`,
+                      `박스에 포함할 필드 선택 (${boxForm.selectedParamIds.length}개 선택됨)`
+                    )}
                   </label>
                   <div className="flex items-center gap-2">
                     <button
@@ -1269,7 +1274,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                       }
                       className="text-[11px] font-medium text-blue-600 hover:underline cursor-pointer"
                     >
-                      Unboxed Only
+                      {t('Unboxed Only', '미지정만 선택')}
                     </button>
                     <button
                       type="button"
@@ -1281,14 +1286,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                       }
                       className="text-[11px] font-medium text-slate-600 hover:underline cursor-pointer"
                     >
-                      Select All
+                      {t('Select All', '전체 선택')}
                     </button>
                   </div>
                 </div>
 
                 {spec.selection_params.length === 0 ? (
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded text-center text-slate-500">
-                    Add PARAMETERS or SELECT-OPTIONS items first.
+                    {t('Add PARAMETERS or SELECT-OPTIONS items first.', '먼저 PARAMETERS 또는 SELECT-OPTIONS 항목을 추가해 주세요.')}
                   </div>
                 ) : (
                   <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-md divide-y divide-slate-100 bg-slate-50/50">
@@ -1357,14 +1362,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                   onClick={() => setShowBoxModal(false)}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold cursor-pointer"
                 >
-                  Cancel
+                  {t('Cancel', '취소')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>{boxForm.mode === 'edit' ? 'Save Box' : 'Create Box'}</span>
+                  <span>{boxForm.mode === 'edit' ? t('Save Box', '박스 저장') : t('Create Box', '박스 생성')}</span>
                 </button>
               </div>
             </form>
@@ -1382,14 +1387,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div className="flex items-center gap-2">
                 <CircleDot className="w-4 h-4 text-indigo-400" />
                 <h4 className="text-sm font-bold">
-                  Add Radio Button Group
+                  {t('Add Radio Button Group', '라디오 버튼 그룹 추가')}
                 </h4>
               </div>
               <button
                 type="button"
                 onClick={() => setShowRadioGroupModal(false)}
-                aria-label="Close"
-                title="Close"
+                aria-label={t('Close', '닫기')}
+                title={t('Close', '닫기')}
                 className="text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1400,7 +1405,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Group ID (Max 4) <span className="text-red-500">*</span>
+                    {t('Group ID (Max 4)', '그룹 ID (최대 4자)')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1420,7 +1425,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
 
                 <div className="col-span-2">
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Box Title
+                    {t('Box Title', '박스 제목')}
                   </label>
                   <div className="flex gap-1.5">
                     <select
@@ -1433,9 +1438,9 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                       }
                       className="bg-slate-50 border border-slate-300 rounded px-2 py-1.5 text-slate-800 cursor-pointer"
                     >
-                      <option value="new">New Box Title</option>
-                      {existingBoxes.length > 0 && <option value="existing">Existing Box</option>}
-                      <option value="none">No Box</option>
+                      <option value="new">{t('New Box Title', '새 박스 생성')}</option>
+                      {existingBoxes.length > 0 && <option value="existing">{t('Existing Box', '기존 박스')}</option>}
+                      <option value="none">{t('No Box', '박스 없음')}</option>
                     </select>
 
                     {radioGroupForm.boxMode === 'new' && (
@@ -1445,7 +1450,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                         onChange={(e) =>
                           setRadioGroupForm({ ...radioGroupForm, newBoxTitle: e.target.value })
                         }
-                        placeholder="e.g., Processing Options"
+                        placeholder={t('e.g., Processing Options', '예: 처리 옵션')}
                         className="flex-1 bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 focus:bg-white focus:border-blue-500"
                       />
                     )}
@@ -1472,7 +1477,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="font-semibold text-slate-700">
-                    Radio Options (Select 1 default)
+                    {t('Radio Options (Select 1 default)', '라디오 옵션 (기본값 1개 선택)')}
                   </label>
                   <button
                     type="button"
@@ -1489,7 +1494,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                     className="px-2 py-0.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded flex items-center gap-1 cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>Add Option</span>
+                    <span>{t('Add Option', '옵션 추가')}</span>
                   </button>
                 </div>
 
@@ -1501,7 +1506,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                     >
                       <label
                         className="flex items-center gap-1 cursor-pointer shrink-0"
-                        title="Default Selection ('X')"
+                        title={t("Default Selection ('X')", "기본 선택값 ('X')")}
                       >
                         <input
                           type="radio"
@@ -1512,7 +1517,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                           }
                           className="w-3.5 h-3.5 accent-indigo-600 cursor-pointer"
                         />
-                        <span className="text-[10px] font-semibold text-slate-500">Default</span>
+                        <span className="text-[10px] font-semibold text-slate-500">{t('Default', '기본')}</span>
                       </label>
                       <input
                         type="text"
@@ -1537,7 +1542,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                           );
                           setRadioGroupForm({ ...radioGroupForm, options: updatedOpts });
                         }}
-                        placeholder="Screen label"
+                        placeholder={t('Screen label', '화면 레이블')}
                         className="flex-1 bg-white border border-slate-300 rounded px-2 py-1 text-slate-800 focus:border-indigo-500"
                       />
                       <button
@@ -1555,8 +1560,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                           });
                         }}
                         className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-30 cursor-pointer"
-                        title="Delete Option"
-                        aria-label="Delete Option"
+                        title={t('Delete Option', '옵션 삭제')}
+                        aria-label={t('Delete Option', '옵션 삭제')}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1571,14 +1576,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                   onClick={() => setShowRadioGroupModal(false)}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold cursor-pointer"
                 >
-                  Cancel
+                  {t('Cancel', '취소')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Add Radio Group</span>
+                  <span>{t('Add Radio Group', '라디오 그룹 추가')}</span>
                 </button>
               </div>
             </form>
@@ -1595,8 +1600,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
             type="button"
             disabled={isReadOnly}
             onClick={() => handleOpenAdd('PARAMETER')}
-            title="Add PARAM (Single Value)"
-            aria-label="Add PARAM"
+            title={t('Add PARAM (Single Value)', 'PARAM (단일 값) 추가')}
+            aria-label={t('Add PARAM', 'PARAM 추가')}
             className="p-1.5 text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-md transition-colors shadow-2xs cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4 text-amber-600" />
@@ -1605,8 +1610,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
             type="button"
             disabled={isReadOnly}
             onClick={() => handleOpenAdd('SELECT_OPTION')}
-            title="Add S-OPT (Range Selection)"
-            aria-label="Add S-OPT"
+            title={t('Add S-OPT (Range Selection)', 'S-OPT (범위 선택) 추가')}
+            aria-label={t('Add S-OPT', 'S-OPT 추가')}
             className="p-1.5 text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-md transition-colors shadow-2xs cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Sliders className="w-4 h-4 text-blue-600" />
@@ -1615,8 +1620,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
             type="button"
             disabled={isReadOnly}
             onClick={handleOpenRadioGroupModal}
-            title="Add Radio Button Group"
-            aria-label="Add Radio Button Group"
+            title={t('Add Radio Button Group', '라디오 버튼 그룹 추가')}
+            aria-label={t('Add Radio Button Group', '라디오 버튼 그룹 추가')}
             className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 rounded-md transition-colors shadow-2xs cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <CircleDot className="w-4 h-4 text-indigo-600" />
@@ -1625,8 +1630,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
             type="button"
             disabled={isReadOnly}
             onClick={() => handleOpenBoxModal()}
-            title="Group into Box"
-            aria-label="Group into Box"
+            title={t('Group into Box', '박스로 그룹화')}
+            aria-label={t('Group into Box', '박스로 그룹화')}
             className="p-1.5 text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-300 rounded-md transition-colors shadow-2xs cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Box className="w-4 h-4 text-sky-600" />
@@ -1640,8 +1645,12 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                 ? 'text-emerald-700 bg-emerald-50 border-emerald-300'
                 : 'text-slate-700 bg-white hover:bg-slate-100 border-slate-300'
             }`}
-            title={tableCopied ? 'Copied to Clipboard!' : 'Copy Table to Excel'}
-            aria-label="Copy Table to Excel"
+            title={
+              tableCopied
+                ? t('Copied to Clipboard!', '클립보드에 복사됨!')
+                : t('Copy Table to Excel', '엑셀용 테이블 복사')
+            }
+            aria-label={t('Copy Table to Excel', '엑셀용 테이블 복사')}
           >
             {tableCopied ? (
               <Check className="w-4 h-4 text-emerald-600" />
@@ -1655,8 +1664,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               disabled={isReadOnly}
               onClick={onOpenAiExtract}
               className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 rounded-md transition-colors shadow-2xs cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
-              title="AI Suggest Parameters from Logic"
-              aria-label="AI Suggest Parameters from Logic"
+              title={t('AI Suggest Parameters from Logic', '로직 기반 AI 조회 조건 추천')}
+              aria-label={t('AI Suggest Parameters from Logic', '로직 기반 AI 조회 조건 추천')}
             >
               <GitPullRequestCreate className="w-4 h-4 text-indigo-600" />
             </button>
@@ -1666,10 +1675,11 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
         {/* Spreadsheet Hint */}
         <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
           <span className="bg-white px-2 py-0.5 rounded border border-slate-200">
-            <strong>Spreadsheet Mode:</strong> Drag to select cells · Ctrl+C copy · Ctrl+V paste
+            <strong>{t('Spreadsheet Mode:', '스프레드시트 모드:')}</strong>{' '}
+            {t('Drag to select cells · Ctrl+C copy · Ctrl+V paste', '드래그하여 셀 선택 · Ctrl+C 복사 · Ctrl+V 붙여넣기')}
           </span>
           <span className="font-bold text-slate-700 tabular-nums">
-            {spec.selection_params.length} rows
+            {t(`${spec.selection_params.length} rows`, `${spec.selection_params.length}행`)}
           </span>
         </div>
       </div>
@@ -1746,9 +1756,14 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
               <tr>
                 <td colSpan={14} className="py-10 text-center text-slate-400 font-sans">
                   <div className="flex flex-col items-center justify-center gap-1.5">
-                    <p className="font-medium">No selection parameters defined.</p>
+                    <p className="font-medium">
+                      {t('No selection parameters defined.', '정의된 조회 조건이 없습니다.')}
+                    </p>
                     <p className="text-xs text-slate-400">
-                      Copy rows from Excel and paste directly with <strong>Ctrl+V</strong> (lines will be created automatically).
+                      {t(
+                        'Copy rows from Excel and paste directly with Ctrl+V (lines will be created automatically).',
+                        '엑셀에서 행을 복사한 뒤 Ctrl+V로 바로 붙여넣을 수 있습니다 (행이 자동 생성됩니다).'
+                      )}
                     </p>
                   </div>
                 </td>
@@ -1785,7 +1800,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                                     e.target.value
                                   )
                                 }
-                                placeholder="Box title..."
+                                placeholder={t('Box title...', '박스 제목...')}
                                 className="bg-white/80 hover:bg-white focus:bg-white border border-sky-200 focus:border-sky-500 rounded px-2 py-0.5 text-xs font-bold text-slate-900 min-w-[200px] focus:outline-none read-only:bg-white/60"
                               />
                               <span className="text-[10px] font-mono text-sky-700">
@@ -1803,8 +1818,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                                     count: 0,
                                   })
                                 }
-                                title="Edit Box Items"
-                                aria-label="Edit Box Items"
+                                title={t('Edit Box Items', '박스 항목 편집')}
+                                aria-label={t('Edit Box Items', '박스 항목 편집')}
                                 className="p-1.5 text-sky-800 bg-white hover:bg-sky-100 border border-sky-200 rounded flex items-center justify-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
@@ -1815,8 +1830,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                                 onClick={() =>
                                   handleUngroupBox(param.block_id || '', param.block_title || '')
                                 }
-                                title="Ungroup Box"
-                                aria-label="Ungroup Box"
+                                title={t('Ungroup Box', '박스 그룹 해제')}
+                                aria-label={t('Ungroup Box', '박스 그룹 해제')}
                                 className="p-1.5 text-slate-600 bg-white hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 border border-slate-200 rounded flex items-center justify-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 <Unlink className="w-3.5 h-3.5" />
@@ -2290,8 +2305,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                             type="button"
                             onClick={() => handleMove(idx, 'up')}
                             disabled={isReadOnly || idx === 0}
-                            title="Move Up"
-                            aria-label="Move Up"
+                            title={t('Move Up', '위로 이동')}
+                            aria-label={t('Move Up', '위로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
@@ -2300,8 +2315,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                             type="button"
                             onClick={() => handleMove(idx, 'down')}
                             disabled={isReadOnly || idx === spec.selection_params.length - 1}
-                            title="Move Down"
-                            aria-label="Move Down"
+                            title={t('Move Down', '아래로 이동')}
+                            aria-label={t('Move Down', '아래로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
@@ -2310,8 +2325,8 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                             type="button"
                             disabled={isReadOnly}
                             onClick={() => handleDelete(param.id)}
-                            title="Delete Row"
-                            aria-label="Delete Row"
+                            title={t('Delete Row', '행 삭제')}
+                            aria-label={t('Delete Row', '행 삭제')}
                             className="p-1 text-slate-400 hover:text-red-600 cursor-pointer transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

@@ -19,6 +19,7 @@ import {
   isTruthy,
 } from '../utils/spreadsheetClipboard';
 import { InspectableSelect } from './InspectableSelect';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface AlvSortEditorProps {
   spec: ProgramSpec;
@@ -33,6 +34,7 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
   onReorder,
   isReadOnly = false,
 }) => {
+  const { lang, t } = useLanguage();
   // Cell range selection state
   const [selectedRange, setSelectedRange] = useState<CellRange | null>(null);
   const [isMouseDown, setIsMouseDown] = useState(false);
@@ -446,13 +448,38 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
       onKeyDown={handleKeyDown}
       className="space-y-3 font-sans focus:outline-none"
     >
+      {/* Top Header (Matched to Layout tab) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">
+            Configure the Sort
+          </h3>
+          <p className="text-xs text-slate-500">
+            {t(
+              'Configure ALV initial sort sequence, ascending/descending direction, subtotals, page breaks, and column order (LVC_T_SORT).',
+              'ALV 초기 정렬 순서, 오름차순/내림차순, 소계, 페이지 구분 및 컬럼 순서(LVC_T_SORT)를 설정합니다.'
+            )}
+          </p>
+        </div>
+      </div>
+
       {/* 1. Top Controls Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200 shadow-2xs">
         <div className="flex items-center gap-2">
           <GripVertical className="w-4 h-4 text-blue-600 shrink-0" />
-          <span className="text-xs font-bold text-slate-800">Reorder & Sort ALV Columns:</span>
+          <span className="text-xs font-bold text-slate-800">
+            {t('Reorder & Sort ALV Columns:', 'ALV 컬럼 순서 및 정렬 기준:')}
+          </span>
           <span className="text-xs text-slate-600">
-            Drag the <strong>grip (↕)</strong> or set <strong>SPOS</strong> to arrange sort sequence.
+            {lang === 'ko' ? (
+              <>
+                <strong>손잡이(↕)</strong>를 드래그하거나 <strong>SPOS</strong> 값을 입력해 정렬 순서를 지정하세요.
+              </>
+            ) : (
+              <>
+                Drag the <strong>grip (↕)</strong> or set <strong>SPOS</strong> to arrange sort sequence.
+              </>
+            )}
           </span>
         </div>
 
@@ -462,15 +489,18 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
             type="button"
             onClick={handleCopyTable}
             disabled={spec.field_catalog.length === 0}
-            title="Copy Table to Excel"
-            aria-label="Copy Table to Excel"
+            title={t('Copy Table to Excel', '엑셀용 테이블 복사')}
+            aria-label={t('Copy Table to Excel', '엑셀용 테이블 복사')}
             className="p-1.5 text-slate-700 bg-white hover:bg-slate-100 hover:text-blue-700 border border-slate-300 rounded-md transition-colors shadow-2xs cursor-pointer disabled:opacity-40"
           >
             <Copy className="w-4 h-4" />
           </button>
 
           <span className="font-mono text-xs text-blue-700 bg-white px-2.5 py-1 rounded border border-blue-200 font-semibold shadow-2xs">
-            Enabled: {enabledCount} / Total {spec.field_catalog.length}
+            {t(
+              `Enabled: ${enabledCount} / Total ${spec.field_catalog.length}`,
+              `활성: ${enabledCount} / 전체 ${spec.field_catalog.length}`
+            )}
           </span>
         </div>
       </div>
@@ -480,11 +510,23 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
         <div className="flex items-center gap-2.5 p-2.5 bg-rose-50 border border-rose-300 rounded-lg text-rose-800 text-xs font-medium">
           <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
           <span>
-            <strong>Missing SPOS:</strong> Sort-enabled field(s) (
-            <span className="font-mono font-bold text-rose-900">
-              {emptySposFields.map((f) => f.fieldname || f.coltext).join(', ')}
-            </span>
-            ) require a sort position (&ge; 1).
+            {lang === 'ko' ? (
+              <>
+                <strong>SPOS 누락:</strong> 정렬이 활성화된 필드(
+                <span className="font-mono font-bold text-rose-900">
+                  {emptySposFields.map((f) => f.fieldname || f.coltext).join(', ')}
+                </span>
+                )에는 1 이상의 정렬 순서(SPOS)가 필요합니다.
+              </>
+            ) : (
+              <>
+                <strong>Missing SPOS:</strong> Sort-enabled field(s) (
+                <span className="font-mono font-bold text-rose-900">
+                  {emptySposFields.map((f) => f.fieldname || f.coltext).join(', ')}
+                </span>
+                ) require a sort position (&ge; 1).
+              </>
+            )}
           </span>
         </div>
       )}
@@ -498,10 +540,10 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
           <table className="w-full text-xs text-left border-collapse font-sans">
             <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-semibold text-[11px] select-none">
               <tr>
-                <th className="py-2 px-1 text-center w-8 bg-slate-200 border-r border-slate-300 text-slate-500 font-mono text-[10px]" title="Spreadsheet Row Number">
+                <th className="py-2 px-1 text-center w-8 bg-slate-200 border-r border-slate-300 text-slate-500 font-mono text-[10px]" title={t('Spreadsheet Row Number', '스프레드시트 행 번호')}>
                   fx
                 </th>
-                <th className="py-1 px-1 text-center w-8 border-r border-slate-200" title="Drag grip to reorder column sequence">
+                <th className="py-1 px-1 text-center w-8 border-r border-slate-200" title={t('Drag grip to reorder column sequence', '드래그하여 컬럼 순서 변경')}>
                   <div className="text-[9px] text-slate-400 font-mono">A</div>
                   <div>↕</div>
                 </th>
@@ -553,7 +595,7 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
                   <td colSpan={12} className="py-10 text-center text-slate-400 font-sans">
                     <div className="flex flex-col items-center justify-center gap-1.5">
                       <FileSpreadsheet className="w-6 h-6 text-slate-300" />
-                      <p className="font-medium">No fields registered.</p>
+                      <p className="font-medium">{t('No fields registered.', '등록된 필드가 없습니다.')}</p>
                     </div>
                   </td>
                 </tr>
@@ -901,8 +943,8 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
                                 title="GROUP: Controls grouping or page-break options during sorting/printing."
                               >
                                 <option value="">-</option>
-                                <option value="*">* (New Page)</option>
-                                <option value="UL">UL (Underline)</option>
+                                <option value="*">{t('* (New Page)', '* (새 페이지)')}</option>
+                                <option value="UL">{t('UL (Underline)', 'UL (밑줄)')}</option>
                               </InspectableSelect>
                             </div>
                           ) : (
@@ -925,7 +967,10 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
                             ? 'bg-blue-100 ring-1 ring-blue-500'
                             : ''
                         }`}
-                        title="EXPA (Expand): Set to 'X' to automatically expand subtotal levels when the ALV is displayed."
+                        title={t(
+                          "EXPA (Expand): Set to 'X' to automatically expand subtotal levels when the ALV is displayed.",
+                          "EXPA (펼치기): ALV 표시 시 소계 레벨을 자동으로 펼치려면 'X'로 설정합니다."
+                        )}
                       >
                         <div className="flex items-center justify-center h-8">
                           <input
@@ -952,8 +997,8 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
                             type="button"
                             onClick={() => handleReorder(idx, 0)}
                             disabled={isReadOnly || idx === 0}
-                            title="Move to Top (COL_POS 1)"
-                            aria-label="Move to Top"
+                            title={t('Move to Top (COL_POS 1)', '맨 위로 이동 (COL_POS 1)')}
+                            aria-label={t('Move to Top', '맨 위로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowUpToLine className="w-3.5 h-3.5" />
@@ -962,8 +1007,8 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
                             type="button"
                             onClick={() => handleReorder(idx, idx - 1)}
                             disabled={isReadOnly || idx === 0}
-                            title="Move Up"
-                            aria-label="Move Up"
+                            title={t('Move Up', '위로 이동')}
+                            aria-label={t('Move Up', '위로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
@@ -972,8 +1017,8 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
                             type="button"
                             onClick={() => handleReorder(idx, idx + 1)}
                             disabled={isReadOnly || idx === spec.field_catalog.length - 1}
-                            title="Move Down"
-                            aria-label="Move Down"
+                            title={t('Move Down', '아래로 이동')}
+                            aria-label={t('Move Down', '아래로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
@@ -982,8 +1027,8 @@ export const AlvSortEditor: React.FC<AlvSortEditorProps> = ({
                             type="button"
                             onClick={() => handleReorder(idx, spec.field_catalog.length - 1)}
                             disabled={isReadOnly || idx === spec.field_catalog.length - 1}
-                            title="Move to Bottom"
-                            aria-label="Move to Bottom"
+                            title={t('Move to Bottom', '맨 아래로 이동')}
+                            aria-label={t('Move to Bottom', '맨 아래로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowDownToLine className="w-3.5 h-3.5" />

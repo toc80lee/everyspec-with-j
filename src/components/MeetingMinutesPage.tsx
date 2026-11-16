@@ -33,38 +33,43 @@ import {
 import { SavedProgramSpecItem } from '../utils/specStorage';
 import { MarkdownFieldEditor } from './MarkdownFieldEditor';
 import { requestAiMeetingMinutes } from '../utils/aiLogicGenerator';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const STATUS_META: Record<
   MeetingMinuteStatus,
-  { label: string; textColor: string; dotColor: string }
+  { label: string; labelKo: string; textColor: string; dotColor: string }
 > = {
   recording: {
     label: 'Draft / Recording',
+    labelKo: '작성중 / 녹음',
     textColor: 'text-amber-700',
     dotColor: 'bg-amber-500',
   },
   minutes_ready: {
     label: 'Minutes Ready',
+    labelKo: '회의록 완료',
     textColor: 'text-slate-700',
     dotColor: 'bg-slate-500',
   },
   recommended: {
     label: 'Type Suggested',
+    labelKo: '유형 추천',
     textColor: 'text-blue-700',
     dotColor: 'bg-blue-600',
   },
   spec_generated: {
     label: 'Spec Done',
+    labelKo: '스펙 완료',
     textColor: 'text-emerald-700',
     dotColor: 'bg-emerald-600',
   },
 };
 
-const SAMPLE_TYPE_NAMES: Record<string, string> = {
-  '01': '01 · Single ALV Grid (ZRALV0010)',
-  '02': '02 · Master-Detail 2-Grid (ZRALV0020)',
-  '03': '03 · Tree ALV Grid (ZRALV0030)',
-  '04': '04 · Pivot Browser (ZRALV0040)',
+const SAMPLE_TYPE_NAMES: Record<string, { en: string; ko: string }> = {
+  '01': { en: '01 · Single ALV Grid (ZRALV0010)', ko: '01 · 단일 ALV 그리드 (ZRALV0010)' },
+  '02': { en: '02 · Master-Detail 2-Grid (ZRALV0020)', ko: '02 · 마스터-디테일 2그리드 (ZRALV0020)' },
+  '03': { en: '03 · Tree ALV Grid (ZRALV0030)', ko: '03 · 트리 ALV 그리드 (ZRALV0030)' },
+  '04': { en: '04 · Pivot Browser (ZRALV0040)', ko: '04 · 피벗 브라우저 (ZRALV0040)' },
 };
 
 interface MeetingMinutesPageProps {
@@ -102,6 +107,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
   onOpenProgram,
   onNotify,
 }) => {
+  const { t } = useLanguage();
   const nonCommonProjects = useMemo(
     () => accessibleProjects.filter((p) => p.code !== COMMON_PROJECT_CODE),
     [accessibleProjects]
@@ -228,7 +234,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
     saveMeetingMinute(updated);
     setIsDirty(false);
     onMinutesChanged();
-    onNotify?.(`Saved changes to '${updated.title}'.`);
+    onNotify?.(t(`Saved changes to '${updated.title}'.`, `'${updated.title}' 변경 사항이 저장되었습니다.`));
   };
 
   const handleEnrichWithSupplement = async () => {
@@ -261,9 +267,9 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
       }
       setSupplementInput('');
       setIsDirty(false);
-      onNotify?.('Supplemental notes merged into AI meeting minutes and saved.');
+      onNotify?.(t('Supplemental notes merged into AI meeting minutes and saved.', '추가 메모가 AI 회의록에 반영되어 저장되었습니다.'));
     } catch (err: any) {
-      onNotify?.(err?.message || 'Failed to apply supplemental notes.');
+      onNotify?.(err?.message || t('Failed to apply supplemental notes.', '추가 메모 반영에 실패했습니다.'));
     } finally {
       setIsEnriching(false);
     }
@@ -327,7 +333,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
     }
 
     if (extractedTexts.length === 0) {
-      onNotify?.('No bullet items (-) found under Section 5 / Open Items.');
+      onNotify?.(t('No bullet items (-) found under Section 5 / Open Items.', '5번 섹션(확인 필요 / Open Items) 아래에서 항목(-)을 찾지 못했습니다.'));
       return;
     }
 
@@ -343,12 +349,12 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
       }));
 
     if (newItems.length === 0) {
-      onNotify?.('All extracted open items are already in the checklist.');
+      onNotify?.(t('All extracted open items are already in the checklist.', '추출된 미결 항목이 이미 체크리스트에 모두 등록되어 있습니다.'));
       return;
     }
 
     updateActionItems([...actionItems, ...newItems]);
-    onNotify?.(`Extracted ${newItems.length} open item(s) into the action checklist.`);
+    onNotify?.(t(`Extracted ${newItems.length} open item(s) into the action checklist.`, `${newItems.length}건의 미결 항목을 체크리스트로 추출했습니다.`));
   };
 
   const handleAddActionItem = (e: React.FormEvent) => {
@@ -379,18 +385,18 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
               <MessageSquareText className="w-4 h-4" />
             </div>
             <h1 className="text-lg font-bold tracking-tight text-slate-900">
-              Project Meeting Minutes
+              {t('Project Meeting Minutes', '프로젝트 회의록')}
             </h1>
             {activeProjectCode === TEMP_PROJECT_CODE && (
               <span className="text-[11px] font-medium text-slate-500">
-                ({currentUser.name} Private)
+                ({currentUser.name} {t('Private', '개인 전용')})
               </span>
             )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <select
-              aria-label="Select project"
+              aria-label={t('Select project', '프로젝트 선택')}
               value={activeProjectCode}
               onChange={(e) => onSelectProject(e.target.value)}
               className="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 cursor-pointer"
@@ -405,8 +411,8 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
             <button
               type="button"
               onClick={onStartNewMeeting}
-              title="New Recording"
-              aria-label="New Recording"
+              title={t('New Recording', '새 회의 녹음')}
+              aria-label={t('New Recording', '새 회의 녹음')}
               className="w-8 h-8 bg-slate-900 hover:bg-slate-800 text-white rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"
             >
               <Plus className="w-4 h-4 text-blue-300" />
@@ -427,7 +433,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search title, content, author, Program ID..."
+                  placeholder={t('Search title, content, author, Program ID...', '회의록 제목, 내용, 작성자, Program ID 검색...')}
                   className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:bg-white focus:border-blue-500"
                 />
               </div>
@@ -435,11 +441,11 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
               <div className="flex flex-wrap gap-1.5">
                 {(
                   [
-                    { key: 'ALL', label: 'All' },
-                    { key: 'recording', label: 'Draft' },
-                    { key: 'minutes_ready', label: 'Minutes' },
-                    { key: 'recommended', label: 'Type Pick' },
-                    { key: 'spec_generated', label: 'Spec Done' },
+                    { key: 'ALL', label: t('All', '전체') },
+                    { key: 'recording', label: t('Draft', '작성중') },
+                    { key: 'minutes_ready', label: t('Minutes', '회의록') },
+                    { key: 'recommended', label: t('Type Pick', '유형추천') },
+                    { key: 'spec_generated', label: t('Spec Done', '스펙완료') },
                   ] as const
                 ).map((tab) => (
                   <button
@@ -463,14 +469,17 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                 <div className="p-8 text-center space-y-3">
                   <p className="text-xs text-slate-500">
                     {projectMinutes.length === 0
-                      ? `No saved meeting minutes in '${activeProject?.name || activeProjectCode}'.`
-                      : 'No meeting minutes match your filters.'}
+                      ? t(
+                          `No saved meeting minutes in '${activeProject?.name || activeProjectCode}'.`,
+                          `'${activeProject?.name || activeProjectCode}' 프로젝트에 저장된 회의록이 없습니다.`
+                        )
+                      : t('No meeting minutes match your filters.', '검색 조건에 맞는 회의록이 없습니다.')}
                   </p>
                   <button
                     type="button"
                     onClick={onStartNewMeeting}
-                    title="Start New Recording"
-                    aria-label="Start New Recording"
+                    title={t('Start New Recording', '새 회의 녹음 시작')}
+                    aria-label={t('Start New Recording', '새 회의 녹음 시작')}
                     className="w-9 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors"
                   >
                     <Mic className="w-4 h-4" />
@@ -499,7 +508,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                         <div className="flex items-center gap-1.5 text-slate-500 min-w-0 truncate">
                           <span className={`inline-flex items-center gap-1 font-semibold shrink-0 ${meta.textColor}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${meta.dotColor}`} />
-                            {meta.label}
+                            {t(meta.label, meta.labelKo)}
                           </span>
                           {item.suggested_module && (
                             <span className="font-mono font-bold text-slate-700 shrink-0">
@@ -529,11 +538,13 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
               <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-3">
                 <MessageSquareText className="w-10 h-10 text-slate-300" />
                 <div className="text-sm font-bold text-slate-700">
-                  Select meeting minutes to view details
+                  {t('Select meeting minutes to view details', '상세 내용을 확인할 회의록을 선택해 주세요')}
                 </div>
                 <p className="text-xs text-slate-500 max-w-md">
-                  Select an item from the history list on the left to review, enrich, and enter{' '}
-                  <strong>Generate Program Spec</strong> mode.
+                  {t(
+                    'Select an item from the history list on the left to review, enrich, and enter Generate Program Spec mode.',
+                    '좌측 목록에서 회의록을 선택하면 내용을 검토·보충하고 바로 프로그램 스펙 생성 모드로 진입할 수 있습니다.'
+                  )}
                 </p>
               </div>
             ) : (
@@ -552,14 +563,17 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                             (STATUS_META[selectedMinute.status] || STATUS_META.minutes_ready).textColor
                           }`}
                         >
-                          {(STATUS_META[selectedMinute.status] || STATUS_META.minutes_ready).label}
+                          {t(
+                            (STATUS_META[selectedMinute.status] || STATUS_META.minutes_ready).label,
+                            (STATUS_META[selectedMinute.status] || STATUS_META.minutes_ready).labelKo
+                          )}
                         </span>
                         <span aria-hidden="true">·</span>
-                        <span>Author: {selectedMinute.author}</span>
+                        <span>{t('Author:', '작성자:')} {selectedMinute.author}</span>
                         <span aria-hidden="true">·</span>
                         <span className="font-mono tabular-nums inline-flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          Updated {selectedMinute.updated_at}
+                          {t('Updated', '수정일')} {selectedMinute.updated_at}
                         </span>
                       </div>
 
@@ -571,11 +585,11 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                             setDraftTitle(e.target.value);
                             setIsDirty(true);
                           }}
-                          aria-label="Meeting title"
+                          aria-label={t('Meeting title', '회의록 제목')}
                           className="flex-1 px-3 py-1.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-base font-bold text-slate-900"
                         />
                         <select
-                          aria-label="SAP Module"
+                          aria-label={t('SAP Module', 'SAP 모듈')}
                           value={draftModule}
                           onChange={(e) => {
                             setDraftModule(e.target.value as SapModule);
@@ -586,7 +600,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                           {(['SD', 'MM', 'FI', 'CO', 'PP', 'HR', 'QM', 'PM', 'BC', 'CM'] as SapModule[]).map(
                             (m) => (
                               <option key={m} value={m}>
-                                {m === 'CM' ? 'CM (Common)' : m}
+                                {m === 'CM' ? t('CM (Common)', 'CM (공통)') : m}
                               </option>
                             )
                           )}
@@ -602,7 +616,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
-                        <span>Generate Program Spec</span>
+                        <span>{t('Generate Program Spec', '프로그램 스펙 생성')}</span>
                       </button>
 
                       <button
@@ -611,7 +625,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                         className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         <Mic className="w-3.5 h-3.5 text-blue-300" />
-                        <span>Recording Wizard</span>
+                        <span>{t('Recording Wizard', '녹음 마법사')}</span>
                       </button>
 
                       <button
@@ -621,7 +635,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                         className="px-3 py-2 bg-white hover:bg-slate-100 disabled:opacity-45 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        <span>Save</span>
+                        <span>{t('Save', '저장')}</span>
                       </button>
 
                       {selectedMinute.author === currentUser.name && (
@@ -629,8 +643,8 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                           type="button"
                           onClick={() => onDeleteMinute(selectedMinute.id)}
                           className="p-2 text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg cursor-pointer"
-                          title="Delete minutes"
-                          aria-label="Delete minutes"
+                          title={t('Delete minutes', '회의록 삭제')}
+                          aria-label={t('Delete minutes', '회의록 삭제')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -648,10 +662,14 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                         <Layers className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                         {selectedMinute.recommended_sample_type && (
                           <span>
-                            Suggested Type:{' '}
+                            {t('Suggested Type:', '추천 유형:')}{' '}
                             <strong className="font-mono text-blue-700">
-                              {SAMPLE_TYPE_NAMES[selectedMinute.recommended_sample_type] ||
-                                selectedMinute.recommended_sample_type}
+                              {SAMPLE_TYPE_NAMES[selectedMinute.recommended_sample_type]
+                                ? t(
+                                    SAMPLE_TYPE_NAMES[selectedMinute.recommended_sample_type].en,
+                                    SAMPLE_TYPE_NAMES[selectedMinute.recommended_sample_type].ko
+                                  )
+                                : selectedMinute.recommended_sample_type}
                             </strong>
                           </span>
                         )}
@@ -693,7 +711,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                         : 'border-transparent text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    Review & Enrich Minutes
+                    {t('Review & Enrich Minutes', '회의록 검토 및 보충')}
                   </button>
                   <button
                     type="button"
@@ -704,7 +722,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                         : 'border-transparent text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    Raw Recording & Notes ({selectedMinute.segments?.length || 0})
+                    {t(`Raw Recording & Notes (${selectedMinute.segments?.length || 0})`, `원본 녹취 및 메모 (${selectedMinute.segments?.length || 0})`)}
                   </button>
                 </div>
 
@@ -720,19 +738,25 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                         }}
                         rows={11}
                         minHeight="260px"
-                        placeholder="Meeting minutes are empty. Enter notes or generate AI minutes via the recording wizard..."
+                        placeholder={t(
+                          'Meeting minutes are empty. Enter notes or generate AI minutes via the recording wizard...',
+                          '회의록이 비어 있습니다. 내용을 입력하거나 녹음 마법사를 통해 AI 회의록을 생성하세요...'
+                        )}
                       />
 
                       {/* Quick AI Supplement Box right inside Detail Page */}
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
                         <div className="text-xs font-bold text-slate-800">
-                          Enrich Minutes with AI
+                          {t('Enrich Minutes with AI', 'AI로 회의록 보완하기')}
                         </div>
                         <textarea
                           rows={2}
                           value={supplementInput}
                           onChange={(e) => setSupplementInput(e.target.value)}
-                          placeholder="Add post-meeting updates or changed criteria to merge into existing minutes..."
+                          placeholder={t(
+                            'Add post-meeting updates or changed criteria to merge into existing minutes...',
+                            '회의 후 추가 결정 사항이나 변경된 조건을 입력하면 기존 회의록에 반영됩니다...'
+                          )}
                           className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:border-blue-500"
                         />
                         <div className="flex items-center justify-end">
@@ -747,7 +771,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                             ) : (
                               <Sparkles className="w-3.5 h-3.5" />
                             )}
-                            <span>Apply AI Update & Save</span>
+                            <span>{t('Apply AI Update & Save', 'AI 반영 및 저장')}</span>
                           </button>
                         </div>
                       </div>
@@ -758,10 +782,10 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                           <div className="flex items-center gap-2">
                             <ListTodo className="w-4 h-4 text-blue-600" />
                             <h4 className="text-xs font-bold text-slate-900">
-                              Open Items & Action Checklist
+                              {t('Open Items & Action Checklist', '미결 항목 및 실행 체크리스트')}
                             </h4>
                             <span className="font-mono tabular-nums text-[11px] text-slate-500">
-                              Done {actionItems.filter((i) => i.completed).length}/{actionItems.length}
+                              {t('Done', '완료')} {actionItems.filter((i) => i.completed).length}/{actionItems.length}
                             </span>
                           </div>
                           <button
@@ -769,7 +793,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                             onClick={handleExtractActionItems}
                             className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
                           >
-                            Extract from Minutes
+                            {t('Extract from Minutes', '회의록에서 추출')}
                           </button>
                         </div>
 
@@ -778,21 +802,21 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                             type="text"
                             value={newActionText}
                             onChange={(e) => setNewActionText(e.target.value)}
-                            placeholder="Enter open item or follow-up action..."
+                            placeholder={t('Enter open item or follow-up action...', '미결 항목 또는 후속 조치를 입력하세요...')}
                             className="sm:col-span-6 px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-xs focus:bg-white focus:border-blue-500"
                           />
                           <input
                             type="text"
                             value={newActionAssignee}
                             onChange={(e) => setNewActionAssignee(e.target.value)}
-                            placeholder="Assignee (e.g. Josh Lee)"
+                            placeholder={t('Assignee (e.g. Josh Lee)', '담당자 (예: Josh Lee)')}
                             className="sm:col-span-2 px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-xs focus:bg-white focus:border-blue-500"
                           />
                           <input
                             type="date"
                             value={newActionDueDate}
                             onChange={(e) => setNewActionDueDate(e.target.value)}
-                            aria-label="Due date"
+                            aria-label={t('Due date', '기한')}
                             className="sm:col-span-2 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-xs font-mono focus:bg-white focus:border-blue-500"
                           />
                           <button
@@ -800,13 +824,16 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                             disabled={!newActionText.trim()}
                             className="sm:col-span-2 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-md text-xs font-semibold whitespace-nowrap cursor-pointer"
                           >
-                            Add Item
+                            {t('Add Item', '항목 추가')}
                           </button>
                         </form>
 
                         {actionItems.length === 0 ? (
                           <div className="py-4 text-center text-xs text-slate-400">
-                            No action items yet. Extract open items from the minutes above or add manually.
+                            {t(
+                              'No action items yet. Extract open items from the minutes above or add manually.',
+                              '등록된 실행 항목이 없습니다. 상단 회의록에서 추출하거나 직접 추가하세요.'
+                            )}
                           </div>
                         ) : (
                           <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg">
@@ -855,8 +882,8 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                                       updateActionItems(actionItems.filter((i) => i.id !== act.id))
                                     }
                                     className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
-                                    title="Delete item"
-                                    aria-label="Delete item"
+                                    title={t('Delete item', '항목 삭제')}
+                                    aria-label={t('Delete item', '항목 삭제')}
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -871,7 +898,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                     <div className="space-y-3">
                       {!selectedMinute.segments || selectedMinute.segments.length === 0 ? (
                         <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-xl">
-                          No voice or note segments recorded.
+                          {t('No voice or note segments recorded.', '기록된 음성 또는 메모 세그먼트가 없습니다.')}
                         </div>
                       ) : (
                         <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
@@ -881,15 +908,15 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                                 <span>{seg.timestamp}</span>
                                 <span aria-hidden="true">·</span>
                                 <span className="font-sans font-semibold text-slate-700">
-                                  {seg.speaker || 'Participant'}
+                                  {seg.speaker || t('Participant', '참여자')}
                                 </span>
                                 <span aria-hidden="true">·</span>
                                 <span>
                                   {seg.kind === 'voice'
-                                    ? 'Voice'
+                                    ? t('Voice', '음성')
                                     : seg.kind === 'supplement'
-                                    ? 'Supplement'
-                                    : 'Note'}
+                                    ? t('Supplement', '보충')
+                                    : t('Note', '메모')}
                                 </span>
                               </div>
                               <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap">
@@ -906,7 +933,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                 {/* Sticky Detail Bottom Footer */}
                 <footer className="px-6 py-3 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-between gap-3">
                   <div className="text-[11px] text-amber-700 font-medium">
-                    {isDirty ? 'Unsaved changes (auto-saved when generating spec).' : ''}
+                    {isDirty ? t('Unsaved changes (auto-saved when generating spec).', '저장되지 않은 변경사항이 있습니다 (스펙 생성 시 자동 저장됨).') : ''}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
@@ -916,7 +943,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                       className="px-3.5 py-1.5 bg-white hover:bg-slate-100 disabled:opacity-45 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      <span>Save</span>
+                      <span>{t('Save', '저장')}</span>
                     </button>
                     <button
                       type="button"
@@ -924,7 +951,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                       className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>Generate Program Spec</span>
+                      <span>{t('Generate Program Spec', '프로그램 스펙 생성')}</span>
                     </button>
                   </div>
                 </footer>

@@ -18,6 +18,7 @@ import {
 import { ProgramSpec } from '../types/sap';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { requestMarkdownAiSuggestion } from '../utils/aiLogicGenerator';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export interface MarkdownAiContext {
   section: 'business_purpose' | 'data_extraction_logic' | 'data_flow_node';
@@ -49,12 +50,20 @@ interface MarkdownFieldEditorProps {
 export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
   value,
   onChange,
-  placeholder = 'Enter Markdown (# Heading, - List, **Bold**, `Code`)...',
+  placeholder,
   rows = 5,
   minHeight = '130px',
   aiContext,
   isReadOnly = false,
 }) => {
+  const { lang, t } = useLanguage();
+  const effectivePlaceholder =
+    placeholder ||
+    t(
+      'Enter Markdown (# Heading, - List, **Bold**, `Code`)...',
+      '마크다운을 입력하세요 (# 제목, - 목록, **굵게**, `코드`)...'
+    );
+
   // Default to 'preview' mode per RFQ v1.22
   const [mode, setMode] = useState<'edit' | 'preview'>('preview');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
@@ -77,7 +86,7 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
   }, [isReadOnly, mode]);
 
   const voice = useVoiceInput({
-    lang: 'ko-KR',
+    lang: lang === 'ko' ? 'ko-KR' : 'en-US',
     onResult: (finalText) => {
       if (isReadOnly) return;
       const prev = latestValueRef.current || '';
@@ -102,12 +111,12 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
       onChangeRef.current(res.markdown);
       setAiStatus(
         res.source === 'ai'
-          ? 'Applied AI suggestion tailored to this specification.'
-          : 'Applied standard specification suggestion.'
+          ? t('Applied AI suggestion tailored to this specification.', '이 사양에 맞춘 AI 제안을 적용했습니다.')
+          : t('Applied standard specification suggestion.', '표준 사양 제안을 적용했습니다.')
       );
       setTimeout(() => setAiStatus(null), 5000);
     } catch (err: any) {
-      setAiError(err?.message || 'Failed to generate AI suggestion.');
+      setAiError(err?.message || t('Failed to generate AI suggestion.', 'AI 제안 생성에 실패했습니다.'));
       setTimeout(() => setAiError(null), 6000);
     } finally {
       setIsGeneratingAi(false);
@@ -176,7 +185,7 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
   // Simple Markdown renderer without heavy external parser dependencies
   const renderSimpleMarkdown = (content: string) => {
     if (!content.trim()) {
-      return <p className="text-slate-400 italic">No content.</p>;
+      return <p className="text-slate-400 italic">{t('No content.', '내용이 없습니다.')}</p>;
     }
 
     const lines = content.split('\n');
@@ -288,10 +297,10 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             }`}
             title={
               isReadOnly
-                ? 'Read-only mode'
+                ? t('Read-only mode', '읽기 전용 모드')
                 : mode === 'preview'
-                ? 'Switch to Edit mode to format text'
-                : 'Heading 1 (# )'
+                ? t('Switch to Edit mode to format text', '텍스트 서식을 적용하려면 편집 모드로 전환하세요')
+                : t('Heading 1 (# )', '제목 1 (# )')
             }
           >
             <Heading1 className="w-3.5 h-3.5" />
@@ -307,10 +316,10 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             }`}
             title={
               isReadOnly
-                ? 'Read-only mode'
+                ? t('Read-only mode', '읽기 전용 모드')
                 : mode === 'preview'
-                ? 'Switch to Edit mode to format text'
-                : 'Heading 2 (## )'
+                ? t('Switch to Edit mode to format text', '텍스트 서식을 적용하려면 편집 모드로 전환하세요')
+                : t('Heading 2 (## )', '제목 2 (## )')
             }
           >
             <Heading2 className="w-3.5 h-3.5" />
@@ -327,10 +336,10 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             }`}
             title={
               isReadOnly
-                ? 'Read-only mode'
+                ? t('Read-only mode', '읽기 전용 모드')
                 : mode === 'preview'
-                ? 'Switch to Edit mode to format text'
-                : 'Bold (Ctrl+B)'
+                ? t('Switch to Edit mode to format text', '텍스트 서식을 적용하려면 편집 모드로 전환하세요')
+                : t('Bold (Ctrl+B)', '굵게 (Ctrl+B)')
             }
           >
             <Bold className="w-3.5 h-3.5" />
@@ -346,10 +355,10 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             }`}
             title={
               isReadOnly
-                ? 'Read-only mode'
+                ? t('Read-only mode', '읽기 전용 모드')
                 : mode === 'preview'
-                ? 'Switch to Edit mode to format text'
-                : 'Bullet List (- item)'
+                ? t('Switch to Edit mode to format text', '텍스트 서식을 적용하려면 편집 모드로 전환하세요')
+                : t('Bullet List (- item)', '글머리 기호 (- item)')
             }
           >
             <List className="w-3.5 h-3.5" />
@@ -365,10 +374,10 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             }`}
             title={
               isReadOnly
-                ? 'Read-only mode'
+                ? t('Read-only mode', '읽기 전용 모드')
                 : mode === 'preview'
-                ? 'Switch to Edit mode to format text'
-                : 'Numbered List (1. item)'
+                ? t('Switch to Edit mode to format text', '텍스트 서식을 적용하려면 편집 모드로 전환하세요')
+                : t('Numbered List (1. item)', '번호 목록 (1. item)')
             }
           >
             <ListOrdered className="w-3.5 h-3.5" />
@@ -384,10 +393,10 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             }`}
             title={
               isReadOnly
-                ? 'Read-only mode'
+                ? t('Read-only mode', '읽기 전용 모드')
                 : mode === 'preview'
-                ? 'Switch to Edit mode to format text'
-                : 'Inline Code (`code`)'
+                ? t('Switch to Edit mode to format text', '텍스트 서식을 적용하려면 편집 모드로 전환하세요')
+                : t('Inline Code (`code`)', '인라인 코드 (`code`)')
             }
           >
             <Code className="w-3.5 h-3.5" />
@@ -405,14 +414,14 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             disabled={isReadOnly || voice.isTranscribing || isGeneratingAi}
             title={
               isReadOnly
-                ? 'Read-only mode'
+                ? t('Read-only mode', '읽기 전용 모드')
                 : voice.isListening
-                ? 'Recording... click to stop'
+                ? t('Recording... click to stop', '녹음 중... 클릭하여 중지')
                 : voice.isTranscribing
-                ? 'Transcribing voice...'
-                : 'Voice Input'
+                ? t('Transcribing voice...', '음성을 텍스트로 변환 중...')
+                : t('Voice Input', '음성 입력')
             }
-            aria-label="Voice Input"
+            aria-label={t('Voice Input', '음성 입력')}
             className={`p-1.5 rounded flex items-center justify-center cursor-pointer transition-all shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed ${
               voice.isListening
                 ? 'bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-300'
@@ -436,8 +445,8 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
               type="button"
               onClick={handleAiSuggest}
               disabled={isReadOnly || isGeneratingAi || voice.isListening || voice.isTranscribing}
-              title={isReadOnly ? 'Read-only mode' : 'AI Suggest'}
-              aria-label="AI Suggest"
+              title={isReadOnly ? t('Read-only mode', '읽기 전용 모드') : t('AI Suggest', 'AI 추천 작성')}
+              aria-label={t('AI Suggest', 'AI 추천 작성')}
               className={`p-1.5 rounded flex items-center justify-center cursor-pointer transition-all shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed ${
                 isGeneratingAi
                   ? 'bg-indigo-600 text-white cursor-wait border border-indigo-600'
@@ -463,10 +472,10 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             }}
             title={
               isReadOnly
-                ? 'Read-only mode'
-                : 'Display / Edit (Double-click preview to edit)'
+                ? t('Read-only mode', '읽기 전용 모드')
+                : t('Display / Edit (Double-click preview to edit)', '보기 / 편집 (미리보기 더블클릭으로 편집)')
             }
-            aria-label={isReadOnly ? 'Edit disabled (Read-only)' : 'Toggle Display and Edit'}
+            aria-label={isReadOnly ? t('Edit disabled (Read-only)', '편집 불가 (읽기 전용)') : t('Toggle Display and Edit', '보기/편집 전환')}
             className={`p-1.5 rounded flex items-center justify-center transition-all shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed ${
               !isReadOnly && mode === 'edit'
                 ? 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-600 cursor-pointer'
@@ -489,7 +498,7 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
         <div className="px-2.5 py-1.5 bg-rose-50 border-b border-rose-200 text-[11px] text-rose-800 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-rose-600 shrink-0" />
-            <span>Recording voice... Click again to transcribe.</span>
+            <span>{t('Recording voice... Click again to transcribe.', '음성 녹음 중... 다시 클릭하면 변환됩니다.')}</span>
           </div>
           {voice.transcript && (
             <span className="font-semibold text-rose-950 italic truncate max-w-[220px]">
@@ -502,7 +511,7 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
       {voice.isTranscribing && (
         <div className="px-2.5 py-1.5 bg-indigo-50 border-b border-indigo-200 text-[11px] text-indigo-800 flex items-center gap-1.5">
           <Loader2 className="w-3.5 h-3.5 text-indigo-600 animate-spin shrink-0" />
-          <span>Transcribing audio to text...</span>
+          <span>{t('Transcribing audio to text...', '음성을 텍스트로 변환하고 있습니다...')}</span>
         </div>
       )}
 
@@ -514,7 +523,7 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             onClick={voice.clearError}
             className="text-[11px] font-semibold text-amber-700 hover:underline shrink-0 cursor-pointer"
           >
-            Dismiss
+            {t('Dismiss', '닫기')}
           </button>
         </div>
       )}
@@ -546,12 +555,12 @@ export const MarkdownFieldEditor: React.FC<MarkdownFieldEditorProps> = ({
             onKeyDown={handleTextareaKeyDown}
             className="w-full text-slate-800 text-xs leading-relaxed focus:outline-none border-none resize-y selection:bg-blue-100 bg-white"
             style={{ minHeight }}
-            placeholder={placeholder}
+            placeholder={effectivePlaceholder}
           />
         ) : (
           <div
             onDoubleClick={isReadOnly ? undefined : switchToEditAndFocus}
-            title={isReadOnly ? 'Read-only mode' : 'Double-click to edit Markdown'}
+            title={isReadOnly ? t('Read-only mode', '읽기 전용 모드') : t('Double-click to edit Markdown', '더블클릭하여 마크다운 편집')}
             className={`min-h-[100px] overflow-auto p-1 bg-white rounded transition-colors ${
               isReadOnly ? 'cursor-default' : 'cursor-text hover:bg-slate-50/40'
             }`}

@@ -38,6 +38,7 @@ import {
   generateDataFlowFromSpec,
   autoLayoutFlowchart,
 } from '../utils/dataFlowGenerator';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface InteractiveDataFlowCanvasProps {
   spec: ProgramSpec;
@@ -52,6 +53,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
   onChange,
   readOnly = false,
 }) => {
+  const { lang, t } = useLanguage();
   // Ensure we have nodes and edges
   const nodes: CanvasNode[] =
     config?.nodes && config.nodes.length > 0
@@ -134,10 +136,15 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
       const fitted = autoFitNode(updatedNode);
       const updated = nodes.map((n) => (n.id === fitted.id ? fitted : n));
       updateGraph(updated, edges);
-      setNotice(`Updated and auto-fitted node '${fitted.label.split('\n')[0]}'.`);
+      setNotice(
+        t(
+          `Updated and auto-fitted node '${fitted.label.split('\n')[0]}'.`,
+          `노드 '${fitted.label.split('\n')[0]}' 수정 및 크기 자동 맞춤 완료.`
+        )
+      );
       setTimeout(() => setNotice(null), 3000);
     },
-    [nodes, edges, autoFitNode, updateGraph]
+    [nodes, edges, autoFitNode, updateGraph, t]
   );
 
   const handleDeleteNode = useCallback(
@@ -146,10 +153,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
       const updatedEdges = edges.filter((e) => e.from !== nodeId && e.to !== nodeId);
       updateGraph(updatedNodes, updatedEdges);
       if (selectedNodeId === nodeId) setSelectedNodeId(null);
-      setNotice('Node and connected arrows deleted.');
+      setNotice(t('Node and connected arrows deleted.', '노드 및 연결된 화살표가 삭제되었습니다.'));
       setTimeout(() => setNotice(null), 3000);
     },
-    [nodes, edges, selectedNodeId, updateGraph]
+    [nodes, edges, selectedNodeId, updateGraph, t]
   );
 
   const handleAutoFitNode = useCallback(
@@ -159,10 +166,15 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
       const fitted = autoFitNode(targetNode);
       const updated = nodes.map((n) => (n.id === nodeId ? fitted : n));
       updateGraph(updated, edges);
-      setNotice(`Auto-fitted size for '${fitted.label.split('\n')[0]}'.`);
+      setNotice(
+        t(
+          `Auto-fitted size for '${fitted.label.split('\n')[0]}'.`,
+          `'${fitted.label.split('\n')[0]}' 크기를 텍스트에 맞게 조정했습니다.`
+        )
+      );
       setTimeout(() => setNotice(null), 3000);
     },
-    [nodes, edges, autoFitNode, updateGraph]
+    [nodes, edges, autoFitNode, updateGraph, t]
   );
 
   // Get port coordinates for a node
@@ -275,13 +287,13 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
     let height = 38;
 
     if (type === 'start') {
-      label = 'Start';
+      label = t('Start', '시작');
     } else if (type === 'end') {
-      label = 'End';
+      label = t('End', '종료');
     } else if (type === 'process') {
-      label = `${nextIdx}) Process Step`;
+      label = t(`${nextIdx}) Process Step`, `${nextIdx}) 처리 단계`);
     } else if (type === 'decision') {
-      label = 'Decision';
+      label = t('Decision', '조건 분기');
       width = 110;
       height = 46;
     } else if (type === 'database') {
@@ -308,7 +320,12 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
     const fittedNode = autoFitNode(newNode);
     updateGraph([...nodes, fittedNode], edges);
     setSelectedNodeId(fittedNode.id);
-    setNotice(`Added ${type} node. Double-click to edit text or drag an anchor dot to connect.`);
+    setNotice(
+      t(
+        `Added ${type} node. Double-click to edit text or drag an anchor dot to connect.`,
+        `${type} 노드가 추가되었습니다. 더블 클릭하여 편집하거나 연결 점을 드래그해 연결하세요.`
+      )
+    );
     setTimeout(() => setNotice(null), 3500);
   };
 
@@ -400,7 +417,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
             toPort: 'top',
           };
           updateGraph(nodes, [...edges, newEdge]);
-          setNotice('Connected nodes. Click the arrow to add a branch label.');
+          setNotice(t('Connected nodes. Click the arrow to add a branch label.', '노드가 연결되었습니다. 화살표를 클릭해 분기 라벨을 추가하세요.'));
           setTimeout(() => setNotice(null), 4000);
         }
       }
@@ -444,9 +461,9 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
   const handleAutoLayout = useCallback(() => {
     const result = autoLayoutFlowchart(nodes, edges);
     updateGraph(result.nodes, result.edges);
-    setNotice('Auto-aligned diagram hierarchy.');
+    setNotice(t('Auto-aligned diagram hierarchy.', '다이어그램 계층 구조를 자동 정렬했습니다.'));
     setTimeout(() => setNotice(null), 3500);
-  }, [nodes, edges, updateGraph]);
+  }, [nodes, edges, updateGraph, t]);
 
   // Inline Quick Label Change
   const handleInlineLabelChange = useCallback(
@@ -484,13 +501,13 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
       let height = 38;
 
       if (appendType === 'start') {
-        label = 'Start';
+        label = t('Start', '시작');
       } else if (appendType === 'end') {
-        label = 'End';
+        label = t('End', '종료');
       } else if (appendType === 'process') {
-        label = `${nextIdx}) Process Step`;
+        label = t(`${nextIdx}) Process Step`, `${nextIdx}) 처리 단계`);
       } else if (appendType === 'decision') {
-        label = 'Decision';
+        label = t('Decision', '조건 분기');
         width = 110;
         height = 46;
       } else if (appendType === 'database') {
@@ -542,10 +559,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
 
       updateGraph([...nodes, newNode], [...edges, newEdge]);
       setSelectedNodeId(newNodeId);
-      setNotice(`Added '${label}' and connected arrow.`);
+      setNotice(t(`Added '${label}' and connected arrow.`, `'${label}' 추가 및 화살표 연결 완료.`));
       setTimeout(() => setNotice(null), 3000);
     },
-    [nodes, edges, autoFitNode, updateGraph]
+    [nodes, edges, autoFitNode, updateGraph, t]
   );
 
   // Connect from node to selected target
@@ -554,7 +571,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
       if (!fromId || !toId || fromId === toId) return;
       const existing = edges.some((e) => e.from === fromId && e.to === toId);
       if (existing) {
-        setNotice('Connection already exists between these two nodes.');
+        setNotice(t('Connection already exists between these two nodes.', '두 노드 사이에 이미 연결이 존재합니다.'));
         setTimeout(() => setNotice(null), 3000);
         return;
       }
@@ -574,10 +591,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
         label: label?.trim() || undefined,
       };
       updateGraph(nodes, [...edges, newEdge]);
-      setNotice('Arrow connected.');
+      setNotice(t('Arrow connected.', '화살표가 연결되었습니다.'));
       setTimeout(() => setNotice(null), 3000);
     },
-    [nodes, edges, getAutoPorts, updateGraph]
+    [nodes, edges, getAutoPorts, updateGraph, t]
   );
 
   // Remove edge
@@ -611,10 +628,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
     (index: number, shapeType: FlowShapeType = 'process') => {
       const prevNode = nodes[index];
       const nextIdx = nodes.length + 1;
-      let label = `${nextIdx}) New Step`;
-      if (shapeType === 'start') label = 'Start';
-      else if (shapeType === 'end') label = 'End';
-      else if (shapeType === 'decision') label = 'Decision';
+      let label = t(`${nextIdx}) New Step`, `${nextIdx}) 새 단계`);
+      if (shapeType === 'start') label = t('Start', '시작');
+      else if (shapeType === 'end') label = t('End', '종료');
+      else if (shapeType === 'decision') label = t('Decision', '조건 분기');
       else if (shapeType === 'database') label = 'DB_TABLE';
 
       const newNodeId = `node-${Date.now()}`;
@@ -645,10 +662,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
 
       updateGraph(newNodes, newEdges);
       setSelectedNodeId(newNodeId);
-      setNotice(`Added '${label}' step to list.`);
+      setNotice(t(`Added '${label}' step to list.`, `'${label}' 단계가 목록에 추가되었습니다.`));
       setTimeout(() => setNotice(null), 3000);
     },
-    [nodes, edges, autoFitNode, updateGraph]
+    [nodes, edges, autoFitNode, updateGraph, t]
   );
 
   // Load Reference Template
@@ -657,7 +674,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
       JSON.parse(JSON.stringify(DEFAULT_CANVAS_NODES)),
       JSON.parse(JSON.stringify(DEFAULT_CANVAS_EDGES))
     );
-    setNotice('Loaded standard 19-node reference flowchart template.');
+    setNotice(t('Loaded standard 19-node reference flowchart template.', '표준 19노드 참조 흐름도 템플릿을 불러왔습니다.'));
     setTimeout(() => setNotice(null), 4000);
   };
 
@@ -665,13 +682,13 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
   const handleAutoGenerate = () => {
     const generated = generateDataFlowFromSpec(spec);
     updateGraph(generated.nodes || DEFAULT_CANVAS_NODES, generated.edges || DEFAULT_CANVAS_EDGES);
-    setNotice('Generated flowchart from current module and table logic.');
+    setNotice(t('Generated flowchart from current module and table logic.', '현재 모듈과 테이블 로직으로 흐름도를 자동 생성했습니다.'));
     setTimeout(() => setNotice(null), 4000);
   };
 
   // Clear Canvas
   const handleClearCanvas = () => {
-    if (confirm('Clear all nodes and arrows from the canvas?')) {
+    if (confirm(t('Clear all nodes and arrows from the canvas?', '캔버스의 모든 노드와 화살표를 삭제하시겠습니까?'))) {
       updateGraph([], []);
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
@@ -717,10 +734,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                       ? 'bg-white text-blue-700 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
-                  title="Switch to interactive drag-and-drop visual flowchart canvas"
+                  title={t('Switch to interactive drag-and-drop visual flowchart canvas', '드래그 앤 드롭 비주얼 흐름도 캔버스로 전환')}
                 >
                   <LayoutGrid className="w-3.5 h-3.5" />
-                  <span>Visual Canvas</span>
+                  <span>{t('Visual Canvas', '비주얼 캔버스')}</span>
                 </button>
                 <button
                   type="button"
@@ -730,10 +747,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                       ? 'bg-white text-blue-700 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
-                  title="Switch to sequential step-by-step table list editor"
+                  title={t('Switch to sequential step-by-step table list editor', '단계별 순차 테이블 편집기로 전환')}
                 >
                   <ListOrdered className="w-3.5 h-3.5" />
-                  <span>Step List Editor</span>
+                  <span>{t('Step List Editor', '단계 목록 편집')}</span>
                 </button>
               </div>
 
@@ -742,10 +759,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                 type="button"
                 onClick={handleAutoLayout}
                 className="px-2.5 py-1 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-300 rounded flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                title="Auto-align diagram hierarchy"
+                title={t('Auto-align diagram hierarchy', '다이어그램 계층 자동 정렬')}
               >
                 <RotateCcw className="w-3.5 h-3.5 text-sky-600" />
-                <span>Auto-Layout</span>
+                <span>{t('Auto-Layout', '자동 정렬')}</span>
               </button>
 
               <div className="h-4 w-px bg-slate-300 hidden sm:block" />
@@ -756,50 +773,50 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                   type="button"
                   onClick={() => handleAddShape('start')}
                   className="px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Add Start node"
+                  title={t('Add Start node', '시작 노드 추가')}
                 >
                   <Play className="w-3 h-3 text-emerald-600 fill-emerald-600" />
-                  <span>Start</span>
+                  <span>{t('Start', '시작')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleAddShape('process')}
                   className="px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Add Process box"
+                  title={t('Add Process box', '처리 박스 추가')}
                 >
                   <Square className="w-3 h-3 text-blue-600" />
-                  <span>Process Box</span>
+                  <span>{t('Process Box', '처리 박스')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleAddShape('decision')}
                   className="px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Add Decision (Branch) diamond"
+                  title={t('Add Decision (Branch) diamond', '조건 분기(마름모) 추가')}
                 >
                   <HelpCircle className="w-3 h-3 text-amber-600" />
-                  <span>Decision (Branch)</span>
+                  <span>{t('Decision (Branch)', '조건 분기')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleAddShape('database')}
                   className="px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Add Database Cylinder node"
+                  title={t('Add Database Cylinder node', 'DB 테이블(원통) 추가')}
                 >
                   <Database className="w-3 h-3 text-purple-600" />
-                  <span>DB Table</span>
+                  <span>{t('DB Table', 'DB 테이블')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleAddShape('end')}
                   className="px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Add End node"
+                  title={t('Add End node', '종료 노드 추가')}
                 >
                   <Square className="w-3 h-3 text-rose-600 fill-rose-600 rounded-sm" />
-                  <span>End</span>
+                  <span>{t('End', '종료')}</span>
                 </button>
               </div>
             </div>
@@ -811,10 +828,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                   type="button"
                   onClick={handleDeleteSelected}
                   className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-300 rounded flex items-center gap-1 cursor-pointer"
-                  title="Delete Selected Item (Delete key)"
+                  title={t('Delete Selected Item (Delete key)', '선택 항목 삭제 (Delete 키)')}
                 >
                   <Trash2 className="w-3 h-3" />
-                  <span>Delete</span>
+                  <span>{t('Delete', '삭제')}</span>
                 </button>
               ) : null}
 
@@ -822,29 +839,29 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                 type="button"
                 onClick={handleAutoGenerate}
                 className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 rounded flex items-center gap-1 cursor-pointer"
-                title="Auto-generate flow from program logic"
+                title={t('Auto-generate flow from program logic', '프로그램 로직 기반 흐름도 자동 생성')}
               >
                 <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Auto-Generate Flow</span>
+                <span>{t('Auto-Generate Flow', '흐름 자동 생성')}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleLoadReferenceTemplate}
                 className="px-2 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded flex items-center gap-1 cursor-pointer"
-                title="Load standard reference flowchart template"
+                title={t('Load standard reference flowchart template', '표준 참조 흐름도 템플릿 불러오기')}
               >
                 <RotateCcw className="w-3 h-3 text-slate-500" />
-                <span>Standard Template</span>
+                <span>{t('Standard Template', '표준 템플릿')}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleClearCanvas}
                 className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded cursor-pointer"
-                title="Clear canvas"
+                title={t('Clear canvas', '캔버스 비우기')}
               >
-                Clear Canvas
+                {t('Clear Canvas', '캔버스 초기화')}
               </button>
 
               {/* Zoom controls (only in canvas mode) */}
@@ -854,7 +871,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     type="button"
                     onClick={() => setZoom((z) => Math.min(z + 0.15, 2.0))}
                     className="p-1 hover:bg-slate-100 text-slate-600 cursor-pointer"
-                    title="Zoom In"
+                    title={t('Zoom In', '확대')}
                   >
                     <ZoomIn className="w-3.5 h-3.5" />
                   </button>
@@ -862,7 +879,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     type="button"
                     onClick={() => setZoom((z) => Math.max(z - 0.15, 0.5))}
                     className="p-1 hover:bg-slate-100 text-slate-600 cursor-pointer"
-                    title="Zoom Out"
+                    title={t('Zoom Out', '축소')}
                   >
                     <ZoomOut className="w-3.5 h-3.5" />
                   </button>
@@ -870,7 +887,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     type="button"
                     onClick={() => setZoom(1)}
                     className="px-1.5 py-0.5 text-[11px] text-slate-600 font-mono hover:bg-slate-100 cursor-pointer"
-                    title="Reset 100%"
+                    title={t('Reset 100%', '100% 초기화')}
                   >
                     {Math.round(zoom * 100)}%
                   </button>
@@ -881,7 +898,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                 type="button"
                 onClick={handleDownloadSvg}
                 className="p-1.5 hover:bg-slate-200 bg-white border border-slate-300 rounded text-slate-700 cursor-pointer"
-                title="Export as SVG"
+                title={t('Export as SVG', 'SVG로 내보내기')}
               >
                 <Download className="w-3.5 h-3.5" />
               </button>
@@ -894,17 +911,17 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
               {/* Left: Shape Switcher & Live Label input */}
               <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[280px]">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold text-indigo-900 shrink-0">Selected:</span>
+                  <span className="text-[11px] font-bold text-indigo-900 shrink-0">{t('Selected:', '선택됨:')}</span>
                   <select
                     value={selectedNode.type}
                     onChange={(e) => handleInlineTypeChange(selectedNode.id, e.target.value as FlowShapeType)}
                     className="text-xs font-semibold bg-white border border-indigo-300 rounded px-2 py-1 text-indigo-900 cursor-pointer"
                   >
-                    <option value="start">Start</option>
-                    <option value="process">Process</option>
-                    <option value="decision">Decision</option>
-                    <option value="database">Database</option>
-                    <option value="end">End</option>
+                    <option value="start">{t('Start', '시작')}</option>
+                    <option value="process">{t('Process', '처리')}</option>
+                    <option value="decision">{t('Decision', '분기')}</option>
+                    <option value="database">{t('Database', '데이터베이스')}</option>
+                    <option value="end">{t('End', '종료')}</option>
                   </select>
                 </div>
 
@@ -913,7 +930,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     type="text"
                     value={selectedNode.label}
                     onChange={(e) => handleInlineLabelChange(selectedNode.id, e.target.value)}
-                    placeholder="Node label or table name..."
+                    placeholder={t('Node label or table name...', '노드 라벨 또는 테이블명...')}
                     className="w-full text-xs font-medium bg-white border border-indigo-300 rounded px-2.5 py-1 text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
                   />
                 </div>
@@ -921,45 +938,45 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
 
               {/* Center: 1-Click Append Buttons */}
               <div className="flex items-center gap-1 flex-wrap">
-                <span className="text-[11px] font-bold text-indigo-900 mr-0.5">Append:</span>
+                <span className="text-[11px] font-bold text-indigo-900 mr-0.5">{t('Append:', '연결 추가:')}</span>
                 <button
                   type="button"
                   onClick={() => handleAppendNode(selectedNode.id, 'process')}
                   className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-white hover:bg-blue-50 hover:text-blue-700 border border-indigo-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Append Process step below and connect"
+                  title={t('Append Process step below and connect', '아래에 처리 단계 추가 후 연결')}
                 >
                   <Plus className="w-3 h-3 text-blue-600" />
-                  <span>Process</span>
+                  <span>{t('Process', '처리')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleAppendNode(selectedNode.id, 'decision')}
                   className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-white hover:bg-amber-50 hover:text-amber-800 border border-amber-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Append Decision branch below and connect"
+                  title={t('Append Decision branch below and connect', '아래에 분기 노드 추가 후 연결')}
                 >
                   <HelpCircle className="w-3 h-3 text-amber-600" />
-                  <span>Branch</span>
+                  <span>{t('Branch', '분기')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleAppendNode(selectedNode.id, 'database')}
                   className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-white hover:bg-purple-50 hover:text-purple-800 border border-purple-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Append DB Table node to the left and connect"
+                  title={t('Append DB Table node to the left and connect', '왼쪽에 DB 테이블 노드 추가 후 연결')}
                 >
                   <Database className="w-3 h-3 text-purple-600" />
-                  <span>DB Table</span>
+                  <span>{t('DB Table', 'DB 테이블')}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleAppendNode(selectedNode.id, 'end')}
                   className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-white hover:bg-rose-50 hover:text-rose-800 border border-rose-300 rounded shadow-2xs flex items-center gap-1 cursor-pointer"
-                  title="Append End node below and connect"
+                  title={t('Append End node below and connect', '아래에 종료 노드 추가 후 연결')}
                 >
                   <Square className="w-3 h-3 text-rose-600 fill-rose-600" />
-                  <span>End</span>
+                  <span>{t('End', '종료')}</span>
                 </button>
               </div>
 
@@ -971,7 +988,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     onChange={(e) => setTargetConnectNodeId(e.target.value)}
                     className="text-xs bg-white border border-slate-300 rounded px-2 py-1 text-slate-700 max-w-[130px] truncate"
                   >
-                    <option value="">Target node...</option>
+                    <option value="">{t('Target node...', '대상 노드...')}</option>
                     {nodes
                       .filter((n) => n.id !== selectedNode.id)
                       .map((n) => (
@@ -991,7 +1008,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     }}
                     className="px-2.5 py-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 rounded cursor-pointer shadow-2xs"
                   >
-                    Connect
+                    {t('Connect', '연결')}
                   </button>
                 </div>
 
@@ -999,11 +1016,11 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                   type="button"
                   onClick={() => handleDeleteNode(selectedNode.id)}
                   className="px-2 py-1 text-xs font-bold text-red-600 hover:bg-red-50 border border-red-300 rounded flex items-center gap-1 cursor-pointer"
-                  title="Delete node and arrows"
-                  aria-label="Delete node and arrows"
+                  title={t('Delete node and arrows', '노드 및 화살표 삭제')}
+                  aria-label={t('Delete node and arrows', '노드 및 화살표 삭제')}
                 >
                   <Trash2 className="w-3 h-3" />
-                  <span>Delete</span>
+                  <span>{t('Delete', '삭제')}</span>
                 </button>
               </div>
             </div>
@@ -1013,10 +1030,13 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
           {viewMode === 'canvas' && (
             <div className="px-3 py-1.5 bg-blue-50/70 border border-blue-200 rounded text-[11px] text-blue-900 flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-1.5">
-                <span className="font-bold">Flowchart Guide:</span>
+                <span className="font-bold">{t('Flowchart Guide:', '흐름도 가이드:')}</span>
                 <span>
-                  Click a node to <strong>edit its label</strong> or use <strong>Append</strong> buttons to connect next steps. Switch to{' '}
-                  <strong>Step List Editor</strong> or click <strong>Auto-Layout</strong> anytime.
+                  {lang === 'ko' ? (
+                    <>노드를 클릭해 <strong>라벨을 수정</strong>하거나 <strong>연결 추가</strong> 버튼으로 다음 단계를 연결하세요. 언제든 <strong>단계 목록 편집</strong>이나 <strong>자동 정렬</strong>을 사용할 수 있습니다.</>
+                  ) : (
+                    <>Click a node to <strong>edit its label</strong> or use <strong>Append</strong> buttons to connect next steps. Switch to <strong>Step List Editor</strong> or click <strong>Auto-Layout</strong> anytime.</>
+                  )}
                 </span>
               </div>
             </div>
@@ -1038,10 +1058,10 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
             <div className="flex items-center gap-2">
               <ListOrdered className="w-4 h-4 text-blue-600" />
               <h4 className="text-xs font-bold text-slate-800">
-                Step-by-Step Flow List
+                {t('Step-by-Step Flow List', '단계별 흐름 목록')}
               </h4>
               <span className="text-[11px] text-slate-500 tabular-nums">
-                ({nodes.length} steps)
+                {t(`(${nodes.length} steps)`, `(${nodes.length}개 단계)`)}
               </span>
             </div>
 
@@ -1052,7 +1072,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                 className="px-2.5 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded flex items-center gap-1 cursor-pointer shadow-2xs"
               >
                 <Plus className="w-3 h-3" />
-                <span>Add Step</span>
+                <span>{t('Add Step', '단계 추가')}</span>
               </button>
               <button
                 type="button"
@@ -1060,7 +1080,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                 className="px-2.5 py-1 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-300 rounded flex items-center gap-1 cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3 text-sky-600" />
-                <span>Auto-Layout</span>
+                <span>{t('Auto-Layout', '자동 정렬')}</span>
               </button>
             </div>
           </div>
@@ -1069,12 +1089,12 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-100/90 text-slate-700 uppercase font-semibold text-[11px] sticky top-0 border-b border-slate-200 z-10">
                 <tr>
-                  <th className="py-2.5 px-3 w-16 text-center">Order</th>
-                  <th className="py-2.5 px-3 w-36">Type</th>
-                  <th className="py-2.5 px-3 min-w-[220px]">Step Label / Tables</th>
-                  <th className="py-2.5 px-3 w-48">SAP Event / Note</th>
-                  <th className="py-2.5 px-3 min-w-[240px]">Outgoing Arrows</th>
-                  <th className="py-2.5 px-3 w-28 text-center">Actions</th>
+                  <th className="py-2.5 px-3 w-16 text-center">{t('Order', '순서')}</th>
+                  <th className="py-2.5 px-3 w-36">{t('Type', '유형')}</th>
+                  <th className="py-2.5 px-3 min-w-[220px]">{t('Step Label / Tables', '단계 라벨 / 테이블')}</th>
+                  <th className="py-2.5 px-3 w-48">{t('SAP Event / Note', 'SAP 이벤트 / 비고')}</th>
+                  <th className="py-2.5 px-3 min-w-[240px]">{t('Outgoing Arrows', '다음 연결 화살표')}</th>
+                  <th className="py-2.5 px-3 w-28 text-center">{t('Actions', '작업')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1094,8 +1114,8 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                               disabled={idx === 0}
                               onClick={() => handleMoveNodeOrder(node.id, 'up')}
                               className="p-0.5 text-slate-400 hover:text-blue-600 disabled:opacity-20 cursor-pointer"
-                              title="Move Up"
-                              aria-label="Move Up"
+                              title={t('Move Up', '위로 이동')}
+                              aria-label={t('Move Up', '위로 이동')}
                             >
                               <ArrowUp className="w-3 h-3" />
                             </button>
@@ -1104,8 +1124,8 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                               disabled={idx === nodes.length - 1}
                               onClick={() => handleMoveNodeOrder(node.id, 'down')}
                               className="p-0.5 text-slate-400 hover:text-blue-600 disabled:opacity-20 cursor-pointer"
-                              title="Move Down"
-                              aria-label="Move Down"
+                              title={t('Move Down', '아래로 이동')}
+                              aria-label={t('Move Down', '아래로 이동')}
                             >
                               <ArrowDown className="w-3 h-3" />
                             </button>
@@ -1120,11 +1140,11 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                           onChange={(e) => handleInlineTypeChange(node.id, e.target.value as FlowShapeType)}
                           className="w-full text-xs font-semibold bg-white border border-slate-300 rounded px-2 py-1 text-slate-800 cursor-pointer"
                         >
-                          <option value="start">Start</option>
-                          <option value="process">Process</option>
-                          <option value="decision">Decision</option>
-                          <option value="database">Database</option>
-                          <option value="end">End</option>
+                          <option value="start">{t('Start', '시작')}</option>
+                          <option value="process">{t('Process', '처리')}</option>
+                          <option value="decision">{t('Decision', '분기')}</option>
+                          <option value="database">{t('Database', '데이터베이스')}</option>
+                          <option value="end">{t('End', '종료')}</option>
                         </select>
                       </td>
 
@@ -1137,7 +1157,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                           className={`w-full text-xs p-1.5 border border-slate-300 rounded bg-white focus:ring-1 focus:ring-blue-500 ${
                             node.type === 'database' ? 'font-mono font-bold uppercase' : 'font-medium'
                           }`}
-                          placeholder="Step label..."
+                          placeholder={t('Step label...', '단계 라벨...')}
                         />
                       </td>
 
@@ -1179,8 +1199,8 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                                     type="button"
                                     onClick={() => handleRemoveEdge(edge.id)}
                                     className="text-slate-400 hover:text-red-600 p-0.5 cursor-pointer"
-                                    title="Remove arrow"
-                                    aria-label="Remove arrow"
+                                    title={t('Remove arrow', '화살표 제거')}
+                                    aria-label={t('Remove arrow', '화살표 제거')}
                                   >
                                     <X className="w-2.5 h-2.5" />
                                   </button>
@@ -1188,7 +1208,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                               );
                             })}
                             {outgoingEdges.length === 0 && (
-                              <span className="text-[11px] text-slate-400 italic">No connections</span>
+                              <span className="text-[11px] text-slate-400 italic">{t('No connections', '연결 없음')}</span>
                             )}
                           </div>
 
@@ -1205,7 +1225,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                               }}
                               className="text-[11px] bg-slate-50 border border-slate-300 rounded px-1.5 py-0.5 text-slate-600 cursor-pointer max-w-[180px] truncate"
                             >
-                              <option value="">+ Connect target node...</option>
+                              <option value="">{t('+ Connect target node...', '+ 대상 노드 연결...')}</option>
                               {otherNodes.map((on) => (
                                 <option key={on.id} value={on.id}>
                                   ➔ {on.label.split('\n')[0]}
@@ -1223,8 +1243,8 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                             type="button"
                             onClick={() => handleInsertStepAfter(idx, 'process')}
                             className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
-                            title="Insert step below"
-                            aria-label="Insert step below"
+                            title={t('Insert step below', '아래에 단계 삽입')}
+                            aria-label={t('Insert step below', '아래에 단계 삽입')}
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -1234,8 +1254,8 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                               setEditingNode(node);
                             }}
                             className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer"
-                            title="Edit properties"
-                            aria-label="Edit properties"
+                            title={t('Edit properties', '속성 편집')}
+                            aria-label={t('Edit properties', '속성 편집')}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -1243,8 +1263,8 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                             type="button"
                             onClick={() => handleDeleteNode(node.id)}
                             className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer"
-                            title="Delete step"
-                            aria-label="Delete step"
+                            title={t('Delete step', '단계 삭제')}
+                            aria-label={t('Delete step', '단계 삭제')}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1390,8 +1410,8 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     className="cursor-pointer hover:opacity-90"
                   >
                     <rect x="-35" y="-10" width="70" height="20" rx="4" fill="#0f172a" fillOpacity="0.9" />
-                    <text x="0" y="3.5" fill="#ffffff" fontSize="9.5" textAnchor="middle" fontWeight="bold">
-                      Edit Arrow
+                      <text x="0" y="3.5" fill="#ffffff" fontSize="9.5" textAnchor="middle" fontWeight="bold">
+                      {t('Edit Arrow', '화살표 편집')}
                     </text>
                   </g>
                 )}
@@ -1548,7 +1568,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     >
                       <rect x="2" y="2" width="31" height="18" rx="3" fill="#2563eb" />
                       <text x="17.5" y="14" fill="#ffffff" fontSize="9.5" textAnchor="middle" fontWeight="bold">
-                        Edit
+                        {t('Edit', '편집')}
                       </text>
                     </g>
                     {/* Auto-Fit Button */}
@@ -1561,7 +1581,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     >
                       <rect x="35" y="2" width="31" height="18" rx="3" fill="#475569" />
                       <text x="50.5" y="14" fill="#ffffff" fontSize="9.5" textAnchor="middle" fontWeight="bold">
-                        Fit
+                        {t('Fit', '맞춤')}
                       </text>
                     </g>
                     {/* Delete Button */}
@@ -1574,7 +1594,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     >
                       <rect x="68" y="2" width="35" height="18" rx="3" fill="#ef4444" />
                       <text x="85.5" y="14" fill="#ffffff" fontSize="9.5" textAnchor="middle" fontWeight="bold">
-                        Del
+                        {t('Del', '삭제')}
                       </text>
                     </g>
                   </g>
@@ -1652,13 +1672,13 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-blue-400" />
-                <h3 className="text-sm font-bold">Edit Flowchart Node</h3>
+                <h3 className="text-sm font-bold">{t('Edit Flowchart Node', '흐름도 노드 편집')}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingNode(null)}
-                title="Close"
-                aria-label="Close"
+                title={t('Close', '닫기')}
+                aria-label={t('Close', '닫기')}
                 className="text-slate-400 hover:text-white p-1 rounded cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1670,15 +1690,15 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
               {/* Shape Type Selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Node Shape & Role
+                  {t('Node Shape & Role', '노드 도형 및 역할')}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { type: 'start', label: 'Start (Capsule)', icon: Play },
-                    { type: 'process', label: 'Process Box', icon: Square },
-                    { type: 'decision', label: 'Decision (Diamond)', icon: HelpCircle },
-                    { type: 'database', label: 'DB Table (Cylinder)', icon: Database },
-                    { type: 'end', label: 'End (Capsule)', icon: Square },
+                    { type: 'start', label: t('Start (Capsule)', '시작 (캡슐)'), icon: Play },
+                    { type: 'process', label: t('Process Box', '처리 박스'), icon: Square },
+                    { type: 'decision', label: t('Decision (Diamond)', '조건 분기 (마름모)'), icon: HelpCircle },
+                    { type: 'database', label: t('DB Table (Cylinder)', 'DB 테이블 (원통)'), icon: Database },
+                    { type: 'end', label: t('End (Capsule)', '종료 (캡슐)'), icon: Square },
                   ].map((item) => (
                     <button
                       key={item.type}
@@ -1703,17 +1723,17 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-bold text-slate-700">
-                    Node Label (Text Content)
+                    {t('Node Label (Text Content)', '노드 라벨 (텍스트 내용)')}
                   </label>
                   <span className="text-[11px] text-slate-400 font-normal">
-                    Enter for new line
+                    {t('Enter for new line', '줄바꿈: Enter')}
                   </span>
                 </div>
                 <textarea
                   rows={editingNode.type === 'database' ? 4 : 3}
                   value={editingNode.label}
                   onChange={(e) => setEditingNode({ ...editingNode, label: e.target.value })}
-                  placeholder="Enter step label or DB table names..."
+                  placeholder={t('Enter step label or DB table names...', '단계 라벨 또는 DB 테이블명 입력...')}
                   className={`w-full p-2.5 border border-slate-300 rounded-lg text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
                     editingNode.type === 'database' ? 'font-mono uppercase font-bold' : 'font-medium'
                   }`}
@@ -1725,7 +1745,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-bold text-slate-700">
-                    Dimensions (Width × Height)
+                    {t('Dimensions (Width × Height)', '크기 (너비 × 높이)')}
                   </label>
                   <button
                     type="button"
@@ -1736,12 +1756,12 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded border border-blue-200 cursor-pointer flex items-center gap-1"
                   >
                     <Maximize2 className="w-3 h-3" />
-                    <span>Auto-Fit Size to Text</span>
+                    <span>{t('Auto-Fit Size to Text', '텍스트에 크기 자동 맞춤')}</span>
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[11px] text-slate-500">Width (px):</span>
+                    <span className="text-[11px] text-slate-500">{t('Width (px):', '너비 (px):')}</span>
                     <input
                       type="number"
                       value={editingNode.width}
@@ -1754,7 +1774,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                     />
                   </div>
                   <div>
-                    <span className="text-[11px] text-slate-500">Height (px):</span>
+                    <span className="text-[11px] text-slate-500">{t('Height (px):', '높이 (px):')}</span>
                     <input
                       type="number"
                       value={editingNode.height}
@@ -1772,7 +1792,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
               {/* SAP Event Tag (Optional) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  SAP Event Tag / Notes (Optional)
+                  {t('SAP Event Tag / Notes (Optional)', 'SAP 이벤트 태그 / 비고 (선택)')}
                 </label>
                 <input
                   type="text"
@@ -1795,7 +1815,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                 className="px-3 py-1.5 text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg flex items-center gap-1 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Node</span>
+                <span>{t('Delete Node', '노드 삭제')}</span>
               </button>
 
               <div className="flex items-center gap-2">
@@ -1804,7 +1824,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                   onClick={() => setEditingNode(null)}
                   className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-slate-300 rounded-lg cursor-pointer"
                 >
-                  Cancel
+                  {t('Cancel', '취소')}
                 </button>
                 <button
                   type="button"
@@ -1814,7 +1834,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                   }}
                   className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm cursor-pointer"
                 >
-                  Save Changes
+                  {t('Save Changes', '변경 사항 저장')}
                 </button>
               </div>
             </div>
@@ -1837,13 +1857,13 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
             <div className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ArrowRight className="w-4 h-4 text-blue-400" />
-                <h3 className="text-sm font-bold">Edit Connection Arrow</h3>
+                <h3 className="text-sm font-bold">{t('Edit Connection Arrow', '연결 화살표 편집')}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingEdge(null)}
-                title="Close"
-                aria-label="Close"
+                title={t('Close', '닫기')}
+                aria-label={t('Close', '닫기')}
                 className="text-slate-400 hover:text-white p-1 rounded cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1853,13 +1873,13 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
             <div className="p-4 space-y-3 text-xs">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Branch Label (Condition Text)
+                  {t('Branch Label (Condition Text)', '분기 라벨 (조건 텍스트)')}
                 </label>
                 <input
                   type="text"
                   value={editingEdge.label || ''}
                   onChange={(e) => setEditingEdge({ ...editingEdge, label: e.target.value })}
-                  placeholder="e.g. Query, Create, Success, Fail, Yes, No"
+                  placeholder={t('e.g. Query, Create, Success, Fail, Yes, No', '예: 조회, 생성, 성공, 실패, 예, 아니오')}
                   className="w-full p-2 border border-slate-300 rounded text-xs font-semibold focus:border-blue-500"
                   autoFocus
                 />
@@ -1867,10 +1887,13 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
 
               <div>
                 <span className="block text-[11px] text-slate-500 mb-1 font-semibold">
-                  Quick Preset Labels:
+                  {t('Quick Preset Labels:', '빠른 프리셋 라벨:')}
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {['Query', 'Create', 'Success', 'Fail', 'Yes', 'No', 'Retry', 'Exit', 'Cancel'].map((tag) => (
+                  {(lang === 'ko'
+                    ? ['조회', '생성', '성공', '실패', '예', '아니오', '재시도', '종료', '취소']
+                    : ['Query', 'Create', 'Success', 'Fail', 'Yes', 'No', 'Retry', 'Exit', 'Cancel']
+                  ).map((tag) => (
                     <button
                       key={tag}
                       type="button"
@@ -1896,7 +1919,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                 className="px-2.5 py-1 text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 rounded flex items-center gap-1 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Arrow</span>
+                <span>{t('Delete Arrow', '화살표 삭제')}</span>
               </button>
 
               <div className="flex items-center gap-2">
@@ -1905,7 +1928,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                   onClick={() => setEditingEdge(null)}
                   className="px-3 py-1 text-xs text-slate-600 hover:text-slate-800 bg-white border border-slate-300 rounded cursor-pointer"
                 >
-                  Cancel
+                  {t('Cancel', '취소')}
                 </button>
                 <button
                   type="button"
@@ -1918,7 +1941,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
                   }}
                   className="px-3.5 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded shadow-xs cursor-pointer"
                 >
-                  Save
+                  {t('Save', '저장')}
                 </button>
               </div>
             </div>

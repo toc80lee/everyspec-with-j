@@ -27,6 +27,7 @@ import {
 } from '../utils/authStorage';
 import { SapGuiTheme, SAP_GUI_THEMES } from '../data/sapGuiThemes';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { COMMON_PROJECT_CODE } from '../utils/projectStorage';
 
 export type MainWorkspaceMode =
@@ -104,6 +105,7 @@ export const TopNav: React.FC<TopNavProps> = ({
     logoutGoogle,
     authError,
   } = useAuth();
+  const { lang, setLang, t } = useLanguage();
   const isOverviewOrList =
     currentMode === 'overview' ||
     currentMode === 'program_list' ||
@@ -154,17 +156,17 @@ export const TopNav: React.FC<TopNavProps> = ({
   }, [isUserMenuOpen, isThemeMenuOpen]);
 
   const modeBreadcrumbLabel: Record<MainWorkspaceMode, string> = {
-    overview: 'Project Dashboard',
-    program_list: 'Programs',
-    meeting_minutes: 'Meeting Minutes',
-    meeting_wizard: 'AI Spec Wizard',
-    project_settings: 'Project Settings',
-    shortcuts: 'Keyboard Shortcuts',
-    split: 'Split Workspace',
-    mockup_only: 'GUI Simulator',
-    editor_only: 'Spec Editor',
-    abap_code: 'ABAP Code',
-    document: 'Print View',
+    overview: t('Project Dashboard', '프로젝트 대시보드'),
+    program_list: t('Programs', '프로그램 목록'),
+    meeting_minutes: t('Meeting Minutes', '프로젝트 회의록'),
+    meeting_wizard: t('AI Spec Wizard', 'AI 사양서 생성'),
+    project_settings: t('Project Settings', '프로젝트 설정'),
+    shortcuts: t('Keyboard Shortcuts', '단축키 안내'),
+    split: t('Split Workspace', '분할 작업실'),
+    mockup_only: t('GUI Simulator', 'GUI 시뮬레이터'),
+    editor_only: t('Spec Editor', '사양서 편집기'),
+    abap_code: t('ABAP Code', 'ABAP 코드'),
+    document: t('Print View', '인쇄 미리보기'),
   };
 
   const renderTopTooltip = (label: string, shortcut?: string, alignRight = false) => (
@@ -185,12 +187,12 @@ export const TopNav: React.FC<TopNavProps> = ({
 
   const splitLayoutLabel =
     splitLayout === 'top-bottom'
-      ? 'Layout: Top / Bottom'
+      ? t('Layout: Top / Bottom', '배치: 상하 분할')
       : splitLayout === 'left-right'
-      ? 'Layout: Left / Right'
+      ? t('Layout: Left / Right', '배치: 좌우 분할')
       : splitLayout === 'bottom-top'
-      ? 'Layout: Bottom / Top'
-      : 'Layout: Right / Left';
+      ? t('Layout: Bottom / Top', '배치: 하상 분할')
+      : t('Layout: Right / Left', '배치: 우좌 분할');
 
   return (
     <header className="no-print h-12 flex items-center justify-between gap-6 px-5 bg-slate-900 border-b border-slate-800 text-white shrink-0">
@@ -227,7 +229,11 @@ export const TopNav: React.FC<TopNavProps> = ({
               <button
                 type="button"
                 onClick={onToggleCurrentSpecFavorite}
-                aria-label={isCurrentSpecFavorite ? 'Remove favorite' : 'Add favorite'}
+                aria-label={
+                  isCurrentSpecFavorite
+                    ? t('Remove favorite', '즐겨찾기 해제')
+                    : t('Add favorite', '즐겨찾기 추가')
+                }
                 className="group relative p-1.5 rounded-md hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
               >
                 <Star
@@ -237,7 +243,11 @@ export const TopNav: React.FC<TopNavProps> = ({
                       : 'text-slate-500 hover:text-amber-300'
                   }`}
                 />
-                {renderTopTooltip(isCurrentSpecFavorite ? 'Remove favorite' : 'Add favorite')}
+                {renderTopTooltip(
+                  isCurrentSpecFavorite
+                    ? t('Remove favorite', '즐겨찾기 해제')
+                    : t('Add favorite', '즐겨찾기 추가')
+                )}
               </button>
             )}
           </div>
@@ -247,7 +257,7 @@ export const TopNav: React.FC<TopNavProps> = ({
       {/* Zone 2: Icon-Only Spec Workspace Perspective Switcher (Only visible inside a Spec) */}
       {!isOverviewOrList && (
         <nav
-          aria-label="Spec Workspace Views"
+          aria-label={t('Spec Workspace Views', '작업실 화면 전환')}
           className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-lg border border-slate-700/70 shrink-0"
         >
           <button
@@ -258,10 +268,10 @@ export const TopNav: React.FC<TopNavProps> = ({
                 ? 'bg-blue-600 text-white'
                 : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
             }`}
-            aria-label="Split View"
+            aria-label={t('Split View', '분할 보기')}
           >
             <SplitSquareVertical className="w-4 h-4" />
-            {renderTopTooltip('Split View', 'Alt+1')}
+            {renderTopTooltip(t('Split View', '분할 보기'), 'Alt+1')}
           </button>
 
           {currentMode === 'split' && onCycleSplitLayout && (
@@ -292,10 +302,10 @@ export const TopNav: React.FC<TopNavProps> = ({
                 ? 'bg-blue-600 text-white'
                 : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
             }`}
-            aria-label="GUI Simulator"
+            aria-label={t('GUI Simulator', 'GUI 시뮬레이터')}
           >
             <Layers className="w-4 h-4" />
-            {renderTopTooltip('GUI Simulator', 'Alt+2')}
+            {renderTopTooltip(t('GUI Simulator', 'GUI 시뮬레이터'), 'Alt+2')}
           </button>
 
           <button
@@ -306,10 +316,10 @@ export const TopNav: React.FC<TopNavProps> = ({
                 ? 'bg-blue-600 text-white'
                 : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
             }`}
-            aria-label="Spec Editor"
+            aria-label={t('Spec Editor', '사양서 편집기')}
           >
             <FileText className="w-4 h-4" />
-            {renderTopTooltip('Spec Editor', 'Alt+3')}
+            {renderTopTooltip(t('Spec Editor', '사양서 편집기'), 'Alt+3')}
           </button>
 
           <button
@@ -320,10 +330,10 @@ export const TopNav: React.FC<TopNavProps> = ({
                 ? 'bg-blue-600 text-white'
                 : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
             }`}
-            aria-label="ABAP Code"
+            aria-label={t('ABAP Code', 'ABAP 코드')}
           >
             <FileCode className="w-4 h-4" />
-            {renderTopTooltip('ABAP Code', 'Alt+4')}
+            {renderTopTooltip(t('ABAP Code', 'ABAP 코드'), 'Alt+4')}
           </button>
 
           <button
@@ -334,21 +344,25 @@ export const TopNav: React.FC<TopNavProps> = ({
                 ? 'bg-blue-600 text-white'
                 : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
             }`}
-            aria-label="Print View"
+            aria-label={t('Print View', '인쇄 미리보기')}
           >
             <Printer className="w-4 h-4" />
-            {renderTopTooltip('Print View', 'Alt+5')}
+            {renderTopTooltip(t('Print View', '인쇄 미리보기'), 'Alt+5')}
           </button>
         </nav>
       )}
 
-      {/* Zone 3: Icon-Only Actions & Account */}
+      {/* Zone 3: Language Switcher + Icon-Only Actions & Account */}
       <div className="flex items-center gap-2 shrink-0">
         {!isOverviewOrList && onQuickSnapshotSave && (
           <button
             type="button"
             onClick={onQuickSnapshotSave}
-            aria-label={hasUnsavedChanges ? 'Save Snapshot (Unsaved changes)' : 'Save Snapshot'}
+            aria-label={
+              hasUnsavedChanges
+                ? t('Save Snapshot (Unsaved changes)', '스냅샷 저장 (미저장 변경사항)')
+                : t('Save Snapshot', '스냅샷 저장')
+            }
             className={`group relative w-8 h-8 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
               hasUnsavedChanges
                 ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
@@ -358,10 +372,10 @@ export const TopNav: React.FC<TopNavProps> = ({
             <Save className="w-4 h-4" />
             {renderTopTooltip(
               hasUnsavedChanges
-                ? 'Save Snapshot*'
+                ? t('Save Snapshot*', '스냅샷 저장*')
                 : lastSavedAt
-                ? `Save Snapshot (${lastSavedAt})`
-                : 'Save Snapshot',
+                ? t(`Save Snapshot (${lastSavedAt})`, `스냅샷 저장 (${lastSavedAt})`)
+                : t('Save Snapshot', '스냅샷 저장'),
               'Ctrl+S',
               true
             )}
@@ -371,19 +385,52 @@ export const TopNav: React.FC<TopNavProps> = ({
         <button
           type="button"
           onClick={onNewSpec}
-          aria-label="New Spec"
+          aria-label={t('New Spec', '새 사양서')}
           className="group relative w-8 h-8 text-white bg-blue-600 rounded-lg hover:bg-blue-500 transition-colors shrink-0 flex items-center justify-center cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          {renderTopTooltip('New Spec', undefined, true)}
+          {renderTopTooltip(t('New Spec', '새 사양서'), undefined, true)}
         </button>
+
+        {/* Quick Language Option (EN / 한국어) */}
+        <div
+          role="group"
+          aria-label={t('Language Selection', '언어 선택')}
+          className="group relative flex items-center bg-slate-800 border border-slate-700 rounded-lg p-0.5 shrink-0"
+        >
+          <button
+            type="button"
+            onClick={() => setLang('en')}
+            aria-pressed={lang === 'en'}
+            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors cursor-pointer whitespace-nowrap ${
+              lang === 'en'
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            onClick={() => setLang('ko')}
+            aria-pressed={lang === 'ko'}
+            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors cursor-pointer whitespace-nowrap ${
+              lang === 'ko'
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            한국어
+          </button>
+          {renderTopTooltip(t('Language (English / 한국어)', '언어 설정 (English / 한국어)'), undefined, true)}
+        </div>
 
         {/* User Profile, Theme & Role Menu */}
         <div className="relative" ref={userMenuRef}>
           <button
             type="button"
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-            aria-label={`Account & Settings (${activeUser.name})`}
+            aria-label={t(`Account & Settings (${activeUser.name})`, `계정 및 설정 (${activeUser.name})`)}
             className="group relative w-8 h-8 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
             <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px]">
@@ -395,15 +442,42 @@ export const TopNav: React.FC<TopNavProps> = ({
 
           {isUserMenuOpen && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 p-2.5 z-50 text-slate-800 space-y-2.5">
+              {/* Language Setting inside Account & Settings */}
+              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-2">
+                <span className="text-[11px] font-bold text-slate-700">
+                  {t('Language', '언어 설정')}
+                </span>
+                <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-md p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setLang('en')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                      lang === 'en' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    English
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLang('ko')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                      lang === 'ko' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    한국어
+                  </button>
+                </div>
+              </div>
+
               {/* Google Cloud Auth Section */}
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 space-y-1.5">
                 <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
                   <span className="flex items-center gap-1">
                     <ShieldCheck className={`w-3.5 h-3.5 ${isFirebaseAuthenticated ? 'text-emerald-600' : 'text-slate-400'}`} />
-                    Cloud Sync
+                    {t('Cloud Sync', '클라우드 동기화')}
                   </span>
                   <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isFirebaseAuthenticated ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                    {isFirebaseAuthenticated ? 'SYNC ON' : 'LOCAL'}
+                    {isFirebaseAuthenticated ? t('SYNC ON', '동기화 중') : t('LOCAL', '로컬')}
                   </span>
                 </div>
                 {isFirebaseAuthenticated ? (
@@ -415,7 +489,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                       className="flex items-center gap-1 px-2 py-1 rounded bg-white hover:bg-rose-50 text-rose-700 border border-slate-200 font-semibold shrink-0 cursor-pointer"
                     >
                       <LogOut className="w-3 h-3" />
-                      Sign Out
+                      {t('Sign Out', '로그아웃')}
                     </button>
                   </div>
                 ) : (
@@ -425,7 +499,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                     className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors cursor-pointer"
                   >
                     <LogIn className="w-3.5 h-3.5" />
-                    Sign in with Google
+                    {t('Sign in with Google', 'Google 로그인')}
                   </button>
                 )}
                 {authError && (
@@ -436,7 +510,7 @@ export const TopNav: React.FC<TopNavProps> = ({
               {/* Project RBAC Role Selector */}
               <div>
                 <div className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1">
-                  Project Role (Approval)
+                  {t('Project Role (Approval)', '프로젝트 역할 (승인 권한)')}
                 </div>
                 <div className="grid grid-cols-5 gap-1">
                   {(['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN'] as UserProjectRole[]).map((role) => (
@@ -463,7 +537,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                     <div>
                       <div className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1 flex items-center gap-1">
                         <Palette className="w-3 h-3" />
-                        <span>SAP GUI Theme</span>
+                        <span>{t('SAP GUI Theme', 'SAP GUI 테마')}</span>
                       </div>
                       <div className="grid grid-cols-3 gap-1">
                         {(['quartz', 'belize', 'blue_crystal'] as SapGuiTheme[]).map((themeKey) => {
@@ -504,7 +578,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                     >
                       <span className="flex items-center gap-1.5 font-semibold">
                         <Keyboard className="w-3.5 h-3.5 text-slate-500" />
-                        Keyboard Shortcuts
+                        {t('Keyboard Shortcuts', '단축키 안내')}
                       </span>
                       <kbd className="font-mono text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                         ?
@@ -517,7 +591,7 @@ export const TopNav: React.FC<TopNavProps> = ({
               {/* Registered Users Switcher */}
               <div>
                 <div className="text-[10px] font-bold text-slate-500 uppercase px-1 py-1 border-t border-slate-100">
-                  Switch User Profile
+                  {t('Switch User Profile', '사용자 프로필 전환')}
                 </div>
                 <div className="space-y-0.5 max-h-56 overflow-y-auto">
                   {registeredUsers.map((u) => (
@@ -540,7 +614,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                           <span className="truncate">{u.name}</span>
                           {isDefaultOperatorUser(u) && (
                             <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-slate-900 text-white shrink-0">
-                              Default
+                              {t('Default', '기본 관리자')}
                             </span>
                           )}
                         </div>

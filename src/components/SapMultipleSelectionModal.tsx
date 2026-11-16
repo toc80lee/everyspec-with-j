@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, X, Plus, Trash2 } from 'lucide-react';
 import { SelectionParameter } from '../types/sap';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SapMultipleSelectionModalProps {
   param: SelectionParameter;
@@ -19,6 +20,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
   onClose,
   onApply,
 }) => {
+  const { t } = useLanguage();
   const existingMulti = param.multi_values || [];
 
   const initialIncludeSingles = existingMulti
@@ -119,12 +121,13 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 border border-white" />
             <span>
-              Multiple Selection: {param.text} ({param.name})
+              {t('Multiple Selection:', '다중 선택:')} {param.text} ({param.name})
             </span>
           </div>
           <button
             type="button"
             onClick={onClose}
+            title={t('Close', '닫기')}
             className="rounded p-0.5 hover:bg-white/20 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4 text-white" />
@@ -142,7 +145,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                 : 'bg-[#DCD8C8] border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            Select Single Values{validSingleCount > 0 ? ` (${validSingleCount})` : ''}
+            {t('Select Single Values', '단일 값 선택')}{validSingleCount > 0 ? ` (${validSingleCount})` : ''}
           </button>
           <button
             type="button"
@@ -153,7 +156,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                 : 'bg-[#DCD8C8] border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            Select Ranges{validRangeCount > 0 ? ` (${validRangeCount})` : ''}
+            {t('Select Ranges', '범위 선택')}{validRangeCount > 0 ? ` (${validRangeCount})` : ''}
           </button>
           <button
             type="button"
@@ -164,7 +167,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                 : 'bg-[#DCD8C8] border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            Exclude Values{validExcludeCount > 0 ? ` (${validExcludeCount})` : ''}
+            {t('Exclude Values', '값 제외')}{validExcludeCount > 0 ? ` (${validExcludeCount})` : ''}
           </button>
         </div>
 
@@ -172,11 +175,20 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
         <div className="p-4 space-y-3">
           <div className="text-[11px] text-slate-600">
             {tab === 'single' &&
-              'Enter individual values to include (Sign = I, Option = EQ/CP). Supports * wildcards.'}
+              t(
+                'Enter individual values to include (Sign = I, Option = EQ/CP). Supports * wildcards.',
+                '포함할 개별 값을 입력하세요 (Sign = I, Option = EQ/CP). * 와일드카드를 지원합니다.'
+              )}
             {tab === 'range' &&
-              'Enter From / To intervals to include (Sign = I, Option = BT).'}
+              t(
+                'Enter From / To intervals to include (Sign = I, Option = BT).',
+                '포함할 시작(From) / 종료(To) 구간을 입력하세요 (Sign = I, Option = BT).'
+              )}
             {tab === 'exclude' &&
-              'Enter individual values or intervals to exclude from selection (Sign = E).'}
+              t(
+                'Enter individual values or intervals to exclude from selection (Sign = E).',
+                '조회에서 제외할 개별 값 또는 구간을 입력하세요 (Sign = E).'
+              )}
           </div>
 
           {tab === 'single' && (
@@ -192,7 +204,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                       next[idx] = e.target.value;
                       setSingleItems(next);
                     }}
-                    placeholder={`Value ${idx + 1}`}
+                    placeholder={t(`Value ${idx + 1}`, `값 ${idx + 1}`)}
                     className="flex-1 bg-white border border-slate-400 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                   />
                   {singleItems.length > 2 && (
@@ -211,7 +223,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                 onClick={() => setSingleItems([...singleItems, ''])}
                 className="mt-1 flex items-center gap-1 text-[11px] text-blue-700 hover:underline cursor-pointer"
               >
-                <Plus className="w-3 h-3" /> Add Row
+                <Plus className="w-3 h-3" /> {t('Add Row', '행 추가')}
               </button>
             </div>
           )}
@@ -219,8 +231,8 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
           {tab === 'range' && (
             <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
               <div className="flex text-[11px] text-slate-500 font-medium px-8 gap-4">
-                <span className="flex-1">Lower Limit (From)</span>
-                <span className="flex-1">Upper Limit (To)</span>
+                <span className="flex-1">{t('Lower Limit (From)', '하한 (From)')}</span>
+                <span className="flex-1">{t('Upper Limit (To)', '상한 (To)')}</span>
               </div>
               {rangeItems.map((r, idx) => (
                 <div key={idx} className="flex items-center gap-2">
@@ -233,7 +245,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                       next[idx] = { ...next[idx], low: e.target.value };
                       setRangeItems(next);
                     }}
-                    placeholder="From"
+                    placeholder={t('From', '시작')}
                     className="flex-1 bg-white border border-slate-400 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                   />
                   <span className="text-slate-400">~</span>
@@ -245,7 +257,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                       next[idx] = { ...next[idx], high: e.target.value };
                       setRangeItems(next);
                     }}
-                    placeholder="To"
+                    placeholder={t('To', '종료')}
                     className="flex-1 bg-white border border-slate-400 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                   />
                   {rangeItems.length > 1 && (
@@ -264,7 +276,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                 onClick={() => setRangeItems([...rangeItems, { low: '', high: '' }])}
                 className="mt-1 flex items-center gap-1 text-[11px] text-blue-700 hover:underline cursor-pointer"
               >
-                <Plus className="w-3 h-3" /> Add Interval
+                <Plus className="w-3 h-3" /> {t('Add Interval', '구간 추가')}
               </button>
             </div>
           )}
@@ -273,7 +285,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
             <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
               <div className="space-y-1.5">
                 <div className="text-[11px] font-semibold text-rose-800">
-                  Exclude Single Values (Sign = E, Option = EQ)
+                  {t('Exclude Single Values (Sign = E, Option = EQ)', '단일 값 제외 (Sign = E, Option = EQ)')}
                 </div>
                 {excludeSingles.map((val, idx) => (
                   <div key={idx} className="flex items-center gap-2">
@@ -286,7 +298,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                         next[idx] = e.target.value;
                         setExcludeSingles(next);
                       }}
-                      placeholder={`Exclude value ${idx + 1}`}
+                      placeholder={t(`Exclude value ${idx + 1}`, `제외 값 ${idx + 1}`)}
                       className="flex-1 bg-white border border-rose-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono"
                     />
                     {excludeSingles.length > 1 && (
@@ -305,13 +317,13 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                   onClick={() => setExcludeSingles([...excludeSingles, ''])}
                   className="flex items-center gap-1 text-[11px] text-rose-700 hover:underline cursor-pointer"
                 >
-                  <Plus className="w-3 h-3" /> Add Exclude Value
+                  <Plus className="w-3 h-3" /> {t('Add Exclude Value', '제외 값 추가')}
                 </button>
               </div>
 
               <div className="border-t border-slate-300 pt-2 space-y-1.5">
                 <div className="text-[11px] font-semibold text-rose-800">
-                  Exclude Ranges (Sign = E, Option = BT)
+                  {t('Exclude Ranges (Sign = E, Option = BT)', '범위 제외 (Sign = E, Option = BT)')}
                 </div>
                 {excludeRanges.map((r, idx) => (
                   <div key={idx} className="flex items-center gap-2">
@@ -324,7 +336,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                         next[idx] = { ...next[idx], low: e.target.value };
                         setExcludeRanges(next);
                       }}
-                      placeholder="Exclude From"
+                      placeholder={t('Exclude From', '제외 시작')}
                       className="flex-1 bg-white border border-rose-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono"
                     />
                     <span className="text-slate-400">~</span>
@@ -336,7 +348,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                         next[idx] = { ...next[idx], high: e.target.value };
                         setExcludeRanges(next);
                       }}
-                      placeholder="Exclude To"
+                      placeholder={t('Exclude To', '제외 종료')}
                       className="flex-1 bg-white border border-rose-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-rose-500 font-mono"
                     />
                   </div>
@@ -346,7 +358,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                   onClick={() => setExcludeRanges([...excludeRanges, { low: '', high: '' }])}
                   className="flex items-center gap-1 text-[11px] text-rose-700 hover:underline cursor-pointer"
                 >
-                  <Plus className="w-3 h-3" /> Add Exclude Range
+                  <Plus className="w-3 h-3" /> {t('Add Exclude Range', '제외 범위 추가')}
                 </button>
               </div>
             </div>
@@ -365,7 +377,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
             }}
             className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-slate-700 bg-[#F4F2E6] border border-slate-400 hover:bg-white cursor-pointer"
           >
-            Clear All
+            {t('Clear All', '전체 지우기')}
           </button>
           <div className="flex items-center gap-2">
             <button
@@ -374,14 +386,14 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
               className="flex items-center gap-1 px-3 py-1 text-[11px] font-semibold text-white bg-[#2B547E] border border-[#1A385C] hover:bg-[#1E3F66] shadow-xs cursor-pointer"
             >
               <Check className="w-3.5 h-3.5" />
-              Copy (F8)
+              {t('Copy (F8)', '복사 (F8)')}
             </button>
             <button
               type="button"
               onClick={onClose}
               className="px-3 py-1 text-[11px] text-slate-700 bg-[#ECE9D8] border border-slate-400 hover:bg-white cursor-pointer"
             >
-              Cancel (F12)
+              {t('Cancel (F12)', '취소 (F12)')}
             </button>
           </div>
         </div>

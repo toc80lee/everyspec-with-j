@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ProgramSpec } from '../types/sap';
 import { exportSpecificationPdf, PdfExportProgress } from '../utils/pdfExport';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface PdfExportModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
   onClose,
   spec,
 }) => {
+  const { t } = useLanguage();
   const [exportMode, setExportMode] = useState<'high_fidelity' | 'vector'>('high_fidelity');
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState<PdfExportProgress>({ percent: 0, step: '' });
@@ -35,7 +37,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
   const handleStartExport = async () => {
     setIsExporting(true);
     setCompletedNotice(null);
-    setProgress({ percent: 5, step: 'Initializing jsPDF engine...' });
+    setProgress({ percent: 5, step: t('Initializing jsPDF engine...', 'jsPDF 엔진 초기화 중...') });
 
     try {
       await exportSpecificationPdf(spec, {
@@ -44,7 +46,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
       });
 
       const filename = `${spec.program_id || 'SAP_SPEC'}_SPECIFICATION.pdf`;
-      setCompletedNotice(`PDF export completed successfully: ${filename}`);
+      setCompletedNotice(t(`PDF export completed successfully: ${filename}`, `PDF 내보내기 완료: ${filename}`));
       setTimeout(() => {
         setIsExporting(false);
         onClose();
@@ -52,7 +54,10 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
     } catch (err) {
       console.error('PDF export error:', err);
       setIsExporting(false);
-      setProgress({ percent: 0, step: 'Failed to generate PDF. Falling back to browser print.' });
+      setProgress({
+        percent: 0,
+        step: t('Failed to generate PDF. Falling back to browser print.', 'PDF 생성에 실패했습니다. 브라우저 인쇄를 이용해 주세요.'),
+      });
     }
   };
 
@@ -73,13 +78,16 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold tracking-tight flex items-center gap-2">
-                Export Specification as PDF
+                {t('Export Specification as PDF', '사양서 PDF 내보내기')}
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-200 border border-blue-400/30 font-semibold font-mono">
                   jsPDF
                 </span>
               </h2>
               <p className="text-xs text-blue-200">
-                Generate a professional, formatted PDF deliverable for [{spec.program_id}].
+                {t(
+                  `Generate a professional, formatted PDF deliverable for [${spec.program_id}].`,
+                  `[${spec.program_id}] 표준 서식 PDF 산출물을 생성합니다.`
+                )}
               </p>
             </div>
           </div>
@@ -87,7 +95,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-blue-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-              title="Close"
+              title={t('Close', '닫기')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -101,11 +109,11 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             <div>
               <div className="font-bold text-slate-800">{spec.title}</div>
               <div className="text-[11px] text-slate-500 font-mono">
-                ID: {spec.program_id} | T-Code: {spec.tcode} | Module: {spec.module}
+                ID: {spec.program_id} | T-Code: {spec.tcode} | {t('Module', '모듈')}: {spec.module}
               </div>
             </div>
             <span className="text-[10px] px-2 py-1 rounded bg-blue-100 text-blue-800 font-bold font-mono">
-              A4 Portrait
+              {t('A4 Portrait', 'A4 세로')}
             </span>
           </div>
 
@@ -113,7 +121,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
               <Settings2 className="w-3.5 h-3.5 text-blue-600" />
-              <span>Select PDF Generation Engine</span>
+              <span>{t('Select PDF Generation Engine', 'PDF 생성 엔진 선택')}</span>
             </label>
 
             <div className="grid grid-cols-1 gap-2.5">
@@ -138,14 +146,17 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-xs text-slate-900">
-                      High-Fidelity Document PDF (Full Page Render)
+                      {t('High-Fidelity Document PDF (Full Page Render)', '고해상도 문서 PDF (전체 페이지 렌더링)')}
                     </span>
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-bold">
-                      Recommended
+                      {t('Recommended', '권장')}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
-                    Captures the complete SAP specification document pages with full corporate typography, Korean text, table borders, badges, and layout exactness.
+                    {t(
+                      'Captures the complete SAP specification document pages with full corporate typography, Korean text, table borders, badges, and layout exactness.',
+                      'SAP 사양서 페이지의 한글 텍스트, 표 테두리, 배지 및 레이아웃을 원형 그대로 캡처하여 출력합니다.'
+                    )}
                   </p>
                 </div>
               </div>
@@ -171,14 +182,17 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="font-bold text-xs text-slate-900">
-                      Clean Vector PDF (jsPDF AutoTable)
+                      {t('Clean Vector PDF (jsPDF AutoTable)', '클린 벡터 PDF (jsPDF AutoTable)')}
                     </span>
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 font-bold">
-                      Lightweight
+                      {t('Lightweight', '경량')}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
-                    Generates pure vector PDF with crisp tables, selectable text, compact file size, and standard SAP corporate blue styling.
+                    {t(
+                      'Generates pure vector PDF with crisp tables, selectable text, compact file size, and standard SAP corporate blue styling.',
+                      '텍스트 선택이 가능한 경량 벡터 표와 표준 SAP 블루 스타일로 PDF를 생성합니다.'
+                    )}
                   </p>
                 </div>
               </div>
@@ -188,32 +202,32 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
           {/* Included Sections Checkmark Grid */}
           <div className="space-y-1.5 bg-slate-50/70 border border-slate-200 p-3.5 rounded-xl text-xs">
             <div className="font-semibold text-slate-700 text-[11px] uppercase tracking-wider mb-1">
-              Included Specification Sections
+              {t('Included Specification Sections', '포함되는 사양서 섹션')}
             </div>
             <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-600">
               <div className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-blue-600" />
-                <span>1. Cover & Admin Control</span>
+                <span>{t('1. Cover & Admin Control', '1. 표지 및 기본 정보')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-blue-600" />
-                <span>2. Review & Approvals</span>
+                <span>{t('2. Review & Approvals', '2. 결재선 및 개정이력')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-blue-600" />
-                <span>3. Selection Screen (1000)</span>
+                <span>{t('3. Selection Screen (1000)', '3. 선택 화면 (1000)')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-blue-600" />
-                <span>4. ALV Field Catalog (FCAT)</span>
+                <span>{t('4. ALV Field Catalog (FCAT)', '4. ALV 필드 카탈로그 (FCAT)')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-blue-600" />
-                <span>5. Data Extraction Logic</span>
+                <span>{t('5. Data Extraction Logic', '5. 데이터 추출 로직')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-blue-600" />
-                <span>6. Test Cases & Verification</span>
+                <span>{t('6. Test Cases & Verification', '6. 테스트 시나리오 및 검증')}</span>
               </div>
             </div>
           </div>
@@ -224,7 +238,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
               <div className="flex items-center justify-between text-xs font-bold text-blue-900">
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-blue-700" />
-                  <span>{progress.step || 'Exporting PDF...'}</span>
+                  <span>{progress.step || t('Exporting PDF...', 'PDF 내보내는 중...')}</span>
                 </div>
                 <span>{progress.percent}%</span>
               </div>
@@ -254,7 +268,7 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
             disabled={isExporting}
             className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-40"
           >
-            Cancel
+            {t('Cancel', '취소')}
           </button>
 
           <div className="flex items-center gap-2">
@@ -266,10 +280,10 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
               }}
               disabled={isExporting}
               className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
-              title="Open browser print dialog (Save as PDF) for full vector PDF output"
+              title={t('Open browser print dialog (Save as PDF) for full vector PDF output', '브라우저 인쇄 대화상자(PDF로 저장) 열기')}
             >
               <Printer className="w-4 h-4 text-slate-600" />
-              <span>Browser Print (Ctrl+P)</span>
+              <span>{t('Browser Print (Ctrl+P)', '브라우저 인쇄 (Ctrl+P)')}</span>
             </button>
 
             <button
@@ -281,12 +295,12 @@ export const PdfExportModal: React.FC<PdfExportModalProps> = ({
               {isExporting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  <span>Generating PDF...</span>
+                  <span>{t('Generating PDF...', 'PDF 생성 중...')}</span>
                 </>
               ) : (
                 <>
                   <FileDown className="w-4 h-4 text-blue-200" />
-                  <span>Download PDF File</span>
+                  <span>{t('Download PDF File', 'PDF 다운로드')}</span>
                 </>
               )}
             </button>

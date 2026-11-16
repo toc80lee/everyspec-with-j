@@ -42,59 +42,84 @@ import {
   requestAiSampleRecommendation,
 } from '../utils/aiLogicGenerator';
 import { SAMPLE_SPECS } from '../data/sampleSpecs';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const SAP_MODULES: SapModule[] = ['SD', 'MM', 'FI', 'CO', 'PP', 'HR', 'QM', 'PM', 'BC', 'CM'];
 
 const SAMPLE_MEETING_PRESETS = [
   {
     label: 'SD Header-Item Delivery Status (02)',
+    labelKo: 'SD 판매오더 납품현황 (02)',
     speaker: 'Sales Lead',
+    speakerKo: '영업팀장',
     text:
       'Weekly Sales meeting. Search sales order headers by Sales Org, Document Date, and Customer. Selecting a sales order row in the top grid should filter the bottom Item grid to show delivered quantity and open quantity. Add traffic-light status, VA03 hotspot drilldown, and a Post Goods Issue button on the header.',
+    textKo:
+      '영업팀 주간회의입니다. 영업조직, 오더일자, 고객별로 판매오더 헤더를 조회하고, 상단 헤더에서 오더를 선택하면 하단 품목 그리드에 납품수량과 미납수량이 동적 연동되게 해주세요. 신호등 상태와 VA03 드릴다운, 헤더 출고전기 버튼을 포함합니다.',
   },
   {
     label: 'CO Cost Center Hierarchy Tree (03)',
+    labelKo: 'CO 코스트센터 계층 트리 (03)',
     speaker: 'Controlling Lead',
+    speakerKo: '관리회계 담당자',
     text:
       'Cost center hierarchy report requirements. Use Controlling Area, Fiscal Year, and Period as obligatory selection parameters, and display the cost center group hierarchy in a Tree ALV with automatic node-level plan, actual, and variance subtotals.',
+    textKo:
+      '코스트센터 그룹 계층구조 리포트 요구사항입니다. 관리회계 영역, 회계연도, 기간을 필수 조회 조건으로 두고 트리 ALV로 계획금액, 실적금액, 차이금액을 계층별 자동 소계로 보여주세요.',
   },
   {
     label: 'MM Purchase Order Monitoring (01)',
+    labelKo: 'MM 구매오더 입고지연 모니터링 (01)',
     speaker: 'Procurement Lead',
+    speakerKo: '구매 담당자',
     text:
       'Purchase order delivery delay monitor in a single ALV grid. Filter by Company Code, Plant, PO Date, and Vendor with a radio button for open receipts only. Show red traffic lights for overdue items, ME23N drilldown, and a Goods Receipt toolbar action.',
+    textKo:
+      '단일 ALV 그리드로 구매오더 납기지연 현황을 모니터링합니다. 회사코드, 플랜트, 발주일자, 공급업체 조회조건과 미입고만 조회 라디오버튼을 넣고, 지연 시 적색 신호등 및 ME23N 드릴다운, 입고처리 버튼을 추가합니다.',
   },
   {
     label: 'FI Monthly Account Pivot (04)',
+    labelKo: 'FI 계정별 월간 피벗 분석 (04)',
     speaker: 'Finance Closing Lead',
+    speakerKo: '재무결산 팀장',
     text:
       'Multi-dimensional pivot analysis over ACDOCA journal entries by Company Code, G/L Account, and Fiscal Period so users can compare month-over-month variances across rows and columns.',
+    textKo:
+      'ACDOCA 전표 데이터를 기반으로 회사코드, G/L 계정, 회계기간별 월간 증감 추이를 행/열 다차원 피벗 그리드로 분석하는 리포트가 필요합니다.',
   },
 ];
 
 const SAMPLE_TYPE_META: Record<
   '01' | '02' | '03' | '04',
-  { sampleId: string; title: string; subtitle: string }
+  { sampleId: string; title: string; titleKo: string; subtitle: string; subtitleKo: string }
 > = {
   '01': {
     sampleId: 'ZRALV0010',
     title: '01 · Single ALV Grid',
+    titleKo: '01 · 단일 ALV 그리드',
     subtitle: 'Single list view, status icons, hotspot drilldown, custom toolbar',
+    subtitleKo: '단일 목록 조회, 신호등 상태, 핫스팟 드릴다운, 커스텀 툴바',
   },
   '02': {
     sampleId: 'ZRALV0020',
     title: '02 · Master-Detail 2-Grid',
+    titleKo: '02 · 헤더-아이템 2단 그리드',
     subtitle: 'Selecting a header row dynamically updates the item grid below',
+    subtitleKo: '상단 헤더 행 선택 시 하단 품목 그리드 동적 필터 연동',
   },
   '03': {
     sampleId: 'ZRALV0030',
     title: '03 · Tree ALV Grid',
+    titleKo: '03 · 계층 트리 ALV',
     subtitle: 'Expandable parent-child hierarchy with node subtotals & variances',
+    subtitleKo: '상하위 계층 펼침/접기 및 노드별 합계·차이 자동 집계',
   },
   '04': {
     sampleId: 'ZRALV0040',
     title: '04 · Pivot Browser',
+    titleKo: '04 · 다차원 피벗 브라우저',
     subtitle: 'Multi-dimensional cross-tab aggregation over CDS / ACDOCA',
+    subtitleKo: 'CDS / ACDOCA 기반 행/열 크로스탭 다차원 분석',
   },
 };
 
@@ -126,6 +151,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
   onMinutesSaved,
   onSpecFinalized,
 }) => {
+  const { lang, t } = useLanguage();
   const nonCommonProjects = useMemo(
     () => accessibleProjects.filter((p) => p.code !== COMMON_PROJECT_CODE),
     [accessibleProjects]
@@ -149,13 +175,17 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
   );
 
   // Step 1: Recording & segments
-  const [speakerName, setSpeakerName] = useState<string>('Business Lead');
+  const [speakerName, setSpeakerName] = useState<string>(() =>
+    lang === 'ko' ? '현업 담당자' : 'Business Lead'
+  );
   const [segments, setSegments] = useState<MeetingTranscriptSegment[]>([]);
   const [manualNoteInput, setManualNoteInput] = useState<string>('');
   const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
 
   // Step 2: Structured minutes & enrichment
-  const [meetingTitle, setMeetingTitle] = useState<string>('New Program Design Meeting');
+  const [meetingTitle, setMeetingTitle] = useState<string>(() =>
+    lang === 'ko' ? '신규 프로그램 설계 회의' : 'New Program Design Meeting'
+  );
   const [minutesMarkdown, setMinutesMarkdown] = useState<string>('');
   const [supplementalNotes, setSupplementalNotes] = useState<string>('');
   const [isProcessingAi, setIsProcessingAi] = useState<boolean>(false);
@@ -168,7 +198,9 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
   const [selectedModule, setSelectedModule] = useState<SapModule>('SD');
   const [programId, setProgramId] = useState<string>('ZR_SD_MON_10');
   const [tcode, setTcode] = useState<string>('ZSD010');
-  const [programTitle, setProgramTitle] = useState<string>('New ALV Program');
+  const [programTitle, setProgramTitle] = useState<string>(() =>
+    lang === 'ko' ? '신규 ALV 리포트 프로그램' : 'New ALV Program'
+  );
 
   // Step 4: Generated spec preview
   const [generatedSpec, setGeneratedSpec] = useState<ProgramSpec | null>(null);
@@ -188,14 +220,20 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setCreatedAt(initialMinute.created_at);
       setTargetProjectCode(resolveSafeTargetProject(initialMinute.project_code));
       setSegments(initialMinute.segments || []);
-      setMeetingTitle(initialMinute.title || 'New Program Design Meeting');
+      setMeetingTitle(
+        initialMinute.title || t('New Program Design Meeting', '신규 프로그램 설계 회의')
+      );
       setMinutesMarkdown(initialMinute.minutes_markdown || '');
       setSupplementalNotes(initialMinute.supplemental_notes || '');
       setSelectedSampleType(initialMinute.recommended_sample_type || '01');
       setSelectedModule(initialMinute.suggested_module || 'SD');
       setProgramId(initialMinute.suggested_program_id || 'ZR_SD_MON_10');
       setTcode(initialMinute.suggested_tcode || 'ZSD010');
-      setProgramTitle(initialMinute.suggested_title || initialMinute.title || 'New ALV Program');
+      setProgramTitle(
+        initialMinute.suggested_title ||
+          initialMinute.title ||
+          t('New ALV Program', '신규 ALV 리포트 프로그램')
+      );
       setGeneratedSpec(null);
 
       if (initialMinute.recommended_sample_type && initialMinute.suggested_program_id) {
@@ -203,7 +241,10 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
           recommendedSampleType: initialMinute.recommended_sample_type,
           confidenceReason:
             initialMinute.recommendation_reason ||
-            'Recommended COMM sample type based on saved meeting minutes.',
+            t(
+              'Recommended COMM sample type based on saved meeting minutes.',
+              '저장된 회의록 기반으로 추천된 COMM 샘플 유형입니다.'
+            ),
           suggestedModule: initialMinute.suggested_module || 'SD',
           suggestedProgramId: initialMinute.suggested_program_id,
           suggestedTcode: initialMinute.suggested_tcode || 'ZSD010',
@@ -212,8 +253,8 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
           alternatives: Object.entries(SAMPLE_TYPE_META).map(([k, v]) => ({
             sampleType: k as '01' | '02' | '03' | '04',
             sampleProgramId: v.sampleId,
-            label: v.title,
-            fitSummary: v.subtitle,
+            label: lang === 'ko' ? v.titleKo : v.title,
+            fitSummary: lang === 'ko' ? v.subtitleKo : v.subtitle,
           })),
           source: 'ai',
         });
@@ -245,11 +286,17 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
               setProgramTitle(res.suggestedTitle);
               setStep(3);
               setAiFeedbackMsg(
-                `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}). Review details before generating the spec.`
+                t(
+                  `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}). Review details before generating the spec.`,
+                  `COMM 샘플 유형 ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId})을(를) 추천했습니다. 확인 후 사양서를 생성하세요.`
+                )
               );
             })
             .catch((err: any) => {
-              setErrorMsg(err?.message || 'Failed to recommend sample type.');
+              setErrorMsg(
+                err?.message ||
+                  t('Failed to recommend sample type.', '샘플 유형 추천 중 오류가 발생했습니다.')
+              );
             })
             .finally(() => {
               setIsProcessingAi(false);
@@ -266,7 +313,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setTargetProjectCode(resolveSafeTargetProject(defaultProjectCode));
       setSegments([]);
       setManualNoteInput('');
-      setMeetingTitle('New Program Design Meeting');
+      setMeetingTitle(t('New Program Design Meeting', '신규 프로그램 설계 회의'));
       setMinutesMarkdown('');
       setSupplementalNotes('');
       setRecommendation(null);
@@ -274,7 +321,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setSelectedModule('SD');
       setProgramId('ZR_SD_MON_10');
       setTcode('ZSD010');
-      setProgramTitle('New ALV Program');
+      setProgramTitle(t('New ALV Program', '신규 ALV 리포트 프로그램'));
       setGeneratedSpec(null);
       setStep(1);
     }
@@ -301,7 +348,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
 
   // Primary meeting voice hook (Step 1)
   const mainVoice = useVoiceInput({
-    lang: 'ko-KR',
+    lang: lang === 'ko' ? 'ko-KR' : 'en-US',
     onResult: (finalText) => {
       appendSegment(finalText, 'voice', speakerName);
     },
@@ -309,7 +356,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
 
   // Supplemental voice hook (Step 2)
   const supplementVoice = useVoiceInput({
-    lang: 'ko-KR',
+    lang: lang === 'ko' ? 'ko-KR' : 'en-US',
     onResult: (finalText) => {
       appendSegment(finalText, 'supplement', currentUser.name);
       setSupplementalNotes((prev) => (prev.trim() ? `${prev.trim()}\n${finalText}` : finalText));
@@ -364,7 +411,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
     const record: ProjectMeetingMinute = {
       id: minuteId,
       project_code: targetProjectCode,
-      title: meetingTitle.trim() || 'New Program Design Meeting',
+      title: meetingTitle.trim() || t('New Program Design Meeting', '신규 프로그램 설계 회의'),
       created_at: createdAt,
       updated_at: formatNowDateTime(),
       author: initialMinute?.author || currentUser.name,
@@ -408,7 +455,12 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
     if (mainVoice.isListening) mainVoice.stopListening();
     const combinedTranscript = rawTranscriptText.trim() || manualNoteInput.trim();
     if (!combinedTranscript) {
-      setErrorMsg('Please record audio or enter meeting notes first.');
+      setErrorMsg(
+        t(
+          'Please record audio or enter meeting notes first.',
+          '먼저 음성을 녹음하거나 회의 메모를 입력해 주세요.'
+        )
+      );
       setGate(null);
       return;
     }
@@ -429,8 +481,14 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setStep(2);
       setAiFeedbackMsg(
         res.source === 'ai'
-          ? 'AI generated structured SAP meeting minutes. Review and enrich before confirming.'
-          : 'Draft meeting minutes prepared. Review and refine before proceeding.'
+          ? t(
+              'AI generated structured SAP meeting minutes. Review and enrich before confirming.',
+              'AI가 SAP 설계 회의록을 정리했습니다. 내용을 검토·보완한 후 다음 단계로 진행하세요.'
+            )
+          : t(
+              'Draft meeting minutes prepared. Review and refine before proceeding.',
+              '회의록 초안이 작성되었습니다. 검토 후 진행해 주세요.'
+            )
       );
       persistProgress({
         title: res.title,
@@ -439,7 +497,9 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
         status: 'minutes_ready',
       });
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to generate meeting minutes.');
+      setErrorMsg(
+        err?.message || t('Failed to generate meeting minutes.', '회의록 생성 중 오류가 발생했습니다.')
+      );
     } finally {
       setIsProcessingAi(false);
     }
@@ -449,7 +509,12 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
   const handleEnrichMinutes = async () => {
     if (supplementVoice.isListening) supplementVoice.stopListening();
     if (!supplementalNotes.trim()) {
-      setErrorMsg('Please enter or record supplemental notes first.');
+      setErrorMsg(
+        t(
+          'Please enter or record supplemental notes first.',
+          '먼저 보완 사항을 녹음하거나 입력해 주세요.'
+        )
+      );
       return;
     }
     setErrorMsg(null);
@@ -467,7 +532,9 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       if (res.title) setMeetingTitle(res.title);
       setSelectedModule(res.detectedModule);
       setSupplementalNotes('');
-      setAiFeedbackMsg('Supplemental notes merged into meeting minutes.');
+      setAiFeedbackMsg(
+        t('Supplemental notes merged into meeting minutes.', '추가 보완 내용이 회의록에 병합되었습니다.')
+      );
       persistProgress({
         title: res.title || meetingTitle,
         minutes_markdown: res.minutesMarkdown,
@@ -476,7 +543,9 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
         status: 'minutes_ready',
       });
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to apply supplemental notes.');
+      setErrorMsg(
+        err?.message || t('Failed to apply supplemental notes.', '보완 내용 반영 중 오류가 발생했습니다.')
+      );
     } finally {
       setIsProcessingAi(false);
     }
@@ -490,7 +559,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       : minutesMarkdown.trim();
 
     if (!combinedMinutes) {
-      setErrorMsg('Meeting minutes cannot be empty.');
+      setErrorMsg(t('Meeting minutes cannot be empty.', '회의록 내용이 비어 있습니다.'));
       setGate(null);
       return;
     }
@@ -521,7 +590,10 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setProgramTitle(res.suggestedTitle);
       setStep(3);
       setAiFeedbackMsg(
-        `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}) and suggested IDs.`
+        t(
+          `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}) and suggested IDs.`,
+          `COMM 샘플 유형 ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId})과(와) 권장 ID를 도출했습니다.`
+        )
       );
       persistProgress({
         minutes_markdown: combinedMinutes,
@@ -535,7 +607,9 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
         status: 'recommended',
       });
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to recommend sample type.');
+      setErrorMsg(
+        err?.message || t('Failed to recommend sample type.', '샘플 유형 추천 중 오류가 발생했습니다.')
+      );
     } finally {
       setIsProcessingAi(false);
     }
@@ -545,12 +619,22 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
   const handleConfirmGenerateFullSpec = async () => {
     const cleanPid = programId.trim().toUpperCase();
     if (!cleanPid || (!cleanPid.startsWith('Z') && !cleanPid.startsWith('Y'))) {
-      setErrorMsg('Program ID must start with Z or Y (SAP customer namespace).');
+      setErrorMsg(
+        t(
+          'Program ID must start with Z or Y (SAP customer namespace).',
+          'Program ID는 SAP 고객 네임스페이스 규칙(Z 또는 Y로 시작)을 따라야 합니다.'
+        )
+      );
       setGate(null);
       return;
     }
     if (isDuplicateProgramId) {
-      setErrorMsg(`Program ID '${cleanPid}' already exists. Please enter another ID.`);
+      setErrorMsg(
+        t(
+          `Program ID '${cleanPid}' already exists. Please enter another ID.`,
+          `이미 존재하는 Program ID('${cleanPid}')입니다. 다른 ID를 입력해 주세요.`
+        )
+      );
       setGate(null);
       return;
     }
@@ -590,14 +674,17 @@ ${minutesMarkdown}`;
       const finalSpec: ProgramSpec = {
         ...baseSpec,
         source_meeting_id: minuteId,
-        source_meeting_title: meetingTitle.trim() || 'Design Meeting Minutes',
+        source_meeting_title: meetingTitle.trim() || t('Design Meeting Minutes', '설계 회의록'),
       };
 
       setGeneratedSpec(finalSpec);
       setDetectedTables(draft.detectedTables);
       setStep(4);
       setAiFeedbackMsg(
-        `Cloned COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' structure into '${finalSpec.program_id}'.`
+        t(
+          `Cloned COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' structure into '${finalSpec.program_id}'.`,
+          `COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' 구조를 복제하여 '${finalSpec.program_id}' 사양서를 생성했습니다.`
+        )
       );
       persistProgress({
         recommended_sample_type: selectedSampleType,
@@ -607,7 +694,9 @@ ${minutesMarkdown}`;
         suggested_title: finalSpec.title,
       });
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to build specification.');
+      setErrorMsg(
+        err?.message || t('Failed to build specification.', '프로그램 사양서 생성 중 오류가 발생했습니다.')
+      );
     } finally {
       setIsProcessingAi(false);
     }
@@ -648,12 +737,14 @@ ${minutesMarkdown}`;
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="text-[11px] font-mono font-semibold text-blue-700 flex items-center gap-2">
-                <span>AI MEETING-TO-SPEC WIZARD</span>
+                <span>{t('AI MEETING-TO-SPEC WIZARD', 'AI 회의록-사양서 마법사')}</span>
                 <span aria-hidden="true">·</span>
-                <span>Target Project: {targetProjectCode}</span>
+                <span>
+                  {t('Target Project:', '대상 프로젝트:')} {targetProjectCode}
+                </span>
               </div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900 mt-0.5">
-                AI Meeting-to-Spec Designer
+                {t('AI Meeting-to-Spec Designer', 'AI 회의록 기반 프로그램 설계')}
               </h1>
             </div>
 
@@ -664,20 +755,20 @@ ${minutesMarkdown}`;
                 onClose();
               }}
               className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
-              title="Save draft and return to overview"
+              title={t('Save draft and return to overview', '임시 저장 후 이전 화면으로 돌아가기')}
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Save Draft & Back</span>
+              <span>{t('Save Draft & Back', '임시저장 후 나가기')}</span>
             </button>
           </div>
 
           {/* Stepper Bar */}
           <nav className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2" aria-label="Wizard steps">
             {[
-              { num: 1 as WizardStep, label: '1. Record & Notes' },
-              { num: 2 as WizardStep, label: '2. Review Minutes' },
-              { num: 3 as WizardStep, label: '3. Select Sample Type' },
-              { num: 4 as WizardStep, label: '4. Build & Register' },
+              { num: 1 as WizardStep, label: t('1. Record & Notes', '1. 녹음 및 메모') },
+              { num: 2 as WizardStep, label: t('2. Review Minutes', '2. 회의록 검토·보완') },
+              { num: 3 as WizardStep, label: t('3. Select Sample Type', '3. 샘플 유형·ID 확정') },
+              { num: 4 as WizardStep, label: t('4. Build & Register', '4. 사양서 생성·등록') },
             ].map((item) => {
               const isActive = step === item.num;
               const isDone =
@@ -729,7 +820,7 @@ ${minutesMarkdown}`;
               <button
                 type="button"
                 onClick={() => setErrorMsg(null)}
-                aria-label="Dismiss error"
+                aria-label={t('Dismiss error', '오류 닫기')}
                 className="text-rose-500 hover:text-rose-800 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
@@ -744,7 +835,7 @@ ${minutesMarkdown}`;
               <button
                 type="button"
                 onClick={() => setAiFeedbackMsg(null)}
-                aria-label="Dismiss message"
+                aria-label={t('Dismiss message', '알림 닫기')}
                 className="text-blue-500 hover:text-blue-800 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
@@ -761,16 +852,22 @@ ${minutesMarkdown}`;
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
-                      Step 1. Voice Recording & Requirement Notes
+                      {t(
+                        'Step 1. Voice Recording & Requirement Notes',
+                        'Step 1. 회의 음성 녹음 및 요구사항 메모'
+                      )}
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Record live meeting audio or capture requirement notes below before generating minutes.
+                      {t(
+                        'Record live meeting audio or capture requirement notes below before generating minutes.',
+                        '실시간 회의 음성을 녹음하거나 요구사항 메모를 기록한 뒤 AI 회의록을 생성하세요.'
+                      )}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
                     <label className="text-[11px] font-semibold text-slate-600">
-                      Project
+                      {t('Project', '프로젝트')}
                     </label>
                     <select
                       value={targetProjectCode}
@@ -807,12 +904,12 @@ ${minutesMarkdown}`;
                       {mainVoice.isListening ? (
                         <>
                           <MicOff className="w-4 h-4" />
-                          <span>Stop Recording</span>
+                          <span>{t('Stop Recording', '녹음 중지')}</span>
                         </>
                       ) : (
                         <>
                           <Mic className="w-4 h-4" />
-                          <span>Start Recording</span>
+                          <span>{t('Start Recording', '녹음 시작')}</span>
                         </>
                       )}
                     </button>
@@ -821,28 +918,33 @@ ${minutesMarkdown}`;
                       {mainVoice.isListening ? (
                         <div className="flex items-center gap-2 text-rose-300 font-mono tabular-nums font-semibold">
                           <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse" />
-                          <span>Recording · {formatDuration(recordingSeconds)}</span>
+                          <span>
+                            {t('Recording', '녹음 중')} · {formatDuration(recordingSeconds)}
+                          </span>
                         </div>
                       ) : mainVoice.isTranscribing ? (
                         <div className="flex items-center gap-1.5 text-blue-300 font-medium">
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Transcribing audio...</span>
+                          <span>{t('Transcribing audio...', '음성 인식 변환 중...')}</span>
                         </div>
                       ) : (
                         <span className="text-slate-300">
-                          Click Start Recording to capture meeting audio.
+                          {t(
+                            'Click Start Recording to capture meeting audio.',
+                            '녹음 시작 버튼을 눌러 회의 내용을 음성으로 기록하세요.'
+                          )}
                         </span>
                       )}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-400">Speaker:</span>
+                    <span className="text-[11px] text-slate-400">{t('Speaker:', '발화자:')}</span>
                     <input
                       type="text"
                       value={speakerName}
                       onChange={(e) => setSpeakerName(e.target.value)}
-                      placeholder="Speaker name"
+                      placeholder={t('Speaker name', '발화자 이름')}
                       className="w-28 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white focus:border-blue-400"
                     />
                   </div>
@@ -864,17 +966,23 @@ ${minutesMarkdown}`;
                 {/* Preset Sample Voice Buttons for quick demo/testing */}
                 <div className="space-y-1.5">
                   <div className="text-[11px] font-semibold text-slate-500">
-                    Quick Sample Inputs (No Mic Needed):
+                    {t('Quick Sample Inputs (No Mic Needed):', '마이크 없이 빠른 샘플 대화 입력:')}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {SAMPLE_MEETING_PRESETS.map((preset) => (
                       <button
                         key={preset.label}
                         type="button"
-                        onClick={() => appendSegment(preset.text, 'voice', preset.speaker)}
+                        onClick={() =>
+                          appendSegment(
+                            lang === 'ko' ? preset.textKo : preset.text,
+                            'voice',
+                            lang === 'ko' ? preset.speakerKo : preset.speaker
+                          )
+                        }
                         className="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 hover:border-blue-300 rounded-md text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer"
                       >
-                        + {preset.label}
+                        + {lang === 'ko' ? preset.labelKo : preset.label}
                       </button>
                     ))}
                   </div>
@@ -892,7 +1000,10 @@ ${minutesMarkdown}`;
                         handleAddManualNote();
                       }
                     }}
-                    placeholder="Type a requirement note and press Enter or Add..."
+                    placeholder={t(
+                      'Type a requirement note and press Enter or Add...',
+                      '요구사항 메모를 입력하고 Enter 또는 추가 버튼을 누르세요...'
+                    )}
                     className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:border-blue-500"
                   />
                   <button
@@ -901,7 +1012,7 @@ ${minutesMarkdown}`;
                     className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer shrink-0"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add Note</span>
+                    <span>{t('Add Note', '메모 추가')}</span>
                   </button>
                 </div>
               </div>
@@ -910,7 +1021,7 @@ ${minutesMarkdown}`;
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
                   <div className="text-xs font-bold text-slate-800 tabular-nums">
-                    Captured Segments & Notes ({segments.length})
+                    {t('Captured Segments & Notes', '수집된 대화 및 메모')} ({segments.length})
                   </div>
                   {segments.length > 0 && (
                     <button
@@ -918,14 +1029,22 @@ ${minutesMarkdown}`;
                       onClick={() => setSegments([])}
                       className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer"
                     >
-                      Clear All
+                      {t('Clear All', '전체 삭제')}
                     </button>
                   )}
                 </div>
 
                 {segments.length === 0 ? (
                   <div className="px-6 py-10 text-center text-xs text-slate-500">
-                    No segments recorded yet. Click <strong>Start Recording</strong> above or add a sample/manual note.
+                    {lang === 'ko' ? (
+                      <>
+                        아직 기록된 내용이 없습니다. 위 <strong>녹음 시작</strong>을 누르거나 빠른 샘플/메모를 추가하세요.
+                      </>
+                    ) : (
+                      <>
+                        No segments recorded yet. Click <strong>Start Recording</strong> above or add a sample/manual note.
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
@@ -936,15 +1055,15 @@ ${minutesMarkdown}`;
                             <span>{seg.timestamp}</span>
                             <span aria-hidden="true">·</span>
                             <span className="font-sans font-semibold text-slate-700">
-                              {seg.speaker || 'Participant'}
+                              {seg.speaker || t('Participant', '참여자')}
                             </span>
                             <span aria-hidden="true">·</span>
                             <span>
                               {seg.kind === 'voice'
-                                ? 'Voice'
+                                ? t('Voice', '음성')
                                 : seg.kind === 'supplement'
-                                ? 'Supplement'
-                                : 'Note'}
+                                ? t('Supplement', '보완')
+                                : t('Note', '메모')}
                             </span>
                           </div>
                           <p className="text-xs text-slate-800 mt-1 leading-relaxed whitespace-pre-wrap">
@@ -957,8 +1076,8 @@ ${minutesMarkdown}`;
                             setSegments((prev) => prev.filter((item) => item.id !== seg.id))
                           }
                           className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
-                          title="Delete segment"
-                          aria-label="Delete segment"
+                          title={t('Delete segment', '항목 삭제')}
+                          aria-label={t('Delete segment', '항목 삭제')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -979,21 +1098,24 @@ ${minutesMarkdown}`;
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
-                      Step 2. Review & Enrich Meeting Minutes
+                      {t('Step 2. Review & Enrich Meeting Minutes', 'Step 2. AI 회의록 검토 및 보완')}
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Edit the AI-generated meeting minutes or merge supplemental notes below before confirming.
+                      {t(
+                        'Edit the AI-generated meeting minutes or merge supplemental notes below before confirming.',
+                        'AI가 생성한 회의록을 검토·수정하거나 아래에서 추가 보완 사항을 병합한 뒤 확정하세요.'
+                      )}
                     </p>
                   </div>
                   <div className="text-xs font-mono font-semibold text-slate-600 shrink-0">
-                    Project: {targetProjectCode}
+                    {t('Project:', '프로젝트:')} {targetProjectCode}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Meeting Title
+                      {t('Meeting Title', '회의록 제목')}
                     </label>
                     <input
                       type="text"
@@ -1004,7 +1126,7 @@ ${minutesMarkdown}`;
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Target Project
+                      {t('Target Project', '대상 프로젝트')}
                     </label>
                     <select
                       value={targetProjectCode}
@@ -1022,14 +1144,17 @@ ${minutesMarkdown}`;
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    Meeting Minutes (Markdown & Preview)
+                    {t('Meeting Minutes (Markdown & Preview)', '회의록 본문 (Markdown 편집 및 미리보기)')}
                   </label>
                   <MarkdownFieldEditor
                     value={minutesMarkdown}
                     onChange={setMinutesMarkdown}
                     rows={10}
                     minHeight="220px"
-                    placeholder="Review and edit the meeting minutes in Markdown..."
+                    placeholder={t(
+                      'Review and edit the meeting minutes in Markdown...',
+                      '회의록 본문을 마크다운 형식으로 검토 및 수정하세요...'
+                    )}
                   />
                 </div>
               </div>
@@ -1039,10 +1164,13 @@ ${minutesMarkdown}`;
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <h4 className="text-xs font-bold text-slate-900">
-                      Add Supplemental Recording or Notes
+                      {t('Add Supplemental Recording or Notes', '누락 사항 추가 녹음 또는 메모 보완')}
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      Record or type missing business rules or criteria and merge them into the minutes.
+                      {t(
+                        'Record or type missing business rules or criteria and merge them into the minutes.',
+                        '빠진 업무 규칙이나 조회 조건을 녹음·입력하여 기존 회의록에 병합합니다.'
+                      )}
                     </p>
                   </div>
 
@@ -1064,12 +1192,12 @@ ${minutesMarkdown}`;
                     {supplementVoice.isListening ? (
                       <>
                         <MicOff className="w-3.5 h-3.5" />
-                        <span>Stop Supplement</span>
+                        <span>{t('Stop Supplement', '보완 녹음 중지')}</span>
                       </>
                     ) : (
                       <>
                         <Mic className="w-3.5 h-3.5" />
-                        <span>Record Supplement</span>
+                        <span>{t('Record Supplement', '보완 녹음 시작')}</span>
                       </>
                     )}
                   </button>
@@ -1091,7 +1219,10 @@ ${minutesMarkdown}`;
                   rows={3}
                   value={supplementalNotes}
                   onChange={(e) => setSupplementalNotes(e.target.value)}
-                  placeholder="e.g. Also show open AR balance per customer and add an authority check before Excel export..."
+                  placeholder={t(
+                    'e.g. Also show open AR balance per customer and add an authority check before Excel export...',
+                    '예: 고객별 미결 채권 잔액 컬럼을 추가하고 엑셀 다운로드 전 권한 점검을 넣어주세요...'
+                  )}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:bg-white focus:border-blue-500"
                 />
 
@@ -1107,7 +1238,7 @@ ${minutesMarkdown}`;
                     ) : (
                       <Sparkles className="w-3.5 h-3.5" />
                     )}
-                    <span>Merge into Minutes</span>
+                    <span>{t('Merge into Minutes', '회의록에 병합')}</span>
                   </button>
                 </div>
               </div>
@@ -1124,15 +1255,18 @@ ${minutesMarkdown}`;
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-blue-700 font-bold text-xs">
                     <Sparkles className="w-4 h-4" />
-                    <span>Recommended COMM Sample Type</span>
+                    <span>{t('Recommended COMM Sample Type', '추천 COMM 표준 샘플 유형')}</span>
                   </div>
                   <span className="font-mono text-xs font-bold text-slate-700">
-                    Type {selectedSampleType} ({SAMPLE_TYPE_META[selectedSampleType].sampleId})
+                    {t('Type', '유형')} {selectedSampleType} ({SAMPLE_TYPE_META[selectedSampleType].sampleId})
                   </span>
                 </div>
                 <p className="text-xs text-slate-700 leading-relaxed bg-blue-50/70 border border-blue-100 rounded-lg p-3">
                   {recommendation?.confidenceReason ||
-                    'Recommended the closest COMM standard ALV pattern based on meeting requirements.'}
+                    t(
+                      'Recommended the closest COMM standard ALV pattern based on meeting requirements.',
+                      '회의록 요구사항을 분석하여 가장 적합한 COMM 표준 ALV 패턴을 추천했습니다.'
+                    )}
                 </p>
 
                 {/* 4 Selectable COMM Sample Type Cards */}
@@ -1171,17 +1305,19 @@ ${minutesMarkdown}`;
                                   isChosen ? 'text-emerald-300' : 'text-emerald-600'
                                 }`}
                               >
-                                Suggested
+                                {t('Suggested', '추천')}
                               </span>
                             )}
                           </div>
-                          <div className="text-xs font-bold mt-1">{meta.title}</div>
+                          <div className="text-xs font-bold mt-1">
+                            {lang === 'ko' ? meta.titleKo : meta.title}
+                          </div>
                           <p
                             className={`text-[11px] mt-1 leading-snug ${
                               isChosen ? 'text-slate-300' : 'text-slate-500'
                             }`}
                           >
-                            {alt?.fitSummary || meta.subtitle}
+                            {alt?.fitSummary || (lang === 'ko' ? meta.subtitleKo : meta.subtitle)}
                           </p>
                         </div>
                         <div
@@ -1191,7 +1327,7 @@ ${minutesMarkdown}`;
                               : 'border-slate-100 text-slate-500'
                           }`}
                         >
-                          {isChosen ? 'Selected' : 'Click to select'}
+                          {isChosen ? t('Selected', '선택됨') : t('Click to select', '클릭하여 선택')}
                         </div>
                       </button>
                     );
@@ -1203,17 +1339,20 @@ ${minutesMarkdown}`;
               <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
                 <div>
                   <h4 className="text-sm font-bold text-slate-900">
-                    Confirm Target Program Details
+                    {t('Confirm Target Program Details', '생성 대상 프로그램 정보 확정')}
                   </h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    COMM original ({baselineSample.program_id}) stays protected; a new spec will be generated in the target project.
+                    {t(
+                      `COMM original (${baselineSample.program_id}) stays protected; a new spec will be generated in the target project.`,
+                      `COMM 원본(${baselineSample.program_id})은 보존되며 대상 프로젝트에 신규 사양서가 생성됩니다.`
+                    )}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Target Project (Required)
+                      {t('Target Project (Required)', '대상 프로젝트 (필수)')}
                     </label>
                     <select
                       value={targetProjectCode}
@@ -1230,7 +1369,7 @@ ${minutesMarkdown}`;
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      SAP Module
+                      {t('SAP Module', 'SAP 모듈')}
                     </label>
                     <select
                       value={selectedModule}
@@ -1239,7 +1378,7 @@ ${minutesMarkdown}`;
                     >
                       {SAP_MODULES.map((m) => (
                         <option key={m} value={m}>
-                          {m === 'CM' ? 'CM (Common)' : m}
+                          {m === 'CM' ? t('CM (Common)', 'CM (공통)') : m}
                         </option>
                       ))}
                     </select>
@@ -1279,14 +1418,17 @@ ${minutesMarkdown}`;
                     />
                     {isDuplicateProgramId && (
                       <p className="text-[11px] text-rose-600 mt-1 font-medium">
-                        Program ID already exists. Please enter another ID.
+                        {t(
+                          'Program ID already exists. Please enter another ID.',
+                          '이미 존재하는 Program ID입니다. 다른 ID를 입력하세요.'
+                        )}
                       </p>
                     )}
                   </div>
 
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Program Title
+                      {t('Program Title', '프로그램명')}
                     </label>
                     <input
                       type="text"
@@ -1311,7 +1453,7 @@ ${minutesMarkdown}`;
                   <div className="text-xs font-mono font-semibold text-blue-700 flex items-center gap-2">
                     <span>{generatedSpec.project_code}</span>
                     <span aria-hidden="true">·</span>
-                    <span>Type {generatedSpec.sample_type} (from {baselineSample.program_id})</span>
+                    <span>{t('Type', '유형')} {generatedSpec.sample_type} ({t('from', '기반:')} {baselineSample.program_id})</span>
                     <span aria-hidden="true">·</span>
                     <span>{generatedSpec.module}</span>
                   </div>
@@ -1320,12 +1462,12 @@ ${minutesMarkdown}`;
                   </h3>
                   <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-3 tabular-nums">
                     <span>T-Code: <strong className="font-mono text-slate-800">{generatedSpec.tcode}</strong></span>
-                    <span>Selection: <strong className="font-mono text-slate-800">{generatedSpec.selection_params.length}</strong></span>
-                    <span>ALV Columns: <strong className="font-mono text-slate-800">{generatedSpec.field_catalog.length}</strong></span>
+                    <span>{t('Selection:', '조회 조건:')} <strong className="font-mono text-slate-800">{generatedSpec.selection_params.length}</strong></span>
+                    <span>{t('ALV Columns:', 'ALV 컬럼:')} <strong className="font-mono text-slate-800">{generatedSpec.field_catalog.length}</strong></span>
                     {generatedSpec.item_grid && (
-                      <span>Item Columns: <strong className="font-mono text-slate-800">{generatedSpec.item_grid.field_catalog.length}</strong></span>
+                      <span>{t('Item Columns:', '품목 컬럼:')} <strong className="font-mono text-slate-800">{generatedSpec.item_grid.field_catalog.length}</strong></span>
                     )}
-                    <span>Test Cases: <strong className="font-mono text-slate-800">{generatedSpec.test_cases.length}</strong></span>
+                    <span>{t('Test Cases:', '테스트 케이스:')} <strong className="font-mono text-slate-800">{generatedSpec.test_cases.length}</strong></span>
                   </div>
                 </div>
 
@@ -1336,7 +1478,7 @@ ${minutesMarkdown}`;
                   className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Regenerate Spec</span>
+                  <span>{t('Regenerate Spec', '사양서 다시 생성')}</span>
                 </button>
               </div>
 
@@ -1344,14 +1486,14 @@ ${minutesMarkdown}`;
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                 <div className="px-4 border-b border-slate-200 flex items-center gap-2 bg-slate-50">
                   {[
-                    { id: 'overview' as const, label: 'Purpose & Extraction Logic' },
+                    { id: 'overview' as const, label: t('Purpose & Extraction Logic', '업무 목적 및 추출 로직') },
                     {
                       id: 'fields' as const,
-                      label: `Selection (${generatedSpec.selection_params.length}) & ALV Fields (${generatedSpec.field_catalog.length})`,
+                      label: `${t('Selection', '조회 조건')} (${generatedSpec.selection_params.length}) & ${t('ALV Fields', 'ALV 필드')} (${generatedSpec.field_catalog.length})`,
                     },
                     {
                       id: 'flow' as const,
-                      label: `Data Flow & Tests (${generatedSpec.test_cases.length}) / Mock (${generatedSpec.mock_rows.length})`,
+                      label: `${t('Data Flow & Tests', '흐름도 및 테스트')} (${generatedSpec.test_cases.length}) / Mock (${generatedSpec.mock_rows.length})`,
                     },
                   ].map((tab) => (
                     <button
@@ -1374,7 +1516,7 @@ ${minutesMarkdown}`;
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <div className="text-xs font-bold text-slate-800">
-                          Business Purpose
+                          {t('Business Purpose', '업무 목적 (Business Purpose)')}
                         </div>
                         <pre className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed max-h-64 overflow-y-auto">
                           {generatedSpec.business_purpose}
@@ -1383,11 +1525,11 @@ ${minutesMarkdown}`;
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="text-xs font-bold text-slate-800">
-                            Data Extraction Logic
+                            {t('Data Extraction Logic', '데이터 추출 로직 (Extraction Logic)')}
                           </div>
                           {detectedTables.length > 0 && (
                             <span className="text-[11px] font-mono text-blue-700">
-                              Tables: {detectedTables.join(', ')}
+                              {t('Tables:', '테이블:')} {detectedTables.join(', ')}
                             </span>
                           )}
                         </div>
@@ -1402,18 +1544,18 @@ ${minutesMarkdown}`;
                     <div className="space-y-5">
                       <div>
                         <h4 className="text-xs font-bold text-slate-800 mb-2">
-                          Selection Parameters ({generatedSpec.selection_params.length})
+                          {t('Selection Parameters', '조회 조건 (Selection Screen)')} ({generatedSpec.selection_params.length})
                         </h4>
                         <div className="overflow-x-auto border border-slate-200 rounded-lg">
                           <table className="w-full text-left text-xs">
                             <thead className="bg-slate-100 text-slate-700 font-bold">
                               <tr>
-                                <th className="px-3 py-2">Block</th>
-                                <th className="px-3 py-2">Kind</th>
-                                <th className="px-3 py-2">Name</th>
-                                <th className="px-3 py-2">Label</th>
-                                <th className="px-3 py-2">Ref Field / Type</th>
-                                <th className="px-3 py-2">Req</th>
+                                <th className="px-3 py-2">{t('Block', '블록')}</th>
+                                <th className="px-3 py-2">{t('Kind', '유형')}</th>
+                                <th className="px-3 py-2">{t('Name', '변수명')}</th>
+                                <th className="px-3 py-2">{t('Label', '화면 라벨')}</th>
+                                <th className="px-3 py-2">{t('Ref Field / Type', '참조 필드 / 타입')}</th>
+                                <th className="px-3 py-2">{t('Req', '필수')}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200">
@@ -1438,19 +1580,19 @@ ${minutesMarkdown}`;
 
                       <div>
                         <h4 className="text-xs font-bold text-slate-800 mb-2">
-                          ALV Field Catalog ({generatedSpec.field_catalog.length})
+                          {t('ALV Field Catalog', 'ALV 필드 카탈로그')} ({generatedSpec.field_catalog.length})
                         </h4>
                         <div className="overflow-x-auto border border-slate-200 rounded-lg">
                           <table className="w-full text-left text-xs">
                             <thead className="bg-slate-100 text-slate-700 font-bold">
                               <tr>
-                                <th className="px-3 py-2">Pos</th>
-                                <th className="px-3 py-2">Fieldname</th>
-                                <th className="px-3 py-2">Header Text</th>
-                                <th className="px-3 py-2">Type</th>
-                                <th className="px-3 py-2">Key</th>
+                                <th className="px-3 py-2">{t('Pos', '순번')}</th>
+                                <th className="px-3 py-2">{t('Fieldname', '필드명')}</th>
+                                <th className="px-3 py-2">{t('Header Text', '컬럼 헤더')}</th>
+                                <th className="px-3 py-2">{t('Type', '타입')}</th>
+                                <th className="px-3 py-2">{t('Key', '키')}</th>
                                 <th className="px-3 py-2">Hotspot / T-Code</th>
-                                <th className="px-3 py-2">Sum</th>
+                                <th className="px-3 py-2">{t('Sum', '합계')}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200">
@@ -1478,14 +1620,14 @@ ${minutesMarkdown}`;
                     <div className="space-y-4">
                       <div>
                         <h4 className="text-xs font-bold text-slate-800 mb-2">
-                          QA Test Scenarios ({generatedSpec.test_cases.length})
+                          {t('QA Test Scenarios', 'QA 테스트 시나리오')} ({generatedSpec.test_cases.length})
                         </h4>
                         <div className="divide-y divide-slate-200 border border-slate-200 rounded-lg">
                           {generatedSpec.test_cases.map((tc) => (
                             <div key={tc.id} className="p-3 text-xs space-y-1">
                               <div className="font-bold text-slate-900">{tc.scenario}</div>
-                              <div className="text-slate-600">Condition: {tc.condition}</div>
-                              <div className="text-blue-700 font-medium">Expected: {tc.expected}</div>
+                              <div className="text-slate-600">{t('Condition:', '조건:')} {tc.condition}</div>
+                              <div className="text-blue-700 font-medium">{t('Expected:', '기대 결과:')} {tc.expected}</div>
                             </div>
                           ))}
                         </div>
@@ -1494,7 +1636,7 @@ ${minutesMarkdown}`;
                       {generatedSpec.data_flow?.mermaid_code && (
                         <div>
                           <h4 className="text-xs font-bold text-slate-800 mb-1.5">
-                            Data Flow Diagram
+                            {t('Data Flow Diagram', '데이터 흐름도')}
                           </h4>
                           <pre className="p-3 bg-slate-900 text-slate-200 rounded-lg text-[11px] font-mono overflow-x-auto">
                             {generatedSpec.data_flow.mermaid_code}
@@ -1519,16 +1661,28 @@ ${minutesMarkdown}`;
             <div className="flex items-start gap-2.5">
               <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
               <div className="text-xs text-slate-900">
-                <div className="font-bold">Confirm Next Step</div>
+                <div className="font-bold">{t('Confirm Next Step', '다음 단계 진행 확인')}</div>
                 <p className="text-slate-700 mt-0.5">
                   {gate === 'gate1_minutes' &&
-                    'Finish capturing meeting notes and generate structured AI meeting minutes?'}
+                    t(
+                      'Finish capturing meeting notes and generate structured AI meeting minutes?',
+                      '회의 내용 기록을 마치고 AI 구조화 회의록을 생성할까요?'
+                    )}
                   {gate === 'gate2_recommend' &&
-                    'Save these meeting minutes and get a recommended COMM sample type?'}
+                    t(
+                      'Save these meeting minutes and get a recommended COMM sample type?',
+                      '현재 회의록을 저장하고 적합한 COMM 표준 샘플 유형을 추천받을까요?'
+                    )}
                   {gate === 'gate3_generate' &&
-                    `Clone COMM sample (Type ${selectedSampleType} · ${SAMPLE_TYPE_META[selectedSampleType].sampleId}) to generate spec '${programId}'?`}
+                    t(
+                      `Clone COMM sample (Type ${selectedSampleType} · ${SAMPLE_TYPE_META[selectedSampleType].sampleId}) to generate spec '${programId}'?`,
+                      `COMM 샘플(유형 ${selectedSampleType} · ${SAMPLE_TYPE_META[selectedSampleType].sampleId})을 복제해 '${programId}' 사양서를 생성할까요?`
+                    )}
                   {gate === 'gate4_save' &&
-                    `Register '${generatedSpec?.program_id}' in project '${targetProjectCode}' and open the Spec Editor?`}
+                    t(
+                      `Register '${generatedSpec?.program_id}' in project '${targetProjectCode}' and open the Spec Editor?`,
+                      `'${generatedSpec?.program_id}' 사양서를 프로젝트 '${targetProjectCode}'에 등록하고 편집기를 열까요?`
+                    )}
                 </p>
               </div>
             </div>
@@ -1539,7 +1693,7 @@ ${minutesMarkdown}`;
                 onClick={() => setGate(null)}
                 className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer"
               >
-                No, Keep Editing
+                {t('No, Keep Editing', '아니오, 계속 수정')}
               </button>
               <button
                 type="button"
@@ -1554,10 +1708,10 @@ ${minutesMarkdown}`;
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>
-                  {gate === 'gate1_minutes' && 'Yes, Generate Minutes'}
-                  {gate === 'gate2_recommend' && 'Yes, Recommend Sample'}
-                  {gate === 'gate3_generate' && 'Yes, Build Spec'}
-                  {gate === 'gate4_save' && 'Yes, Register & Open'}
+                  {gate === 'gate1_minutes' && t('Yes, Generate Minutes', '예, 회의록 생성')}
+                  {gate === 'gate2_recommend' && t('Yes, Recommend Sample', '예, 샘플 추천')}
+                  {gate === 'gate3_generate' && t('Yes, Build Spec', '예, 사양서 생성')}
+                  {gate === 'gate4_save' && t('Yes, Register & Open', '예, 등록 및 열기')}
                 </span>
               </button>
             </div>
@@ -1580,7 +1734,7 @@ ${minutesMarkdown}`;
                 className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Previous</span>
+                <span>{t('Previous', '이전 단계')}</span>
               </button>
             )}
             <button
@@ -1592,7 +1746,7 @@ ${minutesMarkdown}`;
               }}
               className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
             >
-              Save Draft & Back
+              {t('Save Draft & Back', '임시저장 후 나가기')}
             </button>
           </div>
 
@@ -1600,7 +1754,7 @@ ${minutesMarkdown}`;
             {isProcessingAi && (
               <div className="text-xs font-semibold text-blue-700 flex items-center gap-1.5 mr-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Processing with AI...</span>
+                <span>{t('Processing with AI...', 'AI 처리 중...')}</span>
               </div>
             )}
 
@@ -1611,7 +1765,7 @@ ${minutesMarkdown}`;
                 onClick={() => setGate('gate1_minutes')}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
-                <span>Generate Minutes</span>
+                <span>{t('Generate Minutes', '회의록 생성')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -1623,7 +1777,7 @@ ${minutesMarkdown}`;
                 onClick={() => setGate('gate2_recommend')}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
-                <span>Recommend Sample Type</span>
+                <span>{t('Recommend Sample Type', '샘플 유형 추천')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -1636,7 +1790,7 @@ ${minutesMarkdown}`;
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>Build AI Spec</span>
+                <span>{t('Build AI Spec', 'AI 사양서 생성')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -1649,7 +1803,7 @@ ${minutesMarkdown}`;
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Register & Open Editor</span>
+                <span>{t('Register & Open Editor', '등록 및 편집기 열기')}</span>
               </button>
             )}
           </div>

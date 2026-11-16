@@ -10,6 +10,7 @@ import {
 import { copySpecInStorage } from '../utils/specStorage';
 import { getCurrentUser } from '../utils/authStorage';
 import { suggestCompliantIdsForProject } from '../utils/sapValidation';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface CopySpecModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
   onClose,
   onCopied,
 }) => {
+  const { t } = useLanguage();
   const currentUser = getCurrentUser();
   const [projects, setProjects] = useState<SapProject[]>([]);
   const [targetProject, setTargetProject] = useState<string>(TEMP_PROJECT_CODE);
@@ -84,11 +86,11 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
     e.preventDefault();
     const cleanId = newProgramId.trim().toUpperCase();
     if (!cleanId) {
-      setErrorMsg('Please enter a new Program ID.');
+      setErrorMsg(t('Please enter a new Program ID.', '새 Program ID를 입력하세요.'));
       return;
     }
     if (!targetProject) {
-      setErrorMsg('Please select a target project.');
+      setErrorMsg(t('Please select a target project.', '복사할 대상 프로젝트를 선택하세요.'));
       return;
     }
 
@@ -102,7 +104,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
     );
 
     if (!res.success || !res.newSpec) {
-      setErrorMsg(res.message || 'Failed to copy specification.');
+      setErrorMsg(res.message || t('Failed to copy specification.', '사양서 복사에 실패했습니다.'));
       return;
     }
 
@@ -124,10 +126,10 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
             <Copy className="w-4 h-4 text-blue-400" />
             <div>
               <h3 className="text-sm font-bold leading-tight">
-                Copy Spec to Project
+                {t('Copy Spec to Project', '프로젝트로 사양서 복사')}
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Source: {sourceSpec.program_id} ({sourceSpec.project_code || COMMON_PROJECT_CODE})
+                {t('Source:', '원본:')} {sourceSpec.program_id} ({sourceSpec.project_code || COMMON_PROJECT_CODE})
               </p>
             </div>
           </div>
@@ -135,8 +137,8 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-white p-1 rounded cursor-pointer"
-            title="Close"
-            aria-label="Close"
+            title={t('Close', '닫기')}
+            aria-label={t('Close', '닫기')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -152,7 +154,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Target Project <span className="text-rose-500">*</span>
+              {t('Target Project', '대상 프로젝트')} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
               <FolderKanban className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
@@ -169,7 +171,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
                 {projects.map((p) => (
                   <option key={p.code} value={p.code}>
                     [{p.code}] {p.name}
-                    {p.code === TEMP_PROJECT_CODE ? ' (Private)' : ''}
+                    {p.code === TEMP_PROJECT_CODE ? t(' (Private)', ' (개인 전용)') : ''}
                   </option>
                 ))}
               </select>
@@ -177,7 +179,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
             {(targetStandards.program_prefix || targetStandards.tcode_pattern) && (
               <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-slate-500">
                 <span className="font-mono">
-                  Naming Rule: Program {targetStandards.program_prefix || 'Z*'} · T-Code{' '}
+                  {t('Naming Rule:', '표준 규칙:')} Program {targetStandards.program_prefix || 'Z*'} · T-Code{' '}
                   {targetStandards.tcode_pattern || 'Z*'}
                 </span>
                 <button
@@ -185,7 +187,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
                   onClick={() => handleApplyTargetNaming(targetProject)}
                   className="text-blue-700 hover:underline font-semibold whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  Apply Rule
+                  {t('Apply Rule', '규칙 적용')}
                 </button>
               </div>
             )}
@@ -194,7 +196,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                New Program ID <span className="text-rose-500">*</span>
+                {t('New Program ID', '새 Program ID')} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -204,21 +206,21 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
                   setNewProgramId(e.target.value.toUpperCase());
                   setErrorMsg(null);
                 }}
-                placeholder="e.g. ZRSD0010"
+                placeholder={t('e.g. ZRSD0010', '예: ZRSD0010')}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase text-blue-900 focus:bg-white focus:border-blue-500"
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                New T-Code <span className="text-rose-500">*</span>
+                {t('New T-Code', '새 T-Code')} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={newTcode}
                 onChange={(e) => setNewTcode(e.target.value.toUpperCase())}
-                placeholder="e.g. ZSD010"
+                placeholder={t('e.g. ZSD010', '예: ZSD010')}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase text-slate-800 focus:bg-white focus:border-blue-500"
               />
             </div>
@@ -226,7 +228,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Program Title
+              {t('Program Title', '프로그램 제목')}
             </label>
             <input
               type="text"
@@ -242,14 +244,14 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
             >
-              Cancel
+              {t('Cancel', '취소')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Copy className="w-3.5 h-3.5" />
-              <span>Copy & Edit</span>
+              <span>{t('Copy & Edit', '복사 후 편집')}</span>
             </button>
           </div>
         </form>

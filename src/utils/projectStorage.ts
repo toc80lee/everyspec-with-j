@@ -1,7 +1,6 @@
 import { ProgramSpec, SapModule, SapProject } from '../types/sap';
 import {
   DEFAULT_OPERATOR_USER,
-  getRegisteredUsers,
   isDefaultOperatorUser,
   isLegacyRemovedUserName,
 } from './authStorage';
@@ -249,7 +248,6 @@ function ensureSystemProjects(list: SapProject[]): SapProject[] {
   );
   const existingCommon = migrated.find((p) => p.code === COMMON_PROJECT_CODE);
   const existingTemp = migrated.find((p) => p.code === TEMP_PROJECT_CODE);
-  const registeredMemberNames = enforceProjectMembers(getRegisteredUsers().map((u) => u.name));
 
   return [
     existingCommon
@@ -261,7 +259,7 @@ function ensureSystemProjects(list: SapProject[]): SapProject[] {
           start_date: existingCommon.start_date || SYSTEM_PROJECTS[0].start_date,
           end_date: existingCommon.end_date || SYSTEM_PROJECTS[0].end_date,
           owner: DEFAULT_PROJECT_MEMBER,
-          members: registeredMemberNames,
+          members: [DEFAULT_PROJECT_MEMBER],
           is_system: true,
           visibility: 'common',
           modules: ALL_SAP_MODULES,
@@ -272,7 +270,7 @@ function ensureSystemProjects(list: SapProject[]): SapProject[] {
         }
       : {
           ...SYSTEM_PROJECTS[0],
-          members: registeredMemberNames,
+          members: [DEFAULT_PROJECT_MEMBER],
         },
     ...customProjects.map((p) => ({
       ...p,
@@ -402,8 +400,8 @@ export function saveProject(project: SapProject): {
       ? project.owner
       : DEFAULT_PROJECT_MEMBER;
   const nextMembers =
-    isSystem && cleanCode === COMMON_PROJECT_CODE
-      ? enforceProjectMembers(getRegisteredUsers().map((u) => u.name))
+    isSystem
+      ? [DEFAULT_PROJECT_MEMBER]
       : enforceProjectMembers(project.members, safeOwner);
 
   const normalized: SapProject = {

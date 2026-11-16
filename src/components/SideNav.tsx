@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { MainWorkspaceMode } from './TopNav';
 import { ProgramSpec } from '../types/sap';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const SIDENAV_EXPANDED_KEY = 'everyspec_sidenav_expanded_v1';
 
@@ -19,6 +20,7 @@ interface SideNavProps {
   currentMode: MainWorkspaceMode;
   onSelectMode: (mode: MainWorkspaceMode) => void;
   onOpenProjectSettings: () => void;
+  canAccessProjectSettings?: boolean;
   onOpenShortcuts: () => void;
   onOpenCommandPalette: () => void;
   currentSpec: ProgramSpec;
@@ -38,10 +40,12 @@ export const SideNav: React.FC<SideNavProps> = ({
   currentMode,
   onSelectMode,
   onOpenProjectSettings,
+  canAccessProjectSettings = false,
   onOpenShortcuts,
   onOpenCommandPalette,
   currentSpec,
 }) => {
+  const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SIDENAV_EXPANDED_KEY) === 'true';
@@ -72,42 +76,46 @@ export const SideNav: React.FC<SideNavProps> = ({
   const primaryItems: NavItemConfig[] = [
     {
       id: 'overview',
-      label: 'Dashboard',
-      shortDesc: 'Project overview & metrics',
+      label: t('Dashboard', '대시보드'),
+      shortDesc: t('Project overview & metrics', '프로젝트 현황 및 지표'),
       icon: LayoutDashboard,
       isActive: currentMode === 'overview',
       onClick: () => onSelectMode('overview'),
     },
     {
       id: 'program_list',
-      label: 'Programs',
-      shortDesc: 'Program specification catalog',
+      label: t('Programs', '프로그램 목록'),
+      shortDesc: t('Program specification catalog', '프로그램 사양서 목록'),
       icon: List,
       isActive: currentMode === 'program_list',
       onClick: () => onSelectMode('program_list'),
     },
     {
       id: 'meeting_minutes',
-      label: 'Meetings',
-      shortDesc: 'Meeting minutes & AI spec wizard',
+      label: t('Meetings', '회의록'),
+      shortDesc: t('Meeting minutes & AI spec wizard', '회의록 및 AI 사양서 생성'),
       icon: MessageSquareText,
       isActive: currentMode === 'meeting_minutes' || currentMode === 'meeting_wizard',
       onClick: () => onSelectMode('meeting_minutes'),
     },
-    {
-      id: 'project_settings',
-      label: 'Project Settings',
-      shortDesc: 'Project & ABAP standards',
-      icon: FolderKanban,
-      isActive: currentMode === 'project_settings',
-      onClick: onOpenProjectSettings,
-    },
+    ...(canAccessProjectSettings
+      ? [
+          {
+            id: 'project_settings',
+            label: t('Project Settings', '프로젝트 설정'),
+            shortDesc: t('Project & ABAP standards', '프로젝트·멤버·ABAP 표준 설정'),
+            icon: FolderKanban,
+            isActive: currentMode === 'project_settings',
+            onClick: onOpenProjectSettings,
+          },
+        ]
+      : []),
   ];
 
   const workspaceItem: NavItemConfig = {
     id: 'spec_workspace',
-    label: `Workspace · ${currentSpec.program_id}`,
-    shortDesc: currentSpec.title || 'Active specification workspace',
+    label: t(`Workspace · ${currentSpec.program_id}`, `작업실 · ${currentSpec.program_id}`),
+    shortDesc: currentSpec.title || t('Active specification workspace', '현재 사양서 작업실'),
     icon: SplitSquareVertical,
     isActive: isInSpecWorkspace,
     onClick: () => {
@@ -137,7 +145,7 @@ export const SideNav: React.FC<SideNavProps> = ({
 
   return (
     <aside
-      aria-label="Primary Sidebar Navigation"
+      aria-label={t('Primary Sidebar Navigation', '기본 사이드바 탐색')}
       className={`no-print shrink-0 h-full bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col select-none z-30 ${
         isExpanded ? 'w-52' : 'w-[60px]'
       }`}
@@ -151,7 +159,7 @@ export const SideNav: React.FC<SideNavProps> = ({
         <button
           type="button"
           onClick={() => onSelectMode('overview')}
-          aria-label="EverySpec Dashboard"
+          aria-label="EverySpec with J"
           className={`group relative flex items-center gap-2.5 rounded-lg transition-colors duration-150 cursor-pointer focus-visible:outline-none ${
             isExpanded ? 'w-full px-1.5 py-1.5 hover:bg-slate-800/80' : 'p-1 hover:bg-slate-800/80'
           }`}
@@ -168,7 +176,7 @@ export const SideNav: React.FC<SideNavProps> = ({
               EverySpec
             </span>
           )}
-          {renderTooltip('EverySpec Dashboard')}
+          {renderTooltip('EverySpec with J')}
         </button>
       </div>
 
@@ -232,27 +240,27 @@ export const SideNav: React.FC<SideNavProps> = ({
         <button
           type="button"
           onClick={onOpenCommandPalette}
-          aria-label="Search (Ctrl+K)"
+          aria-label={t('Search (Ctrl+K)', '검색 (Ctrl+K)')}
           className={`group relative h-10 flex items-center rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0 ${
             isExpanded ? 'px-3 gap-3 justify-between' : 'w-10 mx-auto justify-center'
           }`}
         >
           <span className="flex items-center gap-3 min-w-0">
             <Search className="w-[18px] h-[18px] shrink-0" />
-            {isExpanded && <span className="truncate">Search</span>}
+            {isExpanded && <span className="truncate">{t('Search', '검색')}</span>}
           </span>
           {isExpanded && (
             <kbd className="font-mono text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
               Ctrl+K
             </kbd>
           )}
-          {renderTooltip('Search', 'Ctrl+K')}
+          {renderTooltip(t('Search', '검색'), 'Ctrl+K')}
         </button>
 
         <button
           type="button"
           onClick={onOpenShortcuts}
-          aria-label="Shortcuts (?)"
+          aria-label={t('Shortcuts (?)', '단축키 (?)')}
           aria-current={currentMode === 'shortcuts' ? 'page' : undefined}
           className={`group relative h-10 flex items-center rounded-lg text-xs font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0 ${
             isExpanded ? 'px-3 gap-3 justify-between' : 'w-10 mx-auto justify-center'
@@ -264,20 +272,22 @@ export const SideNav: React.FC<SideNavProps> = ({
         >
           <span className="flex items-center gap-3 min-w-0">
             <Keyboard className="w-[18px] h-[18px] shrink-0" />
-            {isExpanded && <span className="truncate">Shortcuts</span>}
+            {isExpanded && <span className="truncate">{t('Shortcuts', '단축키')}</span>}
           </span>
           {isExpanded && (
             <kbd className="font-mono text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
               ?
             </kbd>
           )}
-          {renderTooltip('Shortcuts', '?')}
+          {renderTooltip(t('Shortcuts', '단축키'), '?')}
         </button>
 
         <button
           type="button"
           onClick={toggleExpanded}
-          aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          aria-label={
+            isExpanded ? t('Collapse sidebar', '사이드바 접기') : t('Expand sidebar', '사이드바 펼치기')
+          }
           aria-expanded={isExpanded}
           className={`group relative h-10 flex items-center rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0 ${
             isExpanded ? 'px-3 gap-3 justify-start' : 'w-10 mx-auto justify-center'
@@ -286,12 +296,14 @@ export const SideNav: React.FC<SideNavProps> = ({
           {isExpanded ? (
             <>
               <PanelLeftClose className="w-[18px] h-[18px] shrink-0" />
-              <span className="truncate">Collapse</span>
+              <span className="truncate">{t('Collapse', '접기')}</span>
             </>
           ) : (
             <PanelLeftOpen className="w-[18px] h-[18px] shrink-0" />
           )}
-          {renderTooltip(isExpanded ? 'Collapse Sidebar' : 'Expand Sidebar')}
+          {renderTooltip(
+            isExpanded ? t('Collapse Sidebar', '사이드바 접기') : t('Expand Sidebar', '사이드바 펼치기')
+          )}
         </button>
       </div>
     </aside>

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart3, X } from 'lucide-react';
 import { AlvField } from '../types/sap';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SapBusinessGraphicModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const SapBusinessGraphicModal: React.FC<SapBusinessGraphicModalProps> = (
   rows,
   onClose,
 }) => {
+  const { t } = useLanguage();
   const numericFields = useMemo(
     () =>
       fieldCatalog.filter(
@@ -78,7 +80,7 @@ export const SapBusinessGraphicModal: React.FC<SapBusinessGraphicModalProps> = (
         <div className="flex items-center justify-between bg-gradient-to-r from-[#2B547E] to-[#4863A0] px-3 py-1.5 text-white font-medium">
           <div className="flex items-center gap-1.5">
             <BarChart3 className="w-3.5 h-3.5 text-sky-200" />
-            <span>SAP Business Graphics - {title}</span>
+            <span>{t(`SAP Business Graphics - ${title}`, `SAP 비즈니스 그래픽 - ${title}`)}</span>
           </div>
           <button
             type="button"
@@ -93,7 +95,7 @@ export const SapBusinessGraphicModal: React.FC<SapBusinessGraphicModalProps> = (
           {/* Axis selectors */}
           <div className="flex items-center gap-4 bg-white border border-slate-300 p-2.5">
             <div className="flex items-center gap-2 flex-1">
-              <span className="font-semibold text-slate-700 shrink-0">Category (X):</span>
+              <span className="font-semibold text-slate-700 shrink-0">{t('Category (X):', '카테고리 (X축):')}</span>
               <select
                 value={activeGroup}
                 onChange={(e) => setGroupField(e.target.value)}
@@ -107,7 +109,7 @@ export const SapBusinessGraphicModal: React.FC<SapBusinessGraphicModalProps> = (
               </select>
             </div>
             <div className="flex items-center gap-2 flex-1">
-              <span className="font-semibold text-slate-700 shrink-0">Metric (Y):</span>
+              <span className="font-semibold text-slate-700 shrink-0">{t('Metric (Y):', '측정값 (Y축):')}</span>
               <select
                 value={activeMetric}
                 onChange={(e) => setMetricField(e.target.value)}
@@ -126,12 +128,15 @@ export const SapBusinessGraphicModal: React.FC<SapBusinessGraphicModalProps> = (
           <div className="bg-white border border-slate-400 p-4">
             {chartData.length === 0 ? (
               <div className="py-12 text-center text-slate-400">
-                No numeric metric columns available to render chart.
+                {t('No numeric metric columns available to render chart.', '차트를 렌더링할 숫자형 측정 컬럼이 없습니다.')}
               </div>
             ) : (
               <div className="space-y-2.5">
                 <div className="text-[11px] font-bold text-slate-700">
-                  {metricColText} by {fieldCatalog.find((f) => f.fieldname === activeGroup)?.coltext || activeGroup}
+                  {t(
+                    `${metricColText} by ${fieldCatalog.find((f) => f.fieldname === activeGroup)?.coltext || activeGroup}`,
+                    `${fieldCatalog.find((f) => f.fieldname === activeGroup)?.coltext || activeGroup}별 ${metricColText}`
+                  )}
                 </div>
                 <div className="space-y-2">
                   {chartData.map((d, idx) => {
@@ -172,7 +177,7 @@ export const SapBusinessGraphicModal: React.FC<SapBusinessGraphicModalProps> = (
             onClick={onClose}
             className="px-3 py-1 text-[11px] text-slate-700 bg-[#ECE9D8] border border-slate-400 hover:bg-white cursor-pointer"
           >
-            Close
+            {t('Close', '닫기')}
           </button>
         </div>
       </div>

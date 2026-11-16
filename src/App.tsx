@@ -30,8 +30,10 @@ import {
   DEFAULT_OPERATOR_USER,
   getCurrentUser,
   getRegisteredUsers,
+  isDefaultOperatorUser,
 } from './utils/authStorage';
 import { useAuth } from './contexts/AuthContext';
+import { useLanguage } from './contexts/LanguageContext';
 import { syncSpecToFirestore, subscribeProjectSpecs } from './services/firestoreSync';
 import {
   COMMON_PROJECT_CODE,
@@ -72,7 +74,9 @@ const DUAL_SPLIT_CYCLE: DualSplitLayout[] = [
 
 export default function App() {
   const { activeUser: authActiveUser, isFirebaseAuthenticated, projectRole } = useAuth();
+  const { t } = useLanguage();
   const [currentUser, setCurrentUserState] = useState<CurrentUser>(() => authActiveUser || getCurrentUser());
+  const isAdminOperator = isDefaultOperatorUser(currentUser);
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
   const [allSavedSpecs, setAllSavedSpecs] = useState<SavedProgramSpecItem[]>(() => getSavedSpecList());
   const [favoriteProgramIds, setFavoriteProgramIds] = useState<string[]>(() =>
@@ -185,6 +189,15 @@ export default function App() {
   }, [accessibleProjects, currentUser.name, meetingRefreshKey]);
 
   const openFullPageMode = (target: 'meeting_wizard' | 'project_settings' | 'shortcuts') => {
+    if (target === 'project_settings' && !isAdminOperator) {
+      showWorkspaceToast(
+        t(
+          'Project Settings is restricted to administrator Josh Lee.',
+          '프로젝트 설정은 관리자(Josh Lee)만 접근할 수 있습니다.'
+        )
+      );
+      return;
+    }
     if (
       workspaceMode !== 'meeting_wizard' &&
       workspaceMode !== 'project_settings' &&
@@ -194,6 +207,12 @@ export default function App() {
     }
     setWorkspaceMode(target);
   };
+
+  useEffect(() => {
+    if (workspaceMode === 'project_settings' && !isAdminOperator) {
+      setWorkspaceMode('overview');
+    }
+  }, [workspaceMode, isAdminOperator]);
 
   const closeFullPageMode = () => {
     const back = returnFromPageModeRef.current || 'overview';
@@ -327,12 +346,17 @@ export default function App() {
 
   const handleQuickSnapshotSave = async (): Promise<boolean> => {
     if (isCommonProtectedSample(currentSpec)) {
-      showWorkspaceToast('COMM standard samples are read-only. Copy to a project before editing.');
+      showWorkspaceToast(
+        t(
+          'COMM standard samples are read-only. Copy to a project before editing.',
+          'COMM 표준 샘플은 읽기 전용입니다. 프로젝트로 복사한 뒤 편집하세요.'
+        )
+      );
       return false;
     }
     const { historyItem } = await createRevisionSnapshot(
       currentSpec,
-      'Quick workspace snapshot (Ctrl+S)',
+      t('Quick workspace snapshot (Ctrl+S)', '작업실 빠른 스냅샷 (Ctrl+S)'),
       currentUser.name
     );
     const updatedSpec: ProgramSpec = {
@@ -352,7 +376,12 @@ export default function App() {
         console.warn('Firestore snapshot spec sync skipped:', err);
       });
     }
-    showWorkspaceToast(`Snapshot ${historyItem.version} saved (${updatedSpec.program_id})`);
+    showWorkspaceToast(
+      t(
+        `Snapshot ${historyItem.version} saved (${updatedSpec.program_id})`,
+        `스냅샷 ${historyItem.version} 저장 완료 (${updatedSpec.program_id})`
+      )
+    );
     return true;
   };
 
@@ -399,7 +428,12 @@ export default function App() {
     setHistoryPast((prev) => prev.slice(0, -1));
     setHistoryFuture((prev) => [currentSpec, ...prev.slice(0, 29)]);
     setCurrentSpec(previous);
-    showWorkspaceToast(`Reverted to previous spec state (${previous.program_id})`);
+    showWorkspaceToast(
+      t(
+        `Reverted to previous spec state (${previous.program_id})`,
+        `이전 사양서 상태로 되돌렸습니다 (${previous.program_id})`
+      )
+    );
   };
 
   const handleRedo = () => {
@@ -408,7 +442,9 @@ export default function App() {
     setHistoryFuture((prev) => prev.slice(1));
     setHistoryPast((prev) => [...prev.slice(-29), currentSpec]);
     setCurrentSpec(next);
-    showWorkspaceToast(`Redid spec state (${next.program_id})`);
+    showWorkspaceToast(
+      t(`Redid spec state (${next.program_id})`, `사양서 상태를 다시 실행했습니다 (${next.program_id})`)
+    );
   };
   const [currentTheme, setCurrentTheme] = useState<SapGuiTheme>(() => loadSavedSapTheme());
 
@@ -436,8 +472,8 @@ export default function App() {
     setFavoriteProgramIds(res.ids);
     showWorkspaceToast(
       res.favorited
-        ? `Added '${cleanId}' to favorites.`
-        : `Removed '${cleanId}' from favorites.`
+        ? t(`Added '${cleanId}' to favorites.`, `'${cleanId}'을(를) 즐겨찾기에 추가했습니다.`)
+        : t(`Removed '${cleanId}' from favorites.`, `'${cleanId}'을(를) 즐겨찾기에서 해제했습니다.`)
     );
   };
 
@@ -445,7 +481,12 @@ export default function App() {
     setCurrentTheme(nextTheme);
     saveSapTheme(nextTheme);
     const info = SAP_GUI_THEMES[nextTheme];
-    showWorkspaceToast(`Simulator theme: SAP ${info.name} (${info.releaseBadge})`);
+    showWorkspaceToast(
+      t(
+        `Simulator theme: SAP ${info.name} (${info.releaseBadge})`,
+        `시뮬레이터 테마: SAP ${info.name} (${info.releaseBadge})`
+      )
+    );
   };
   const [mockDataTrigger, setMockDataTrigger] = useState<number>(0);
 
@@ -878,6 +919,7 @@ export default function App() {
       <SideNav
         currentMode={workspaceMode}
         onSelectMode={handleNavigateModeSafely}
+        canAccessProjectSettings={isAdminOperator}
         onOpenProjectSettings={() => {
           if (workspaceMode !== 'project_settings') {
             openFullPageMode('project_settings');
@@ -909,7 +951,7 @@ export default function App() {
           onSelectTheme={handleSelectTheme}
           onGenerateMockData={() => {
             setMockDataTrigger((prev) => prev + 1);
-            showWorkspaceToast('Generating fresh mock data...');
+            showWorkspaceToast(t('Generating fresh mock data...', '새 테스트 데이터를 생성하는 중...'));
           }}
           splitLayout={splitLayout}
           onCycleSplitLayout={handleCycleSplitLayout}
@@ -939,7 +981,7 @@ export default function App() {
             setFavoriteProgramIds(getFavoriteProgramIds(u.name));
             setProjectRefreshKey((k) => k + 1);
             refreshAllSpecs();
-            showWorkspaceToast(`Switched user: ${u.name}`);
+            showWorkspaceToast(t(`Switched user: ${u.name}`, `사용자 전환: ${u.name}`));
           }}
         />
 
@@ -978,6 +1020,7 @@ export default function App() {
             }}
             onOpenProgram={handleOpenProgramFromProject}
             onCreateNewProgram={(projCode) => handleNewSpec(projCode)}
+            canManageProjects={isAdminOperator}
             onOpenProjectManager={() => openFullPageMode('project_settings')}
             onRequestCopySpec={(spec) => setCopyingSpec(spec)}
             onOpenMeetingWizard={(minute) => {
@@ -1061,7 +1104,7 @@ export default function App() {
           />
         )}
 
-        {workspaceMode === 'project_settings' && (
+        {workspaceMode === 'project_settings' && isAdminOperator && (
           <ProjectManagerModal
             isOpen={true}
             initialProjectCode={selectedProjectCode}
@@ -1359,10 +1402,13 @@ export default function App() {
               </div>
               <div className="space-y-1">
                 <h3 id="leave-confirm-title" className="text-sm font-bold text-slate-900">
-                  Leave without saving a revision snapshot?
+                  {t('Leave without saving a revision snapshot?', '리비전 스냅샷을 저장하지 않고 이동하시겠습니까?')}
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Edits are auto-saved locally and to the cloud, but no version snapshot has been recorded yet for{' '}
+                  {t(
+                    'Edits are auto-saved locally and to the cloud, but no version snapshot has been recorded yet for ',
+                    '편집 내용은 로컬과 클라우드에 자동 저장되지만, 다음 프로그램의 버전 스냅샷이 아직 기록되지 않았습니다: '
+                  )}
                   <span className="font-mono font-semibold">{currentSpec.program_id}</span>.
                 </p>
               </div>
@@ -1374,7 +1420,7 @@ export default function App() {
                 onClick={() => setPendingNavigation(null)}
                 className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
               >
-                Keep Editing
+                {t('Keep Editing', '계속 편집')}
               </button>
               <button
                 type="button"
@@ -1385,7 +1431,7 @@ export default function App() {
                 }}
                 className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
               >
-                Leave Without Snapshot
+                {t('Leave Without Snapshot', '저장 없이 이동')}
               </button>
               <button
                 type="button"
@@ -1398,7 +1444,7 @@ export default function App() {
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>Save Snapshot & Leave</span>
+                <span>{t('Save Snapshot & Leave', '스냅샷 저장 후 이동')}</span>
               </button>
             </div>
           </div>

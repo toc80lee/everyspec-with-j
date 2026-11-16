@@ -14,8 +14,9 @@ import {
   Layers,
   Sparkles,
 } from 'lucide-react';
-import { SAP_SEARCH_HELP_TABLES, SapTableHelp, SapTableFieldHelp } from '../data/sapSearchHelpData';
-import { AlvField, SapDataType } from '../types/sap';
+import { SAP_SEARCH_HELP_TABLES, SapTableHelp } from '../data/sapSearchHelpData';
+import { AlvField } from '../types/sap';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SapTableImportModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
   currentCatalog,
   onImport,
 }) => {
+  const { t } = useLanguage();
   const [selectedModule, setSelectedModule] = useState<string>('ALL');
   const [tableSearchInput, setTableSearchInput] = useState<string>('');
   const [activeTableName, setActiveTableName] = useState<string>('MARA');
@@ -140,7 +142,12 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
       }
     } catch (err: any) {
       console.error('Error fetching SAP table schema:', err);
-      setFetchError(`Could not fetch schema for '${cleanName}'. Created a template schema.`);
+      setFetchError(
+        t(
+          `Could not fetch schema for '${cleanName}'. Created a template schema.`,
+          `'${cleanName}' 스키마를 불러올 수 없어 템플릿 스키마를 생성했습니다.`
+        )
+      );
     } finally {
       setIsLoadingSchema(false);
     }
@@ -252,18 +259,18 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
 
   // Shortcut pills for the most popular tables
   const popularTables = [
-    { table: 'MARA', desc: 'Material Master' },
-    { table: 'MAKT', desc: 'Material Text' },
-    { table: 'VBAK', desc: 'Sales Header' },
-    { table: 'VBAP', desc: 'Sales Item' },
-    { table: 'EKKO', desc: 'PO Header' },
-    { table: 'EKPO', desc: 'PO Item' },
-    { table: 'BKPF', desc: 'FI Header' },
-    { table: 'BSEG', desc: 'FI Item' },
-    { table: 'KNA1', desc: 'Customer' },
-    { table: 'LFA1', desc: 'Vendor' },
-    { table: 'LIKP', desc: 'Delivery Header' },
-    { table: 'LIPS', desc: 'Delivery Item' },
+    { table: 'MARA', desc: t('Material Master', '자재 마스터') },
+    { table: 'MAKT', desc: t('Material Text', '자재 내역') },
+    { table: 'VBAK', desc: t('Sales Header', '판매오더 헤더') },
+    { table: 'VBAP', desc: t('Sales Item', '판매오더 품목') },
+    { table: 'EKKO', desc: t('PO Header', '구매오더 헤더') },
+    { table: 'EKPO', desc: t('PO Item', '구매오더 품목') },
+    { table: 'BKPF', desc: t('FI Header', '회계전표 헤더') },
+    { table: 'BSEG', desc: t('FI Item', '회계전표 항목') },
+    { table: 'KNA1', desc: t('Customer', '고객 마스터') },
+    { table: 'LFA1', desc: t('Vendor', '공급업체') },
+    { table: 'LIKP', desc: t('Delivery Header', '납품 헤더') },
+    { table: 'LIPS', desc: t('Delivery Item', '납품 품목') },
   ];
 
   return (
@@ -278,20 +285,24 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold tracking-tight">
-                  Import SAP Table Metadata & Schema
+                  {t('Import SAP Table Metadata & Schema', 'SAP 테이블 메타데이터 및 스키마 가져오기')}
                 </h3>
                 <span className="text-[10px] bg-blue-500/30 text-blue-200 border border-blue-400/30 px-2 py-0.5 rounded-full font-mono">
-                  DDIC Schema Fetcher
+                  {t('DDIC Schema Fetcher', 'DDIC 스키마 조회기')}
                 </span>
               </div>
               <p className="text-[11px] text-slate-300">
-                Search standard SAP tables (e.g. MARA, VBAK, EKKO) or custom tables to batch import fields into the ALV Field Catalog.
+                {t(
+                  'Search standard SAP tables (e.g. MARA, VBAK, EKKO) or custom tables to batch import fields into the ALV Field Catalog.',
+                  '표준 SAP 테이블(MARA, VBAK, EKKO 등) 또는 커스텀 테이블을 검색해 ALV 필드 카탈로그로 일괄 가져옵니다.'
+                )}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
+            title={t('Close', '닫기')}
             className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -302,7 +313,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
         <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center gap-2 overflow-x-auto shrink-0 text-xs">
           <span className="text-[11px] font-bold text-slate-500 shrink-0 flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-amber-500" />
-            Common Tables:
+            {t('Common Tables:', '주요 테이블:')}
           </span>
           <div className="flex items-center gap-1.5 flex-nowrap">
             {popularTables.map((pt) => {
@@ -344,7 +355,10 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                     handleFetchSchema(tableSearchInput);
                   }
                 }}
-                placeholder="Enter SAP Table (e.g., MARA, VBAK, EKKO, BSEG, Z*)..."
+                placeholder={t(
+                  'Enter SAP Table (e.g., MARA, VBAK, EKKO, BSEG, Z*)...',
+                  'SAP 테이블명 입력 (예: MARA, VBAK, EKKO, BSEG, Z*)...'
+                )}
                 className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-xs font-mono uppercase text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold shadow-2xs"
               />
             </div>
@@ -357,12 +371,12 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
               {isLoadingSchema ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Fetching...</span>
+                  <span>{t('Fetching...', '조회 중...')}</span>
                 </>
               ) : (
                 <>
                   <Search className="w-3.5 h-3.5" />
-                  <span>Fetch Schema</span>
+                  <span>{t('Fetch Schema', '스키마 조회')}</span>
                 </>
               )}
             </button>
@@ -372,7 +386,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
           <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-2xs">
             <span className="text-[11px] font-bold text-slate-500 px-2 flex items-center gap-1">
               <Filter className="w-3 h-3 text-slate-400" />
-              Module:
+              {t('Module:', '모듈:')}
             </span>
             {['ALL', 'SD', 'MM', 'FI', 'CO', 'PP'].map((mod) => (
               <button
@@ -404,13 +418,16 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
           {/* Left Column: Tables List */}
           <div className="w-64 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden shrink-0">
             <div className="p-2 border-b border-slate-200 bg-slate-100/90 text-[11px] font-bold text-slate-600 flex items-center justify-between">
-              <span>SAP Tables ({filteredTablesList.length})</span>
-              <span className="text-[10px] text-slate-400 font-normal">Click to load</span>
+              <span>{t(`SAP Tables (${filteredTablesList.length})`, `SAP 테이블 (${filteredTablesList.length})`)}</span>
+              <span className="text-[10px] text-slate-400 font-normal">{t('Click to load', '클릭하여 로드')}</span>
             </div>
             <div className="flex-1 overflow-y-auto divide-y divide-slate-200/60">
               {filteredTablesList.length === 0 ? (
                 <div className="p-4 text-center text-xs text-slate-400">
-                  No tables found. Type table name and click 'Fetch Schema'.
+                  {t(
+                    "No tables found. Type table name and click 'Fetch Schema'.",
+                    "테이블을 찾을 수 없습니다. 테이블명을 입력하고 '스키마 조회'를 클릭하세요."
+                  )}
                 </div>
               ) : (
                 filteredTablesList.map((t) => {
@@ -464,7 +481,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                       {activeTableObj.name}
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      {activeTableObj.description} · Module: <strong className="text-slate-700">{activeTableObj.module}</strong>
+                      {activeTableObj.description} · {t('Module:', '모듈:')} <strong className="text-slate-700">{activeTableObj.module}</strong>
                     </p>
                   </div>
                 </div>
@@ -478,7 +495,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                       type="text"
                       value={fieldFilterText}
                       onChange={(e) => setFieldFilterText(e.target.value)}
-                      placeholder="Filter fields..."
+                      placeholder={t('Filter fields...', '필드 검색...')}
                       className="bg-white border border-slate-300 rounded pl-7 pr-2 py-1 text-xs text-slate-700 focus:outline-none focus:border-blue-500 w-36 shadow-2xs"
                     />
                   </div>
@@ -489,21 +506,21 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                       onClick={handleSelectAll}
                       className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded font-semibold text-slate-700 text-[11px] cursor-pointer shadow-2xs"
                     >
-                      Select All
+                      {t('Select All', '전체 선택')}
                     </button>
                     <button
                       type="button"
                       onClick={handleSelectKeysOnly}
                       className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded font-semibold text-blue-700 text-[11px] cursor-pointer shadow-2xs"
                     >
-                      Keys Only
+                      {t('Keys Only', '키만 선택')}
                     </button>
                     <button
                       type="button"
                       onClick={handleDeselectAll}
                       className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded font-semibold text-slate-600 text-[11px] cursor-pointer shadow-2xs"
                     >
-                      Clear
+                      {t('Clear', '해제')}
                     </button>
                   </div>
                 </div>
@@ -529,7 +546,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                           }
                         }}
                         className="cursor-pointer"
-                        title="Toggle selection for all displayed fields"
+                        title={t('Toggle selection for all displayed fields', '표시된 모든 필드 선택 전환')}
                       >
                         {displayedFields.length > 0 &&
                         displayedFields.every((f) => selectedFieldNames.has(f.field.toUpperCase())) ? (
@@ -539,13 +556,13 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                         )}
                       </button>
                     </th>
-                    <th className="py-2.5 px-2 w-10 text-center">Key</th>
+                    <th className="py-2.5 px-2 w-10 text-center">{t('Key', '키')}</th>
                     <th className="py-2.5 px-3 min-w-32 font-mono">FIELDNAME</th>
-                    <th className="py-2.5 px-3 min-w-44">Field Label (COLTEXT)</th>
-                    <th className="py-2.5 px-2 w-20">Type</th>
-                    <th className="py-2.5 px-2 w-16 text-center">Length</th>
-                    <th className="py-2.5 px-3">Description</th>
-                    <th className="py-2.5 px-2 w-20 text-center">Status</th>
+                    <th className="py-2.5 px-3 min-w-44">{t('Field Label (COLTEXT)', '필드 라벨 (COLTEXT)')}</th>
+                    <th className="py-2.5 px-2 w-20">{t('Type', '타입')}</th>
+                    <th className="py-2.5 px-2 w-16 text-center">{t('Length', '길이')}</th>
+                    <th className="py-2.5 px-3">{t('Description', '설명')}</th>
+                    <th className="py-2.5 px-2 w-20 text-center">{t('Status', '상태')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
@@ -555,10 +572,10 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                         {isLoadingSchema ? (
                           <div className="flex flex-col items-center justify-center gap-2">
                             <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                            <span>Fetching SAP DDIC table schema...</span>
+                            <span>{t('Fetching SAP DDIC table schema...', 'SAP DDIC 테이블 스키마 불러오는 중...')}</span>
                           </div>
                         ) : (
-                          'No fields match your filter.'
+                          t('No fields match your filter.', '필터와 일치하는 필드가 없습니다.')
                         )}
                       </td>
                     </tr>
@@ -594,7 +611,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                           {/* Key indicator */}
                           <td className="py-2 px-2 text-center">
                             {fld.isKey ? (
-                              <span title="Primary Key Field" className="inline-flex items-center justify-center">
+                              <span title={t('Primary Key Field', '기본 키 필드')} className="inline-flex items-center justify-center">
                                 <Key className="w-3.5 h-3.5 text-blue-700 inline-block" />
                               </span>
                             ) : (
@@ -636,12 +653,12 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                           {/* Status */}
                           <td className="py-2 px-2 text-center font-sans">
                             {isAlreadyInAlv ? (
-                              <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded" title="This field already exists in your ALV Field Catalog">
-                                In ALV
+                              <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-1.5 py-0.5 rounded" title={t('This field already exists in your ALV Field Catalog', '이미 ALV 필드 카탈로그에 존재하는 필드입니다')}>
+                                {t('In ALV', '포함됨')}
                               </span>
                             ) : (
                               <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
-                                New
+                                {t('New', '신규')}
                               </span>
                             )}
                           </td>
@@ -659,12 +676,12 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
         <div className="px-5 py-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between flex-wrap gap-3 shrink-0">
           <div className="flex items-center gap-4 text-xs">
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-500 font-medium">Selected for Import:</span>
+              <span className="text-slate-500 font-medium">{t('Selected for Import:', '가져올 필드:')}</span>
               <span className="font-mono font-bold text-blue-900 bg-white px-2 py-0.5 rounded border border-blue-200 shadow-2xs">
-                {fieldsToImport.length} fields
+                {t(`${fieldsToImport.length} fields`, `${fieldsToImport.length}개 필드`)}
               </span>
               <span className="text-slate-400">
-                (Starting at COL_POS {currentCatalog.length + 1})
+                {t(`(Starting at COL_POS ${currentCatalog.length + 1})`, `(COL_POS ${currentCatalog.length + 1}번부터 시작)`)}
               </span>
             </div>
 
@@ -675,7 +692,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
                 onChange={(e) => setSkipExistingFields(e.target.checked)}
                 className="w-3.5 h-3.5 accent-blue-600 rounded cursor-pointer"
               />
-              <span className="text-[11px]">Skip fields already present in ALV</span>
+              <span className="text-[11px]">{t('Skip fields already present in ALV', 'ALV에 이미 있는 필드 건너뛰기')}</span>
             </label>
           </div>
 
@@ -685,7 +702,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
               onClick={onClose}
               className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg transition-colors cursor-pointer shadow-2xs"
             >
-              Cancel
+              {t('Cancel', '취소')}
             </button>
             <button
               type="button"
@@ -694,7 +711,7 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
               className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Import {fieldsToImport.length} Fields into ALV Grid</span>
+              <span>{t(`Import ${fieldsToImport.length} Fields into ALV Grid`, `${fieldsToImport.length}개 필드를 ALV 그리드로 가져오기`)}</span>
             </button>
           </div>
         </div>

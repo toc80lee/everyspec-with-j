@@ -50,6 +50,7 @@ import { SpecGovernancePanel } from './SpecGovernancePanel';
 import { SpecReviewCommentsPanel } from './SpecReviewCommentsPanel';
 import { LegacyAbapImportModal } from './LegacyAbapImportModal';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { backfillMockRowsForFields } from '../utils/aiLogicGenerator';
 import { exportSpecificationDocx, exportSpecificationXlsx } from '../utils/officeExport';
 import {
@@ -124,6 +125,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
   onCommentsChanged,
   onNotify,
 }) => {
+  const { lang, t } = useLanguage();
   // Main Tabs: 1. Program Spec -> 2. Selection Screen -> 3. Main Screen
   const [mainTab, setMainTab] = useState<'info' | 'selection' | 'alv'>('info');
 
@@ -210,11 +212,16 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
 
   const safeOnChange = (updated: ProgramSpec) => {
     if (isReadOnlyCommon) {
-      onNotify?.('COMM standard samples are read-only. Copy to a project to edit.');
+      onNotify?.(t('COMM standard samples are read-only. Copy to a project to edit.', 'COMM 표준 샘플은 읽기 전용입니다. 프로젝트로 복사 후 편집하세요.'));
       return;
     }
     if (isLockedApproved) {
-      onNotify?.(`Locked by Approved status. Only PM or ADMIN can edit or unlock (${projectRole}).`);
+      onNotify?.(
+        t(
+          `Locked by Approved status. Only PM or ADMIN can edit or unlock (${projectRole}).`,
+          `승인(Approved) 상태로 잠겨 있습니다. PM 또는 ADMIN 권한만 수정/잠금 해제가 가능합니다 (${projectRole}).`
+        )
+      );
       return;
     }
     onChange(updated);
@@ -510,9 +517,9 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
     const nextIdx = activeTestCases.length + 1;
     const newTc: TestCase = {
       id: `tc-${Date.now()}`,
-      scenario: `Scenario ${nextIdx}: Standard Data Check`,
-      condition: 'Set input conditions',
-      expected: 'Verify expected output',
+      scenario: t(`Scenario ${nextIdx}: Standard Data Check`, `시나리오 ${nextIdx}: 기본 데이터 조회 검증`),
+      condition: t('Set input conditions', '조회 조건 입력'),
+      expected: t('Verify expected output', '기대 출력 결과 확인'),
     };
     updateActiveTestCases([...activeTestCases, newTc]);
   };
@@ -529,17 +536,22 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
 
       const parsed = parseUploadedExcelOrCsv(text, activeFieldCatalog);
       if (parsed.errors && parsed.errors.length > 0) {
-        onNotify?.(`CSV upload error: ${parsed.errors.join(', ')}`);
+        onNotify?.(t(`CSV upload error: ${parsed.errors.join(', ')}`, `CSV 업로드 오류: ${parsed.errors.join(', ')}`));
         return;
       }
 
       if (parsed.rows.length === 0) {
-        onNotify?.('No valid data rows found in uploaded file.');
+        onNotify?.(t('No valid data rows found in uploaded file.', '업로드된 파일에 유효한 데이터 행이 없습니다.'));
         return;
       }
 
       updateActiveMockRows(parsed.rows);
-      onNotify?.(`${parsed.rows.length} test data rows loaded into ALV Grid.`);
+      onNotify?.(
+        t(
+          `${parsed.rows.length} test data rows loaded into ALV Grid.`,
+          `${parsed.rows.length}건의 테스트 데이터가 ALV 그리드에 반영되었습니다.`
+        )
+      );
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -555,8 +567,8 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
           <button
             type="button"
             onClick={() => setMainTab('info')}
-            title="Program Spec"
-            aria-label="Program Spec"
+            title={t('Program Spec', '프로그램 사양')}
+            aria-label={t('Program Spec', '프로그램 사양')}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 relative cursor-pointer whitespace-nowrap shrink-0 ${
               mainTab === 'info'
                 ? 'bg-blue-600 text-white shadow-xs'
@@ -564,7 +576,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
             }`}
           >
             <FileText className="w-3.5 h-3.5 shrink-0" />
-            <span>Program Spec</span>
+            <span>{t('Program Spec', '프로그램 사양')}</span>
             {!tcodeValidation.isValid && (
               <span
                 className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"
@@ -583,7 +595,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
             }`}
           >
             <Sliders className="w-3.5 h-3.5 shrink-0" />
-            <span>Selection Screen</span>
+            <span>{t('Selection Screen', '조회 조건 화면')}</span>
           </button>
 
           <button
@@ -596,7 +608,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
             }`}
           >
             <Table className="w-3.5 h-3.5 shrink-0" />
-            <span>Main Screen</span>
+            <span>{t('Main Screen', '메인 화면 (ALV)')}</span>
           </button>
         </div>
 
@@ -608,8 +620,8 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
               onClick={onUndo}
               disabled={!canUndo}
               className="p-1.5 text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-md transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
-              title="Undo (Ctrl+Z)"
-              aria-label="Undo"
+              title={t('Undo (Ctrl+Z)', '실행 취소 (Ctrl+Z)')}
+              aria-label={t('Undo', '실행 취소')}
             >
               <Undo2 className="w-3.5 h-3.5" />
             </button>
@@ -620,8 +632,8 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
               onClick={onRedo}
               disabled={!canRedo}
               className="p-1.5 text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-md transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
-              title="Redo (Ctrl+Y)"
-              aria-label="Redo"
+              title={t('Redo (Ctrl+Y)', '다시 실행 (Ctrl+Y)')}
+              aria-label={t('Redo', '다시 실행')}
             >
               <Redo2 className="w-3.5 h-3.5" />
             </button>
@@ -637,7 +649,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   ? 'bg-indigo-600 text-white border-indigo-600'
                   : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
               }`}
-              title="AI Spec & Reverse Engineering Tools"
+              title={t('AI Spec & Reverse Engineering Tools', 'AI 사양 작성 및 역공학 도구')}
             >
               <Wand2 className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">AI</span>
@@ -654,7 +666,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-indigo-50 text-slate-800 flex items-center gap-2 cursor-pointer"
                 >
                   <Wand2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span>AI Spec Copilot (Draft)</span>
+                  <span>{t('AI Spec Copilot (Draft)', 'AI 사양 코파일럿 (초안)')}</span>
                 </button>
                 <button
                   type="button"
@@ -665,7 +677,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-emerald-50 text-slate-800 flex items-center gap-2 cursor-pointer"
                 >
                   <Code2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Legacy ABAP / SE11 Reverse</span>
+                  <span>{t('Legacy ABAP / SE11 Reverse', '레거시 ABAP / SE11 역공학')}</span>
                 </button>
                 {!isEffectiveReadOnly && (
                   <button
@@ -677,7 +689,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-blue-50 text-slate-800 flex items-center gap-2 cursor-pointer"
                   >
                     <GitPullRequestCreate className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span>Extract Fields from Logic</span>
+                    <span>{t('Extract Fields from Logic', '로직에서 필드 자동 추출')}</span>
                   </button>
                 )}
               </div>
@@ -694,8 +706,8 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   ? 'bg-slate-900 text-white border-slate-900'
                   : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
               }`}
-              title="Export Specification"
-              aria-label="Export Specification"
+              title={t('Export Specification', '사양서 내보내기')}
+              aria-label={t('Export Specification', '사양서 내보내기')}
             >
               <Download className="w-3.5 h-3.5 text-blue-600" />
             </button>
@@ -710,7 +722,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-blue-50 text-slate-800 flex items-center gap-2 cursor-pointer"
                 >
                   <FileDown className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span>Export PDF</span>
+                  <span>{t('Export PDF', 'PDF 내보내기')}</span>
                 </button>
                 <button
                   type="button"
@@ -718,16 +730,16 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     setOpenToolbarMenu(null);
                     try {
                       const filename = await exportSpecificationDocx(spec);
-                      onNotify?.(`Downloaded Word (.docx) spec: ${filename}`);
+                      onNotify?.(t(`Downloaded Word (.docx) spec: ${filename}`, `Word (.docx) 사양서 다운로드 완료: ${filename}`));
                     } catch (err) {
                       console.error('DOCX export error:', err);
-                      onNotify?.('Failed to generate Word (.docx) document.');
+                      onNotify?.(t('Failed to generate Word (.docx) document.', 'Word (.docx) 문서 생성에 실패했습니다.'));
                     }
                   }}
                   className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-sky-50 text-slate-800 flex items-center gap-2 cursor-pointer"
                 >
                   <FileType2 className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                  <span>Word Document (.docx)</span>
+                  <span>{t('Word Document (.docx)', 'Word 문서 (.docx)')}</span>
                 </button>
                 <button
                   type="button"
@@ -735,16 +747,16 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     setOpenToolbarMenu(null);
                     try {
                       const filename = exportSpecificationXlsx(spec);
-                      onNotify?.(`Downloaded Excel (.xlsx) spec: ${filename}`);
+                      onNotify?.(t(`Downloaded Excel (.xlsx) spec: ${filename}`, `Excel (.xlsx) 사양서 다운로드 완료: ${filename}`));
                     } catch (err) {
                       console.error('XLSX export error:', err);
-                      onNotify?.('Failed to generate Excel (.xlsx) workbook.');
+                      onNotify?.(t('Failed to generate Excel (.xlsx) workbook.', 'Excel (.xlsx) 통합 문서 생성에 실패했습니다.'));
                     }
                   }}
                   className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-teal-50 text-slate-800 flex items-center gap-2 cursor-pointer"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                  <span>Excel Workbook (.xlsx)</span>
+                  <span>{t('Excel Workbook (.xlsx)', 'Excel 통합 문서 (.xlsx)')}</span>
                 </button>
                 {onTriggerPrint && (
                   <button
@@ -756,7 +768,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-slate-100 text-slate-800 flex items-center gap-2 cursor-pointer border-t border-slate-100 mt-1 pt-2"
                   >
                     <Printer className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                    <span>Print Preview</span>
+                    <span>{t('Print Preview', '인쇄 미리보기')}</span>
                   </button>
                 )}
               </div>
@@ -773,8 +785,8 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   ? 'bg-slate-900 text-white border-slate-900'
                   : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
               }`}
-              title="Copy, Templates & Switch Spec"
-              aria-label="More Actions"
+              title={t('Copy, Templates & Switch Spec', '복사, 템플릿 및 사양 전환')}
+              aria-label={t('More Actions', '더 보기')}
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
@@ -789,7 +801,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-blue-50 text-slate-800 flex items-center gap-2 cursor-pointer"
                 >
                   <Copy className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span>Copy to Project</span>
+                  <span>{t('Copy to Project', '프로젝트로 복사')}</span>
                 </button>
                 {onOpenTemplates && (
                   <button
@@ -801,7 +813,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-slate-100 text-slate-800 flex items-center gap-2 cursor-pointer"
                   >
                     <Layers className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                    <span>Manage Templates</span>
+                    <span>{t('Manage Templates', '템플릿 관리')}</span>
                   </button>
                 )}
                 <button
@@ -813,7 +825,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-slate-100 text-slate-800 flex items-center gap-2 cursor-pointer"
                 >
                   <FolderOpen className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                  <span>Switch Saved Spec</span>
+                  <span>{t('Switch Saved Spec', '저장된 사양 전환')}</span>
                 </button>
               </div>
             )}
@@ -824,18 +836,18 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
       {/* Slim 1-Line Protection Strip (when read-only) */}
       {isReadOnlyCommon && (
         <div
-          title="Standard samples in COMM are read-only to protect templates. Copy to a project to edit."
+          title={t('Standard samples in COMM are read-only to protect templates. Copy to a project to edit.', 'COMM 표준 샘플은 원본 보호를 위해 읽기 전용입니다. 프로젝트로 복사 후 편집하세요.')}
           className="px-4 py-1.5 bg-blue-50 border-b border-blue-200 text-[11px] text-blue-900 flex items-center justify-between gap-2 shrink-0"
         >
           <span className="flex items-center gap-1.5 font-medium truncate">
             <Lock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span>COMM Standard Sample (Read-Only)</span>
+            <span>{t('COMM Standard Sample (Read-Only)', 'COMM 표준 샘플 (읽기 전용)')}</span>
           </span>
           <button
             type="button"
             onClick={() => setIsCopyModalOpen(true)}
-            title="Copy to Project"
-            aria-label="Copy to Project"
+            title={t('Copy to Project', '프로젝트로 복사')}
+            aria-label={t('Copy to Project', '프로젝트로 복사')}
             className="p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center shrink-0 cursor-pointer"
           >
             <Copy className="w-3.5 h-3.5" />
@@ -844,11 +856,11 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
       )}
       {isLockedApproved && !isReadOnlyCommon && (
         <div
-          title="Specification is approved and locked. Only PM or ADMIN roles can unlock to edit."
+          title={t('Specification is approved and locked. Only PM or ADMIN roles can unlock to edit.', '승인 완료(Approved)로 잠긴 사양서입니다. PM 또는 ADMIN 권한만 수정/잠금 해제할 수 있습니다.')}
           className="px-4 py-1.5 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 flex items-center gap-1.5 font-medium shrink-0"
         >
           <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-          <span>Approved Lock — Read-Only ({projectRole})</span>
+          <span>{t(`Approved Lock — Read-Only (${projectRole})`, `승인 잠금 — 읽기 전용 (${projectRole})`)}</span>
         </div>
       )}
 
@@ -871,7 +883,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Info & Logic</span>
+                <span>{t('Info & Logic', '기본 정보 · 로직')}</span>
               </button>
               <button
                 type="button"
@@ -883,7 +895,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>Flowchart</span>
+                <span>{t('Flowchart', '흐름도')}</span>
               </button>
               <button
                 type="button"
@@ -895,7 +907,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 }`}
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Quality & Security</span>
+                <span>{t('Quality & Security', '품질 · 보안')}</span>
                 {governanceIssueCount > 0 && (
                   <span
                     className={`text-[10px] px-1.5 rounded-full font-mono ${
@@ -918,7 +930,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 }`}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                <span>Review</span>
+                <span>{t('Review', '리뷰')}</span>
                 {unresolvedReviewCount > 0 && (
                   <span
                     className={`text-[10px] px-1.5 rounded-full font-mono ${
@@ -955,10 +967,12 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                       type="button"
                       onClick={() => onOpenMeetingMinute?.(spec.source_meeting_id!)}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer"
-                      title="Open Source Meeting Minutes"
+                      title={t('Open Source Meeting Minutes', '원본 회의록 열기')}
                     >
                       <MessageSquareText className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                      <span>Source Meeting: {spec.source_meeting_title || spec.source_meeting_id}</span>
+                      <span>
+                        {t('Source Meeting:', '원본 회의록:')} {spec.source_meeting_title || spec.source_meeting_id}
+                      </span>
                       <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
                     </button>
                   </div>
@@ -969,15 +983,15 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Project <span className="text-red-500 font-bold">*</span>
+                    {t('Project', '프로젝트')} <span className="text-red-500 font-bold">*</span>
                   </label>
                   {isReadOnlyCommon ? (
                     <span className="text-[10px] font-medium text-blue-700">
-                      COMM Read-Only
+                      {t('COMM Read-Only', 'COMM 읽기 전용')}
                     </span>
                   ) : !spec.project_code ? (
                     <span className="text-[10px] font-semibold text-rose-600">
-                      Required
+                      {t('Required', '필수')}
                     </span>
                   ) : null}
                 </div>
@@ -992,7 +1006,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         safeOnChange({ ...spec, project_code: e.target.value });
                       }
                     }}
-                    aria-label="Project"
+                    aria-label={t('Project', '프로젝트')}
                     className={`w-full pl-8 pr-3 py-1.5 rounded text-xs font-semibold transition-colors cursor-pointer ${
                       isEffectiveReadOnly ? 'bg-slate-100 text-slate-600' : ''
                     } ${
@@ -1002,7 +1016,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     }`}
                   >
                     <option value="" disabled>
-                      Select Project (Required)...
+                      {t('Select Project (Required)...', '프로젝트 선택 (필수)...')}
                     </option>
                     {accessibleProjects.map((p) => {
                       if (!isReadOnlyCommon && p.code === COMMON_PROJECT_CODE && spec.project_code !== COMMON_PROJECT_CODE) {
@@ -1011,7 +1025,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                       return (
                         <option key={p.code} value={p.code}>
                           [{p.code}] {p.name}
-                          {p.code === TEMP_PROJECT_CODE ? ' (Private)' : ''}
+                          {p.code === TEMP_PROJECT_CODE ? t(' (Private)', ' (개인)') : ''}
                         </option>
                       );
                     })}
@@ -1042,11 +1056,11 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Sample Type
+                  {t('Sample Type', '샘플 유형')}
                 </label>
                 <InspectableSelect
                   isReadOnly={isEffectiveReadOnly}
-                  aria-label="Sample Type"
+                  aria-label={t('Sample Type', '샘플 유형')}
                   value={spec.sample_type || '01'}
                   onChange={(e) => handleSampleTypeChange(e.target.value)}
                   className={`w-full border rounded px-2.5 py-1.5 text-xs font-semibold shadow-xs cursor-pointer ${
@@ -1055,20 +1069,20 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                       : 'bg-blue-50/70 border-blue-300 text-blue-950 focus:bg-white focus:border-blue-500'
                   }`}
                 >
-                  <option value="01">01 (Single ALV Grid)</option>
-                  <option value="02">02 (Master-Detail ALV)</option>
-                  <option value="03">03 (Tree ALV Grid)</option>
-                  <option value="04">04 (Pivot Browser)</option>
+                  <option value="01">{t('01 (Single ALV Grid)', '01 (단일 ALV 그리드)')}</option>
+                  <option value="02">{t('02 (Master-Detail ALV)', '02 (마스터-디테일 ALV)')}</option>
+                  <option value="03">{t('03 (Tree ALV Grid)', '03 (트리 ALV 그리드)')}</option>
+                  <option value="04">{t('04 (Pivot Browser)', '04 (피벗 브라우저)')}</option>
                 </InspectableSelect>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Module
+                  {t('Module', '모듈')}
                 </label>
                 <InspectableSelect
                   isReadOnly={isEffectiveReadOnly}
-                  aria-label="Module"
+                  aria-label={t('Module', '모듈')}
                   value={spec.module}
                   onChange={(e) => {
                     if (!isEffectiveReadOnly) safeOnChange({ ...spec, module: e.target.value as SapModule });
@@ -1077,22 +1091,22 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     isEffectiveReadOnly ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-800'
                   }`}
                 >
-                  <option value="SD">SD (Sales & Distribution)</option>
-                  <option value="MM">MM (Materials Management)</option>
-                  <option value="FI">FI (Financial Accounting)</option>
-                  <option value="CO">CO (Controlling)</option>
-                  <option value="PP">PP (Production Planning)</option>
-                  <option value="HR">HR (Human Resources)</option>
-                  <option value="QM">QM (Quality Management)</option>
-                  <option value="PM">PM (Plant Maintenance)</option>
-                  <option value="BC">BC (Basis & System)</option>
-                  <option value="CM">CM (Common)</option>
+                  <option value="SD">{t('SD (Sales & Distribution)', 'SD (영업·출하)')}</option>
+                  <option value="MM">{t('MM (Materials Management)', 'MM (구매·자재)')}</option>
+                  <option value="FI">{t('FI (Financial Accounting)', 'FI (재무회계)')}</option>
+                  <option value="CO">{t('CO (Controlling)', 'CO (관리회계)')}</option>
+                  <option value="PP">{t('PP (Production Planning)', 'PP (생산관리)')}</option>
+                  <option value="HR">{t('HR (Human Resources)', 'HR (인사관리)')}</option>
+                  <option value="QM">{t('QM (Quality Management)', 'QM (품질관리)')}</option>
+                  <option value="PM">{t('PM (Plant Maintenance)', 'PM (설비보전)')}</option>
+                  <option value="BC">{t('BC (Basis & System)', 'BC (Basis·시스템)')}</option>
+                  <option value="CM">{t('CM (Common)', 'CM (공통 영역)')}</option>
                 </InspectableSelect>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Target SAP Release
+                  {t('Target SAP Release', '대상 SAP 릴리즈')}
                 </label>
                 <input
                   type="text"
@@ -1109,15 +1123,15 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between mb-1 gap-2">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Transaction Code (T-Code) <span className="text-red-500 font-bold">*</span>
+                    {t('Transaction Code (T-Code)', '트랜잭션 코드 (T-Code)')} <span className="text-red-500 font-bold">*</span>
                   </label>
                   {tcodeValidation.isValid ? (
                     <span
-                      title="Follows SAP customer namespace rules (Z/Y)."
+                      title={t('Follows SAP customer namespace rules (Z/Y).', 'SAP 고객 네임스페이스 규칙(Z/Y)을 준수합니다.')}
                       className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 cursor-help"
                     >
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>Standard</span>
+                      <span>{t('Standard', '표준 준수')}</span>
                     </span>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -1128,7 +1142,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         }`}
                       >
                         <AlertTriangle className="w-3 h-3" />
-                        <span>Check Z/Y Rule</span>
+                        <span>{t('Check Z/Y Rule', 'Z/Y 규칙 확인')}</span>
                       </span>
                       {!isEffectiveReadOnly && tcodeValidation.suggestedTCode && (
                         <button
@@ -1136,13 +1150,13 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                           onClick={() => {
                             const fixed = tcodeValidation.suggestedTCode!;
                             safeOnChange({ ...spec, tcode: fixed });
-                            onNotify?.(`T-Code updated to standard '${fixed}'.`);
+                            onNotify?.(t(`T-Code updated to standard '${fixed}'.`, `T-Code가 표준 '${fixed}'(으)로 변경되었습니다.`));
                           }}
-                          title={`Apply customer namespace '${tcodeValidation.suggestedTCode}'`}
+                          title={t(`Apply customer namespace '${tcodeValidation.suggestedTCode}'`, `고객 네임스페이스 '${tcodeValidation.suggestedTCode}' 적용`)}
                           className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-0.5 cursor-pointer"
                         >
                           <Sparkles className="w-3 h-3" />
-                          <span>Auto-Fix ({tcodeValidation.suggestedTCode})</span>
+                          <span>{t(`Auto-Fix (${tcodeValidation.suggestedTCode})`, `자동 보정 (${tcodeValidation.suggestedTCode})`)}</span>
                         </button>
                       )}
                     </div>
@@ -1170,11 +1184,11 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                           : 'bg-amber-50/70 border-2 border-amber-400 text-amber-950 focus:bg-white focus:border-amber-600'
                         : 'bg-slate-50 border border-slate-300 text-blue-900 focus:bg-white focus:border-blue-500'
                     }`}
-                    placeholder="e.g., ZSD01, YMM01"
+                    placeholder={t('e.g., ZSD01, YMM01', '예: ZSD01, YMM01')}
                   />
                   <div
                     className="absolute right-2.5 top-2 pointer-events-none"
-                    title={tcodeValidation.isValid ? 'SAP Standard Compliant' : tcodeValidation.message}
+                    title={tcodeValidation.isValid ? t('SAP Standard Compliant', 'SAP 표준 준수') : tcodeValidation.message}
                   >
                     {tcodeValidation.isValid ? (
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -1191,7 +1205,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Program Title <span className="text-red-500 font-bold">*</span>
+                  {t('Program Title', '프로그램 제목')} <span className="text-red-500 font-bold">*</span>
                 </label>
                 <input
                   type="text"
@@ -1207,7 +1221,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
 
               <div className={spec.sample_type === '04' ? 'md:col-span-2' : 'md:col-span-2'}>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Author <span className="text-red-500 font-bold">*</span>
+                  {t('Author', '작성자')} <span className="text-red-500 font-bold">*</span>
                 </label>
                 {(() => {
                   const cleanAuthor =
@@ -1223,7 +1237,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                       onChange={(e) => {
                         if (!isEffectiveReadOnly) safeOnChange({ ...spec, author: e.target.value });
                       }}
-                      aria-label="Author"
+                      aria-label={t('Author', '작성자')}
                       className={`w-full border border-slate-300 rounded px-3 py-1.5 text-xs font-medium focus:bg-white focus:border-blue-500 cursor-pointer ${
                         isEffectiveReadOnly ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-800'
                       }`}
@@ -1242,7 +1256,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
               {spec.sample_type === '04' && (
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    CDS View/Table <span className="text-red-500 font-bold">*</span>
+                    {t('CDS View/Table', 'CDS View / 테이블')} <span className="text-red-500 font-bold">*</span>
                   </label>
                   <input
                     type="text"
@@ -1252,7 +1266,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     onChange={(e) => {
                       if (!isEffectiveReadOnly) safeOnChange({ ...spec, cds_view_table: e.target.value.toUpperCase() });
                     }}
-                    placeholder="e.g., ACDOCA, BSEG, I_JournalEntryItem"
+                    placeholder={t('e.g., ACDOCA, BSEG, I_JournalEntryItem', '예: ACDOCA, BSEG, I_JournalEntryItem')}
                     className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-1.5 text-xs font-mono font-bold uppercase text-blue-900 focus:bg-white focus:border-blue-500 read-only:bg-slate-100 read-only:text-slate-600"
                   />
                 </div>
@@ -1262,7 +1276,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
             {/* Business Purpose */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Business Purpose
+                {t('Business Purpose', '업무 목적 (Business Purpose)')}
               </label>
 
               <MarkdownFieldEditor
@@ -1271,10 +1285,13 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 onChange={(val) => safeOnChange({ ...spec, business_purpose: val })}
                 rows={4}
                 minHeight="120px"
-                placeholder="Document business context, purpose, target users, and expected impact in Markdown (# Heading, - List, **Bold**, `Code`)."
+                placeholder={t(
+                  'Document business context, purpose, target users, and expected impact in Markdown (# Heading, - List, **Bold**, `Code`).',
+                  '업무 배경, 목적, 주요 사용자 및 기대 효과를 마크다운(# 제목, - 목록, **굵게**, `코드`)으로 작성하세요.'
+                )}
                 aiContext={{
                   section: 'business_purpose',
-                  sectionTitle: 'Business Purpose',
+                  sectionTitle: t('Business Purpose', '업무 목적'),
                   spec,
                 }}
               />
@@ -1284,15 +1301,15 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-semibold text-slate-700">
-                  Data Extraction & Logic
+                  {t('Data Extraction & Logic', '데이터 추출 및 가공 로직')}
                 </label>
                 {!isEffectiveReadOnly && (
                   <button
                     type="button"
                     onClick={() => setAiReverseExtractFocus('all')}
                     className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-colors shadow-2xs cursor-pointer flex items-center justify-center"
-                    title="AI Extract Selection & Fields from Logic"
-                    aria-label="AI Extract Selection & Fields from Logic"
+                    title={t('AI Extract Selection & Fields from Logic', '로직에서 조회 조건 및 필드 AI 자동 추출')}
+                    aria-label={t('AI Extract Selection & Fields from Logic', '로직에서 조회 조건 및 필드 AI 자동 추출')}
                   >
                     <GitPullRequestCreate className="w-3.5 h-3.5 text-indigo-600" />
                   </button>
@@ -1305,10 +1322,13 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 onChange={(val) => safeOnChange({ ...spec, data_extraction_logic: val })}
                 rows={7}
                 minHeight="180px"
-                placeholder="Document source DB tables, JOIN/WHERE criteria, traffic-light status logic (LIGHTS=1/2/3), and aggregation rules in Markdown (# Heading, - List, `Table/Field`)."
+                placeholder={t(
+                  'Document source DB tables, JOIN/WHERE criteria, traffic-light status logic (LIGHTS=1/2/3), and aggregation rules in Markdown (# Heading, - List, `Table/Field`).',
+                  '원천 DB 테이블, JOIN/WHERE 조건, 신호등 상태 로직(LIGHTS=1/2/3), 집계 규칙을 마크다운(# 제목, - 목록, `테이블/필드`)으로 기술하세요.'
+                )}
                 aiContext={{
                   section: 'data_extraction_logic',
-                  sectionTitle: 'Data Extraction & Logic',
+                  sectionTitle: t('Data Extraction & Logic', '데이터 추출 및 가공 로직'),
                   spec,
                 }}
               />
@@ -1382,7 +1402,9 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 <div className="flex items-center gap-2">
                   <Sliders className="w-4 h-4 text-blue-400" />
                   <h4 className="text-sm font-bold">
-                    Add {newParamForm.kind === 'PARAMETER' ? 'Parameters (Single Value)' : 'Select-options (Range)'} Field
+                    {newParamForm.kind === 'PARAMETER'
+                      ? t('Add Parameters (Single Value) Field', 'Parameters (단일 값) 필드 추가')
+                      : t('Add Select-options (Range) Field', 'Select-options (범위) 필드 추가')}
                   </h4>
                 </div>
                 <button
@@ -1397,16 +1419,16 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
               {/* Quick SAP Field Presets */}
               <div className="px-5 pt-3 pb-1 bg-slate-50 border-b border-slate-200 text-xs">
                 <span className="text-[11px] font-semibold text-slate-500 block mb-1.5">
-                  Quick Preset Application:
+                  {t('Quick Preset Application:', '빠른 프리셋 적용:')}
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { label: 'P_BUKRS (Company Code)', kind: 'PARAMETER' as SelectionKind, name: 'P_BUKRS', datatype: 'CHAR' as SapDataType, length: 4, text: 'Company Code', ref_table: 'T001', ref_field: 'BUKRS', obligatory: true, default_val: '1000' },
-                    { label: 'S_ERDAT (Doc Date)', kind: 'SELECT_OPTION' as SelectionKind, name: 'S_ERDAT', datatype: 'DATS' as SapDataType, length: 8, text: 'Document Date', ref_table: 'VBAK', ref_field: 'ERDAT', obligatory: false, default_val: '' },
-                    { label: 'S_VBELN (Sales Order)', kind: 'SELECT_OPTION' as SelectionKind, name: 'S_VBELN', datatype: 'CHAR' as SapDataType, length: 10, text: 'Sales Order Number', ref_table: 'VBAK', ref_field: 'VBELN', obligatory: false, default_val: '' },
-                    { label: 'P_WERKS (Plant)', kind: 'PARAMETER' as SelectionKind, name: 'P_WERKS', datatype: 'CHAR' as SapDataType, length: 4, text: 'Plant', ref_table: 'T001W', ref_field: 'WERKS', obligatory: true, default_val: '1000' },
-                    { label: 'S_MATNR (Material)', kind: 'SELECT_OPTION' as SelectionKind, name: 'S_MATNR', datatype: 'CHAR' as SapDataType, length: 18, text: 'Material Number', ref_table: 'MARA', ref_field: 'MATNR', obligatory: false, default_val: '' },
-                    { label: 'P_VKORG (Sales Org)', kind: 'PARAMETER' as SelectionKind, name: 'P_VKORG', datatype: 'CHAR' as SapDataType, length: 4, text: 'Sales Organization', ref_table: 'VBAK', ref_field: 'VKORG', obligatory: true, default_val: '1000' },
+                    { label: t('P_BUKRS (Company Code)', 'P_BUKRS (회사코드)'), kind: 'PARAMETER' as SelectionKind, name: 'P_BUKRS', datatype: 'CHAR' as SapDataType, length: 4, text: t('Company Code', '회사코드'), ref_table: 'T001', ref_field: 'BUKRS', obligatory: true, default_val: '1000' },
+                    { label: t('S_ERDAT (Doc Date)', 'S_ERDAT (전기일)'), kind: 'SELECT_OPTION' as SelectionKind, name: 'S_ERDAT', datatype: 'DATS' as SapDataType, length: 8, text: t('Document Date', '전기일자'), ref_table: 'VBAK', ref_field: 'ERDAT', obligatory: false, default_val: '' },
+                    { label: t('S_VBELN (Sales Order)', 'S_VBELN (판매오더)'), kind: 'SELECT_OPTION' as SelectionKind, name: 'S_VBELN', datatype: 'CHAR' as SapDataType, length: 10, text: t('Sales Order Number', '판매오더 번호'), ref_table: 'VBAK', ref_field: 'VBELN', obligatory: false, default_val: '' },
+                    { label: t('P_WERKS (Plant)', 'P_WERKS (플랜트)'), kind: 'PARAMETER' as SelectionKind, name: 'P_WERKS', datatype: 'CHAR' as SapDataType, length: 4, text: t('Plant', '플랜트'), ref_table: 'T001W', ref_field: 'WERKS', obligatory: true, default_val: '1000' },
+                    { label: t('S_MATNR (Material)', 'S_MATNR (자재번호)'), kind: 'SELECT_OPTION' as SelectionKind, name: 'S_MATNR', datatype: 'CHAR' as SapDataType, length: 18, text: t('Material Number', '자재 번호'), ref_table: 'MARA', ref_field: 'MATNR', obligatory: false, default_val: '' },
+                    { label: t('P_VKORG (Sales Org)', 'P_VKORG (영업조직)'), kind: 'PARAMETER' as SelectionKind, name: 'P_VKORG', datatype: 'CHAR' as SapDataType, length: 4, text: t('Sales Organization', '영업조직'), ref_table: 'VBAK', ref_field: 'VKORG', obligatory: true, default_val: '1000' },
                   ].map((preset) => (
                     <button
                       key={preset.name}
@@ -1430,7 +1452,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
               >
                 {/* Kind Toggle */}
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Kind</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{t('Kind', '유형')}</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -1447,7 +1469,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                           : 'bg-slate-50 border-slate-300 text-slate-600 hover:bg-slate-100'
                       }`}
                     >
-                      <span>PARAMETERS (Single Input)</span>
+                      <span>{t('PARAMETERS (Single Input)', 'PARAMETERS (단일 입력)')}</span>
                     </button>
                     <button
                       type="button"
@@ -1464,7 +1486,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                           : 'bg-slate-50 border-slate-300 text-slate-600 hover:bg-slate-100'
                       }`}
                     >
-                      <span>SELECT-OPTIONS (Range Input)</span>
+                      <span>{t('SELECT-OPTIONS (Range Input)', 'SELECT-OPTIONS (범위 입력)')}</span>
                     </button>
                   </div>
                 </div>
@@ -1473,7 +1495,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Field Name <span className="text-red-500">*</span>
+                      {t('Field Name', '필드명')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -1489,7 +1511,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Data Type <span className="text-red-500">*</span>
+                      {t('Data Type', '데이터 타입')} <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={newParamForm.datatype}
@@ -1504,21 +1526,21 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                       }}
                       className="w-full bg-slate-50 border border-slate-300 rounded px-2 py-1.5 font-mono text-slate-800 focus:bg-white focus:border-blue-500"
                     >
-                      <option value="CHAR">CHAR (Character String)</option>
-                      <option value="NUMC">NUMC (Numeric Text)</option>
-                      <option value="DATS">DATS (Date YYYYMMDD)</option>
-                      <option value="TIMS">TIMS (Time HHMMSS)</option>
-                      <option value="CURR">CURR (Currency Amount)</option>
-                      <option value="DEC">DEC (Decimal Number)</option>
-                      <option value="INT4">INT4 (4-byte Integer)</option>
-                      <option value="UNIT">UNIT (Unit of Measure)</option>
-                      <option value="STRING">STRING (Variable Length)</option>
+                      <option value="CHAR">CHAR ({t('Character String', '문자열')})</option>
+                      <option value="NUMC">NUMC ({t('Numeric Text', '숫자 텍스트')})</option>
+                      <option value="DATS">DATS ({t('Date YYYYMMDD', '일자 YYYYMMDD')})</option>
+                      <option value="TIMS">TIMS ({t('Time HHMMSS', '시간 HHMMSS')})</option>
+                      <option value="CURR">CURR ({t('Currency Amount', '통화 금액')})</option>
+                      <option value="DEC">DEC ({t('Decimal Number', '소수점 숫자')})</option>
+                      <option value="INT4">INT4 ({t('4-byte Integer', '4바이트 정수')})</option>
+                      <option value="UNIT">UNIT ({t('Unit of Measure', '단위')})</option>
+                      <option value="STRING">STRING ({t('Variable Length', '가변 길이')})</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Length <span className="text-red-500">*</span>
+                      {t('Length', '길이')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
@@ -1540,14 +1562,14 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 {/* Screen Text */}
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Screen Text (Label) <span className="text-red-500">*</span>
+                    {t('Screen Text (Label)', '화면 라벨 (Screen Text)')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={newParamForm.text}
                     onChange={(e) => setNewParamForm({ ...newParamForm, text: e.target.value })}
-                    placeholder="e.g., Company Code, Document Date, Sales Order"
+                    placeholder={t('e.g., Company Code, Document Date, Sales Order', '예: 회사코드, 전기일자, 판매오더')}
                     className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 focus:bg-white focus:border-blue-500"
                   />
                 </div>
@@ -1555,14 +1577,14 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 {/* Reference Table & Field with Search Help (F4) */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold text-slate-700">Reference Table & Field</span>
+                    <span className="font-semibold text-slate-700">{t('Reference Table & Field', '참조 테이블 및 필드')}</span>
                     <button
                       type="button"
                       onClick={() => setShowParamSearchHelp(true)}
                       className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer"
                     >
                       <Search className="w-3 h-3 text-blue-600" />
-                      <span>Search Help (F4)</span>
+                      <span>{t('Search Help (F4)', '검색 도움말 (F4)')}</span>
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -1573,7 +1595,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         onChange={(e) =>
                           setNewParamForm({ ...newParamForm, ref_table: e.target.value.toUpperCase() })
                         }
-                        placeholder="Ref Table (e.g., VBAK)"
+                        placeholder={t('Ref Table (e.g., VBAK)', '참조 테이블 (예: VBAK)')}
                         className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase text-slate-800 focus:bg-white focus:border-blue-500"
                       />
                     </div>
@@ -1584,7 +1606,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         onChange={(e) =>
                           setNewParamForm({ ...newParamForm, ref_field: e.target.value.toUpperCase() })
                         }
-                        placeholder="Ref Field (e.g., VBELN)"
+                        placeholder={t('Ref Field (e.g., VBELN)', '참조 필드 (예: VBELN)')}
                         className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 font-mono uppercase text-slate-800 focus:bg-white focus:border-blue-500"
                       />
                     </div>
@@ -1595,7 +1617,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Default Value
+                      {t('Default Value', '기본값')}
                     </label>
                     <input
                       type="text"
@@ -1603,7 +1625,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                       onChange={(e) =>
                         setNewParamForm({ ...newParamForm, default_val: e.target.value })
                       }
-                      placeholder="e.g., 1000, 2026.01.01"
+                      placeholder={t('e.g., 1000, 2026.01.01', '예: 1000, 2026.01.01')}
                       className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 focus:bg-white focus:border-blue-500"
                     />
                   </div>
@@ -1617,7 +1639,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         }
                         className="w-4 h-4 accent-red-600 rounded"
                       />
-                      <span>OBLIGATORY (Required)</span>
+                      <span>{t('OBLIGATORY (Required)', 'OBLIGATORY (필수 입력)')}</span>
                     </label>
                   </div>
                 </div>
@@ -1629,14 +1651,14 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     onClick={() => setShowAddParamModal(false)}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold cursor-pointer"
                   >
-                    Cancel
+                    {t('Cancel', '취소')}
                   </button>
                   <button
                     type="submit"
                     className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
-                    <span>Add Field</span>
+                    <span>{t('Add Field', '필드 추가')}</span>
                   </button>
                 </div>
               </form>
@@ -1679,7 +1701,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         : 'bg-white text-slate-700 hover:bg-blue-100/70 border border-slate-300'
                     }`}
                   >
-                    <span>{spec.sample_type === '03' ? 'Tree' : 'Header'}</span>
+                    <span>{spec.sample_type === '03' ? t('Tree', '트리') : t('Header', '헤더')}</span>
                     <span
                       className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                         activeGridTab === 'header' ? 'bg-blue-700 text-blue-100' : 'bg-slate-200 text-slate-700'
@@ -1698,7 +1720,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         : 'bg-white text-slate-700 hover:bg-blue-100/70 border border-slate-300'
                     }`}
                   >
-                    <span>{spec.sample_type === '03' ? 'Grid' : 'Item'}</span>
+                    <span>{spec.sample_type === '03' ? t('Grid', '그리드') : t('Item', '아이템')}</span>
                     <span
                       className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                         activeGridTab === 'item' ? 'bg-blue-700 text-blue-100' : 'bg-slate-200 text-slate-700'
@@ -1712,11 +1734,14 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 <div className="text-[11px] text-blue-900 font-medium px-2">
                   {spec.sample_type === '03'
                     ? activeGridTab === 'header'
-                      ? 'Editing [Tree] (Carrier Hierarchy)'
-                      : 'Editing [Grid] (Flight Schedule)'
+                      ? t('Editing [Tree] (Carrier Hierarchy)', '[트리] 편집 중 (항공사 계층 구조)')
+                      : t('Editing [Grid] (Flight Schedule)', '[그리드] 편집 중 (항공편 일정)')
                     : activeGridTab === 'header'
-                    ? 'Editing [Header]'
-                    : `Editing [Item] (Header Key: ${spec.item_grid?.foreign_key || 'VBELN'})`}
+                    ? t('Editing [Header]', '[헤더] 영역 편집 중')
+                    : t(
+                        `Editing [Item] (Header Key: ${spec.item_grid?.foreign_key || 'VBELN'})`,
+                        `[아이템] 영역 편집 중 (연계 키: ${spec.item_grid?.foreign_key || 'VBELN'})`
+                      )}
                 </div>
               </div>
             )}
@@ -1733,7 +1758,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 }`}
               >
                 <Layout className="w-3.5 h-3.5" />
-                <span>Layout</span>
+                <span>{t('Layout', '레이아웃')}</span>
               </button>
 
               {/* 2. Field Catalog */}
@@ -1746,7 +1771,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 }`}
               >
                 <Database className="w-3.5 h-3.5" />
-                <span>Field Catalog</span>
+                <span>{t('Field Catalog', '필드 카탈로그')}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                     alvSubTab === 'fields' ? 'bg-blue-700 text-blue-100' : 'bg-slate-200 text-slate-700'
@@ -1767,7 +1792,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                   }`}
                 >
                   <ListOrdered className="w-3.5 h-3.5" />
-                  <span>Sort</span>
+                  <span>{t('Sort', '정렬')}</span>
                   <span
                     className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                       alvSubTab === 'sort' ? 'bg-blue-700 text-blue-100' : 'bg-slate-200 text-slate-700'
@@ -1788,7 +1813,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 }`}
               >
                 <Sliders className="w-3.5 h-3.5" />
-                <span>Toolbar</span>
+                <span>{t('Toolbar', '툴바')}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                     alvSubTab === 'toolbar' ? 'bg-blue-700 text-blue-100' : 'bg-slate-200 text-slate-700'
@@ -1808,7 +1833,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 }`}
               >
                 <CheckCircle className="w-3.5 h-3.5" />
-                <span>Test Case</span>
+                <span>{t('Test Case', '테스트 케이스')}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                     alvSubTab === 'tests' ? 'bg-blue-700 text-blue-100' : 'bg-slate-200 text-slate-700'
@@ -1891,9 +1916,12 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 {/* Compact Action Bar with Tooltip */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                    <span>Test Scenarios & Mock Data</span>
+                    <span>{t('Test Scenarios & Mock Data', '테스트 시나리오 및 목업 데이터')}</span>
                     <span
-                      title="Create validation scenarios or download/upload CSV templates from the current field catalog to preview in the simulator."
+                      title={t(
+                        'Create validation scenarios or download/upload CSV templates from the current field catalog to preview in the simulator.',
+                        '현재 필드 카탈로그 기반으로 검증 시나리오를 작성하거나 CSV 템플릿을 다운로드/업로드하여 시뮬레이터에서 바로 확인할 수 있습니다.'
+                      )}
                       className="text-slate-400 hover:text-slate-600 cursor-help"
                     >
                       <Info className="w-3.5 h-3.5" />
@@ -1910,20 +1938,20 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         );
                       }}
                       className="px-2.5 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-md flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
-                      title="Download CSV template for current field catalog"
+                      title={t('Download CSV template for current field catalog', '현재 필드 카탈로그 기준 CSV 템플릿 다운로드')}
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>CSV Template</span>
+                      <span>{t('CSV Template', 'CSV 템플릿')}</span>
                     </button>
 
                     {!isEffectiveReadOnly && (
                       <>
                         <label
                           className="px-2.5 py-1.5 text-xs font-semibold text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-md flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
-                          title="Upload CSV file to populate simulator test data"
+                          title={t('Upload CSV file to populate simulator test data', '시뮬레이터 테스트 데이터용 CSV 파일 업로드')}
                         >
                           <Upload className="w-3.5 h-3.5" />
-                          <span>Upload CSV</span>
+                          <span>{t('Upload CSV', 'CSV 업로드')}</span>
                           <input
                             type="file"
                             accept=".csv,.txt"
@@ -1938,7 +1966,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                           className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-md flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add Scenario</span>
+                          <span>{t('Add Scenario', '시나리오 추가')}</span>
                         </button>
                       </>
                     )}
@@ -1948,26 +1976,26 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 {/* 1. Test Scenarios Table */}
                 <div className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-xs">
                   <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 font-bold text-xs text-slate-800 flex items-center justify-between">
-                    <span>Test Scenario List</span>
+                    <span>{t('Test Scenario List', '테스트 시나리오 목록')}</span>
                     <span className="text-[11px] font-normal text-slate-500">
-                      Total {activeTestCases.length} items
+                      {t(`Total ${activeTestCases.length} items`, `총 ${activeTestCases.length}건`)}
                     </span>
                   </div>
                   <table className="w-full text-xs text-left">
                     <thead className="bg-slate-50 text-slate-700 font-semibold text-[11px] border-b border-slate-200">
                       <tr>
                         <th className="p-2.5 w-12 text-center">No</th>
-                        <th className="p-2.5 w-48">Scenario (Description)</th>
-                        <th className="p-2.5">Input Condition</th>
-                        <th className="p-2.5">Expected Result</th>
-                        <th className="p-2.5 w-16 text-center">Delete</th>
+                        <th className="p-2.5 w-48">{t('Scenario (Description)', '시나리오 (설명)')}</th>
+                        <th className="p-2.5">{t('Input Condition', '입력 조건')}</th>
+                        <th className="p-2.5">{t('Expected Result', '기대 결과')}</th>
+                        <th className="p-2.5 w-16 text-center">{t('Delete', '삭제')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-[11px]">
                       {activeTestCases.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="p-6 text-center text-slate-400">
-                            No test scenarios registered. Click 'Add Test Scenario' above to add one.
+                            {t("No test scenarios registered. Click 'Add Scenario' above to add one.", "등록된 테스트 시나리오가 없습니다. 상단의 '시나리오 추가' 버튼을 눌러 추가하세요.")}
                           </td>
                         </tr>
                       ) : (
@@ -2043,11 +2071,14 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                     <div className="flex items-center gap-1.5">
                       <Table className="w-3.5 h-3.5 text-blue-700" />
                       <span>
-                        ALV Grid Test Data ({activeIsItem ? 'Item Grid' : 'Header Grid'}: {activeMockRows.length} rows)
+                        {t(
+                          `ALV Grid Test Data (${activeIsItem ? 'Item Grid' : 'Header Grid'}: ${activeMockRows.length} rows)`,
+                          `ALV 그리드 테스트 데이터 (${activeIsItem ? '아이템 그리드' : '헤더 그리드'}: ${activeMockRows.length}건)`
+                        )}
                       </span>
                     </div>
                     <span className="text-[11px] text-blue-700 font-normal">
-                      Rendered in real-time in the Simulate screen on the right
+                      {t('Rendered in real-time in the Simulate screen on the right', '우측 시뮬레이션 화면에 실시간 반영됩니다')}
                     </span>
                   </div>
 
@@ -2067,7 +2098,10 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                         {activeMockRows.length === 0 ? (
                           <tr>
                             <td colSpan={activeFieldCatalog.length + 1} className="p-6 text-center text-slate-400">
-                              No test data available. Download the template above and upload CSV, or generate mock data.
+                              {t(
+                                'No test data available. Download the template above and upload CSV, or generate mock data.',
+                                '테스트 데이터가 없습니다. 상단 템플릿을 다운로드해 CSV를 업로드하거나 목업 데이터를 생성하세요.'
+                              )}
                             </td>
                           </tr>
                         ) : (
@@ -2095,7 +2129,11 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                                           <span className="w-3 h-3 rounded-full bg-rose-500 border border-rose-700 inline-block" />
                                         )}
                                         <span className="text-[10px] text-slate-600 font-bold">
-                                          {val === '1' ? 'Normal(1)' : val === '2' ? 'Warning(2)' : 'Error(3)'}
+                                          {val === '1'
+                                            ? t('Normal(1)', '정상(1)')
+                                            : val === '2'
+                                            ? t('Warning(2)', '주의(2)')
+                                            : t('Error(3)', '오류(3)')}
                                         </span>
                                       </div>
                                     ) : (
@@ -2147,7 +2185,10 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
             is_system: false,
           });
           onNotify?.(
-            `AI Spec Copilot (${generatedSpec.program_id} / ${generatedSpec.tcode}) applied to project '${targetProj}'.`
+            t(
+              `AI Spec Copilot (${generatedSpec.program_id} / ${generatedSpec.tcode}) applied to project '${targetProj}'.`,
+              `AI 사양 코파일럿 (${generatedSpec.program_id} / ${generatedSpec.tcode})이 프로젝트 '${targetProj}'에 적용되었습니다.`
+            )
           );
         }}
       />
@@ -2160,7 +2201,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
         isReadOnly={isEffectiveReadOnly}
         onRestoreSnapshot={(restored) => {
           safeOnChange(restored);
-          onNotify?.('Snapshot version restored.');
+          onNotify?.(t('Snapshot version restored.', '스냅샷 버전이 복원되었습니다.'));
         }}
       />
 
@@ -2174,7 +2215,10 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
         onImportSpec={(importedSpec) => {
           onChange(importedSpec);
           onNotify?.(
-            `Imported spec '${importedSpec.program_id}' created in project '${importedSpec.project_code}'.`
+            t(
+              `Imported spec '${importedSpec.program_id}' created in project '${importedSpec.project_code}'.`,
+              `역공학된 사양 '${importedSpec.program_id}'이(가) 프로젝트 '${importedSpec.project_code}'에 생성되었습니다.`
+            )
           );
         }}
       />
@@ -2187,7 +2231,12 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
         onClose={() => setIsCopyModalOpen(false)}
         onCopied={(newSpec) => {
           onChange(newSpec);
-          onNotify?.(`Spec '${newSpec.program_id}' copied to project '${newSpec.project_code}'.`);
+          onNotify?.(
+            t(
+              `Spec '${newSpec.program_id}' copied to project '${newSpec.project_code}'.`,
+              `사양 '${newSpec.program_id}'이(가) 프로젝트 '${newSpec.project_code}'(으)로 복사되었습니다.`
+            )
+          );
         }}
       />
 
@@ -2200,7 +2249,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
         initialFocus={aiReverseExtractFocus || 'all'}
         onApply={(addedParams, addedFields) => {
           if (isEffectiveReadOnly) {
-            onNotify?.('Spec is read-only or locked by approval.');
+            onNotify?.(t('Spec is read-only or locked by approval.', '읽기 전용이거나 승인으로 잠긴 사양서입니다.'));
             return;
           }
           const existingParamNames = new Set(spec.selection_params.map((p) => p.name.toUpperCase()));
@@ -2239,7 +2288,10 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
           }
 
           onNotify?.(
-            `AI extraction applied: ${uniqueParams.length} selection params, ${uniqueFields.length} fields added.`
+            t(
+              `AI extraction applied: ${uniqueParams.length} selection params, ${uniqueFields.length} fields added.`,
+              `AI 추출 적용 완료: 조회 조건 ${uniqueParams.length}건, 필드 ${uniqueFields.length}건 추가됨.`
+            )
           );
         }}
       />

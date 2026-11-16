@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Search, X, Check, Palette } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export interface SapColorDefinition {
   code: string;
@@ -95,6 +96,7 @@ export const SapColorSearchHelpModal: React.FC<SapColorSearchHelpModalProps> = (
   currentColor = '',
   fieldName = '',
 }) => {
+  const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
 
@@ -125,18 +127,18 @@ export const SapColorSearchHelpModal: React.FC<SapColorSearchHelpModalProps> = (
             </div>
             <div>
               <h3 className="text-sm font-bold tracking-tight">
-                SAP ALV Grid Color Search Help (F4)
+                {t('SAP ALV Grid Color Search Help (F4)', 'SAP ALV 그리드 색상 검색 도움말 (F4)')}
               </h3>
               <p className="text-[11px] text-slate-300">
-                Select an LVC_T_FCAT-EMPHASIZE color code for the column.
+                {t('Select an LVC_T_FCAT-EMPHASIZE color code for the column.', '컬럼에 적용할 LVC_T_FCAT-EMPHASIZE 색상 코드를 선택하세요.')}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            title="Close"
-            aria-label="Close"
+            title={t('Close', '닫기')}
+            aria-label={t('Close', '닫기')}
             className="p-1 text-slate-400 hover:text-white rounded-md cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -151,7 +153,7 @@ export const SapColorSearchHelpModal: React.FC<SapColorSearchHelpModalProps> = (
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search color code (e.g., C310, Green, Yellow)..."
+              placeholder={t('Search color code (e.g., C310, Green, Yellow)...', '색상 코드 검색 (예: C310, Green, Yellow)...')}
               className="text-xs w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
             />
           </div>
@@ -168,7 +170,7 @@ export const SapColorSearchHelpModal: React.FC<SapColorSearchHelpModalProps> = (
                     : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
                 }`}
               >
-                {cat}
+                {cat === 'ALL' ? t('ALL', '전체') : cat}
               </button>
             ))}
           </div>
@@ -190,11 +192,11 @@ export const SapColorSearchHelpModal: React.FC<SapColorSearchHelpModalProps> = (
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-7 rounded border border-dashed border-slate-400 bg-white flex items-center justify-center text-[10px] text-slate-400 font-mono">
-                None
+                {t('None', '없음')}
               </div>
               <div>
-                <span className="font-mono font-bold text-xs text-slate-700">None (Default / Clear Color)</span>
-                <p className="text-[11px] text-slate-400">Do not apply a background highlight to this column.</p>
+                <span className="font-mono font-bold text-xs text-slate-700">{t('None (Default / Clear Color)', '없음 (기본값 / 색상 해제)')}</span>
+                <p className="text-[11px] text-slate-400">{t('Do not apply a background highlight to this column.', '이 컬럼에 배경 강조 색상을 적용하지 않습니다.')}</p>
               </div>
             </div>
             {!currentColor && <Check className="w-4 h-4 text-blue-600" />}
@@ -205,9 +207,9 @@ export const SapColorSearchHelpModal: React.FC<SapColorSearchHelpModalProps> = (
             <table className="w-full text-xs text-left border-collapse">
               <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 sticky top-0 select-none">
                 <tr>
-                  <th className="py-2 px-3 w-28 font-mono">CODE</th>
-                  <th className="py-2 px-3">COLOR PREVIEW & NAME</th>
-                  <th className="py-2 px-2 text-center w-16">SELECT</th>
+                  <th className="py-2 px-3 w-28 font-mono">{t('CODE', '코드')}</th>
+                  <th className="py-2 px-3">{t('COLOR PREVIEW & NAME', '색상 미리보기 및 이름')}</th>
+                  <th className="py-2 px-2 text-center w-16">{t('SELECT', '선택')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-sans">
@@ -252,14 +254,14 @@ export const SapColorSearchHelpModal: React.FC<SapColorSearchHelpModalProps> = (
         {/* Footer */}
         <div className="px-4 py-2.5 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 shrink-0">
           <div>
-            {fieldName && <span>Target Field: <strong className="font-mono text-blue-900">{fieldName}</strong></span>}
+            {fieldName && <span>{t('Target Field:', '대상 필드:')} <strong className="font-mono text-blue-900">{fieldName}</strong></span>}
           </div>
           <button
             type="button"
             onClick={onClose}
             className="px-3.5 py-1 bg-white hover:bg-slate-200 border border-slate-300 rounded font-semibold text-slate-700 cursor-pointer shadow-2xs"
           >
-            Close
+            {t('Close', '닫기')}
           </button>
         </div>
       </div>

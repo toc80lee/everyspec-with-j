@@ -44,6 +44,7 @@ import {
   isTruthy,
 } from '../utils/spreadsheetClipboard';
 import { InspectableSelect } from './InspectableSelect';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface FieldCatalogEditorProps {
   spec: ProgramSpec;
@@ -60,6 +61,7 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
   onOpenAiExtract,
   isReadOnly = false,
 }) => {
+  const { lang, t } = useLanguage();
   const [showSearchHelp, setShowSearchHelp] = useState(false);
   const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
   const [tableCopied, setTableCopied] = useState(false);
@@ -587,6 +589,21 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
       onKeyDown={handleKeyDown}
       className="space-y-3 font-sans focus:outline-none"
     >
+      {/* Top Header (Matched to Layout tab) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">
+            Configure the Field Catalog
+          </h3>
+          <p className="text-xs text-slate-500">
+            {t(
+              'Configure ALV grid columns, DDIC types, lengths, alignment, colors, keys, hotspots, and drilldown T-Codes (LVC_T_FCAT).',
+              'ALV 그리드 컬럼, DDIC 데이터 타입, 길이, 정렬, 색상, 키, 핫스팟 및 드릴다운 T-Code(LVC_T_FCAT)를 설정합니다.'
+            )}
+          </p>
+        </div>
+      </div>
+
       {/* 1. Top Controls Bar: Simplified with icon-only buttons with tooltips */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200 shadow-2xs">
         {/* Left: Icon Actions (Add Field, Search Help, Copy to Excel) */}
@@ -595,8 +612,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
             type="button"
             disabled={isReadOnly}
             onClick={handleAddNewField}
-            title="Add Field"
-            aria-label="Add Field"
+            title={t('Add Field', '필드 추가')}
+            aria-label={t('Add Field', '필드 추가')}
             className="p-1.5 text-slate-700 bg-white hover:bg-slate-100 hover:text-blue-700 border border-slate-300 rounded-md transition-colors shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
@@ -610,8 +627,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
               setEditingFieldIndex(null);
               setShowSearchHelp(true);
             }}
-            title="Search Help (F4)"
-            aria-label="Search Help (F4)"
+            title={t('Search Help (F4)', '탐색 도움말 (F4)')}
+            aria-label={t('Search Help (F4)', '탐색 도움말 (F4)')}
             className="p-1.5 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded-md transition-colors shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Search className="w-4 h-4" />
@@ -621,8 +638,12 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
             type="button"
             onClick={handleCopyTable}
             disabled={spec.field_catalog.length === 0}
-            title={tableCopied ? 'Copied to Clipboard!' : 'Copy Table to Excel'}
-            aria-label="Copy Table to Excel"
+            title={
+              tableCopied
+                ? t('Copied to Clipboard!', '클립보드에 복사됨!')
+                : t('Copy Table to Excel', '엑셀용 테이블 복사')
+            }
+            aria-label={t('Copy Table to Excel', '엑셀용 테이블 복사')}
             className={`p-1.5 border rounded-md transition-colors shadow-2xs cursor-pointer disabled:opacity-40 ${
               tableCopied
                 ? 'text-emerald-700 bg-emerald-50 border-emerald-300'
@@ -637,8 +658,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
               type="button"
               disabled={isReadOnly}
               onClick={onOpenAiExtract}
-              title="AI Suggest Columns from Logic"
-              aria-label="AI Suggest Columns from Logic"
+              title={t('AI Suggest Columns from Logic', '로직 기반 AI 컬럼 추천')}
+              aria-label={t('AI Suggest Columns from Logic', '로직 기반 AI 컬럼 추천')}
               className="p-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-300 rounded-md transition-colors shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <GitPullRequestCreate className="w-4 h-4" />
@@ -651,25 +672,29 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
           {validation.isValid ? (
             <span
               className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 font-semibold shadow-2xs"
-              title="All SAP field types and column positions are valid"
+              title={t('All SAP field types and column positions are valid', '모든 SAP 필드 타입 및 컬럼 위치가 유효합니다')}
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Valid</span>
+              <span>{t('Valid', '유효')}</span>
             </span>
           ) : (
             <span
               className="inline-flex items-center gap-1 text-xs text-rose-700 bg-rose-50 px-2.5 py-1 rounded border border-rose-300 font-semibold shadow-2xs"
-              title={`${validation.totalIssueCount} validation issue(s) detected in Field Catalog`}
+              title={t(
+                `${validation.totalIssueCount} validation issue(s) detected in Field Catalog`,
+                `필드 카탈로그에서 ${validation.totalIssueCount}건의 유효성 오류가 발견되었습니다`
+              )}
             >
               <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
               <span>
-                {validation.totalIssueCount}{' '}
-                {validation.totalIssueCount === 1 ? 'Issue' : 'Issues'}
+                {lang === 'ko'
+                  ? `오류 ${validation.totalIssueCount}건`
+                  : `${validation.totalIssueCount} ${validation.totalIssueCount === 1 ? 'Issue' : 'Issues'}`}
               </span>
             </span>
           )}
           <span className="font-mono text-xs text-blue-700 bg-white px-2.5 py-1 rounded border border-blue-200 font-semibold shadow-2xs">
-            Total {spec.field_catalog.length} Columns
+            {t(`Total ${spec.field_catalog.length} Columns`, `총 ${spec.field_catalog.length}개 컬럼`)}
           </span>
         </div>
       </div>
@@ -684,8 +709,9 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
             <div className="flex items-center gap-2 font-bold text-rose-900">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>
-                Field Catalog Validation ({validation.totalIssueCount}{' '}
-                {validation.totalIssueCount === 1 ? 'error' : 'errors'} detected)
+                {lang === 'ko'
+                  ? `필드 카탈로그 유효성 검증 (${validation.totalIssueCount}건의 오류 감지됨)`
+                  : `Field Catalog Validation (${validation.totalIssueCount} ${validation.totalIssueCount === 1 ? 'error' : 'errors'} detected)`}
               </span>
             </div>
 
@@ -696,10 +722,10 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                 disabled={isReadOnly}
                 onClick={handleAutoRenumberPos}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-rose-800 bg-white hover:bg-rose-100 border border-rose-300 rounded-md shadow-2xs cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Automatically assign unique sequential COL_POS values (1..N)"
+                title={t('Automatically assign unique sequential COL_POS values (1..N)', '고유한 순차 COL_POS 값(1..N) 자동 부여')}
               >
                 <Wand2 className="w-3.5 h-3.5 text-rose-600" />
-                <span>Auto-Fix POS (1..N)</span>
+                <span>{t('Auto-Fix POS (1..N)', 'POS 자동 정렬 (1..N)')}</span>
               </button>
             )}
           </div>
@@ -707,7 +733,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
           <ul className="space-y-1 pl-6 list-disc text-[11px] text-rose-800">
             {validation.invalidTypeRows.length > 0 && (
               <li>
-                <strong>Invalid SAP Field Type:</strong> Row(s){' '}
+                <strong>{t('Invalid SAP Field Type:', '유효하지 않은 SAP 필드 타입:')}</strong>{' '}
+                {t('Row(s)', '행')}{' '}
                 <span className="font-mono font-bold text-rose-950">
                   {validation.invalidTypeRows
                     .map((r) => {
@@ -716,7 +743,7 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                     })
                     .join(', ')}
                 </span>
-                . Allowed SAP DDIC types:{' '}
+                . {t('Allowed SAP DDIC types:', '허용된 SAP DDIC 타입:')}{' '}
                 <span className="font-mono text-rose-950">
                   {VALID_SAP_FIELD_TYPES.join(', ')}
                 </span>
@@ -726,27 +753,32 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
 
             {validation.duplicateColPosValues.length > 0 && (
               <li>
-                <strong>Duplicate Column Position (COL_POS):</strong> Position(s){' '}
+                <strong>{t('Duplicate Column Position (COL_POS):', '중복된 컬럼 위치 (COL_POS):')}</strong>{' '}
+                {t('Position(s)', '위치')}{' '}
                 <span className="font-mono font-bold text-rose-950">
                   {validation.duplicateColPosValues.join(', ')}
                 </span>{' '}
-                assigned to multiple fields. Each column must have a unique position.
+                {t(
+                  'assigned to multiple fields. Each column must have a unique position.',
+                  '값이 여러 필드에 지정되었습니다. 각 컬럼은 고유한 위치 번호를 가져야 합니다.'
+                )}
               </li>
             )}
 
             {validation.invalidColPosRows.length > 0 && (
               <li>
-                <strong>Invalid Column Position (COL_POS):</strong> Row(s){' '}
+                <strong>{t('Invalid Column Position (COL_POS):', '유효하지 않은 컬럼 위치 (COL_POS):')}</strong>{' '}
+                {t('Row(s)', '행')}{' '}
                 <span className="font-mono font-bold text-rose-950">
                   {validation.invalidColPosRows.map((r) => `#${r + 1}`).join(', ')}
                 </span>{' '}
-                must have a positive integer position (&ge; 1).
+                {t('must have a positive integer position (≥ 1).', '항목은 1 이상의 양의 정수여야 합니다.')}
               </li>
             )}
 
             {validation.duplicateFieldnames.length > 0 && (
               <li>
-                <strong>Duplicate Fieldname:</strong>{' '}
+                <strong>{t('Duplicate Fieldname:', '중복된 필드명:')}</strong>{' '}
                 <span className="font-mono font-bold text-rose-950">
                   {validation.duplicateFieldnames.join(', ')}
                 </span>
@@ -766,11 +798,11 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
           <table className="w-full text-xs text-left border-collapse font-sans">
             <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-semibold text-[11px] select-none">
               <tr>
-                {/* fx / Corner Cell */}
-                <th className="py-2 px-1 text-center w-8 bg-slate-200 border-r border-slate-300 text-slate-500 font-mono text-[10px]" title="Spreadsheet Row Number">
+                {/* fx / Corner Cell (Table headers kept strictly English per RFQ v1.29) */}
+                <th className="py-2 px-1 text-center w-8 bg-slate-200 border-r border-slate-300 text-slate-500 font-mono text-[10px]" title={t('Spreadsheet Row Number', '스프레드시트 행 번호')}>
                   fx
                 </th>
-                <th className="py-1 px-1 text-center w-8 border-r border-slate-200" title="Drag grip to reorder column sequence">
+                <th className="py-1 px-1 text-center w-8 border-r border-slate-200" title={t('Drag grip to reorder column sequence', '드래그하여 컬럼 순서 변경')}>
                   <div className="text-[9px] text-slate-400 font-mono">A</div>
                   <div>↕</div>
                 </th>
@@ -860,9 +892,19 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                   <td colSpan={18} className="py-10 text-center text-slate-400 font-sans">
                     <div className="flex flex-col items-center justify-center gap-1.5">
                       <FileSpreadsheet className="w-6 h-6 text-slate-300" />
-                      <p className="font-medium">No fields registered in Field Catalog.</p>
+                      <p className="font-medium">
+                        {t('No fields registered in Field Catalog.', '필드 카탈로그에 등록된 필드가 없습니다.')}
+                      </p>
                       <p className="text-xs text-slate-400">
-                        Copy rows/columns from Excel or Google Sheets and paste directly with <strong>Ctrl+V</strong>.
+                        {lang === 'ko' ? (
+                          <>
+                            엑셀이나 구글 시트에서 행/열을 복사한 뒤 <strong>Ctrl+V</strong>로 바로 붙여넣을 수 있습니다.
+                          </>
+                        ) : (
+                          <>
+                            Copy rows/columns from Excel or Google Sheets and paste directly with <strong>Ctrl+V</strong>.
+                          </>
+                        )}
                       </p>
                     </div>
                   </td>
@@ -1543,8 +1585,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                             type="button"
                             onClick={() => handleReorder(idx, 0)}
                             disabled={isReadOnly || idx === 0}
-                            title="Move to Top (COL_POS 1)"
-                            aria-label="Move to Top"
+                            title={t('Move to Top (COL_POS 1)', '맨 위로 이동 (COL_POS 1)')}
+                            aria-label={t('Move to Top', '맨 위로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowUpToLine className="w-3.5 h-3.5" />
@@ -1553,8 +1595,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                             type="button"
                             onClick={() => handleReorder(idx, idx - 1)}
                             disabled={isReadOnly || idx === 0}
-                            title="Move Up"
-                            aria-label="Move Up"
+                            title={t('Move Up', '위로 이동')}
+                            aria-label={t('Move Up', '위로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
@@ -1563,8 +1605,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                             type="button"
                             onClick={() => handleReorder(idx, idx + 1)}
                             disabled={isReadOnly || idx === spec.field_catalog.length - 1}
-                            title="Move Down"
-                            aria-label="Move Down"
+                            title={t('Move Down', '아래로 이동')}
+                            aria-label={t('Move Down', '아래로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
@@ -1573,8 +1615,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                             type="button"
                             onClick={() => handleReorder(idx, spec.field_catalog.length - 1)}
                             disabled={isReadOnly || idx === spec.field_catalog.length - 1}
-                            title="Move to Bottom"
-                            aria-label="Move to Bottom"
+                            title={t('Move to Bottom', '맨 아래로 이동')}
+                            aria-label={t('Move to Bottom', '맨 아래로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowDownToLine className="w-3.5 h-3.5" />
@@ -1583,8 +1625,12 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                             type="button"
                             onClick={() => handleDeleteField(idx)}
                             disabled={isReadOnly || isZicon}
-                            title={isZicon ? 'ZICON field cannot be deleted' : 'Delete Field'}
-                            aria-label="Delete Field"
+                            title={
+                              isZicon
+                                ? t('ZICON field cannot be deleted', 'ZICON 필드는 삭제할 수 없습니다')
+                                : t('Delete Field', '필드 삭제')
+                            }
+                            aria-label={t('Delete Field', '필드 삭제')}
                             className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded cursor-pointer ml-0.5 disabled:opacity-20 disabled:cursor-not-allowed"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1662,8 +1708,8 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
                 <span className="w-6 h-4 rounded border border-dashed border-slate-400 bg-white shrink-0 flex items-center justify-center text-[9px] text-slate-400 font-mono">
                   -
                 </span>
-                <span className="font-mono font-bold text-slate-700">None</span>
-                <span className="text-[11px] text-slate-500 truncate">No color</span>
+                <span className="font-mono font-bold text-slate-700">{t('None', '없음')}</span>
+                <span className="text-[11px] text-slate-500 truncate">{t('No color', '색상 없음')}</span>
               </div>
               {!currentVal && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
             </button>

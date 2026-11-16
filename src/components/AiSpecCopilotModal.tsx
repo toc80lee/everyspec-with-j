@@ -21,6 +21,7 @@ import {
   applyAiPatchToSpec,
   AiSpecPatchResult,
 } from '../utils/aiLogicGenerator';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface AiSpecCopilotModalProps {
   isOpen: boolean;
@@ -31,37 +32,51 @@ interface AiSpecCopilotModalProps {
 
 const QUICK_PROMPTS: {
   label: string;
+  labelKo: string;
   module: SapModule;
   sampleType: string;
   prompt: string;
+  promptKo: string;
 }[] = [
   {
     label: 'SD Sales Order Delivery Delay',
+    labelKo: 'SD 판매오더 출하 지연 현황',
     module: 'SD',
     sampleType: '01',
     prompt:
       'Query sales orders by sales org, document date, order number, and delivery status radio button (All/Open Only) displaying customer delivery status traffic lights, net value totals, and VA03 drilldown.',
+    promptKo:
+      '영업조직, 전표일, 판매오더 번호 및 납품 상태 라디오버튼(전체/미납만)으로 조회하여 고객별 납품 상태 신호등, 순금액 합계 및 VA03 드릴다운을 표시하는 단일 ALV 리포트를 설계해 주세요.',
   },
   {
     label: 'MM Purchase Order Master-Detail',
+    labelKo: 'MM 구매오더 헤더-아이템 모니터링',
     module: 'MM',
     sampleType: '02',
     prompt:
       'Display PO headers (EKKO) in top grid by company code, plant, and PO date; row click loads PO items (EKPO) with open GR quantity and a custom MIGO goods receipt toolbar button.',
+    promptKo:
+      '회사코드, 플랜트, 발주일 기준으로 상단에 구매오더 헤더(EKKO)를 조회하고 행 클릭 시 하단에 품목(EKPO)과 미입고 수량, 커스텀 MIGO 입고 처리 툴바 버튼을 제공하는 Master-Detail 2-Grid를 설계해 주세요.',
   },
   {
     label: 'FI Open AR Aging Analysis',
+    labelKo: 'FI 미결 매출채권 연령 분석',
     module: 'FI',
     sampleType: '01',
     prompt:
       'Query open AR documents (BSID/BKPF/KNA1) by company code, posting date, and customer with overdue traffic-light alerts, local currency totals, FB03 drilldown, and batch clearing.',
+    promptKo:
+      '회사코드, 전기일, 고객별로 미결 채권 전표(BSID/BKPF/KNA1)를 조회하고 연체 신호등 경고, 현지통화 합계, FB03 드릴다운 및 일괄 반제 기능을 갖춘 ALV 리포트를 설계해 주세요.',
   },
   {
     label: 'CO Cost Center Plan vs Actual',
+    labelKo: 'CO 코스트센터 계획 대비 실적 피벗',
     module: 'CO',
     sampleType: '04',
     prompt:
       'Analyze cost center plan vs actual amounts and variance % across cost elements (CSKS/COEP/COSP) by controlling area (KOKRS), fiscal year (GJAHR), and period (PERIO) in a pivot grid.',
+    promptKo:
+      '관리회계영역(KOKRS), 회계연도(GJAHR), 기간(PERIO)별로 코스트센터·원가요소(CSKS/COEP/COSP) 기준 계획 대비 실적 금액 및 차이율을 피벗 그리드로 분석하는 프로그램을 설계해 주세요.',
   },
 ];
 
@@ -71,6 +86,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
   currentSpec,
   onApplySpec,
 }) => {
+  const { t, lang } = useLanguage();
   const [copilotMode, setCopilotMode] = useState<'full' | 'patch'>('full');
   const [requirementPrompt, setRequirementPrompt] = useState('');
   const [selectedModule, setSelectedModule] = useState<SapModule | 'AUTO'>('AUTO');
@@ -95,8 +111,8 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
     if (!requirementPrompt.trim()) {
       setErrorMsg(
         copilotMode === 'patch'
-          ? 'Please enter modification instructions for the existing specification.'
-          : 'Please enter business requirements for the SAP program.'
+          ? t('Please enter modification instructions for the existing specification.', '기존 사양서에 반영할 수정/추가 지시사항을 입력하세요.')
+          : t('Please enter business requirements for the SAP program.', 'SAP 프로그램의 업무 요구사항을 입력하세요.')
       );
       return;
     }
@@ -125,7 +141,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
         setDraftResult(res);
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to generate program specification.');
+      setErrorMsg(err?.message || t('Failed to generate program specification.', '프로그램 사양서 생성에 실패했습니다.'));
     } finally {
       setIsGenerating(false);
     }
@@ -205,10 +221,13 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold leading-tight">
-                AI Spec Copilot (Requirements → Full Spec Draft)
+                {t('AI Spec Copilot (Requirements → Full Spec Draft)', 'AI 사양 코파일럿 (요구사항 → 전체 사양서 초안)')}
               </h3>
               <p className="text-[11px] text-slate-300">
-                Generates selection parameters, field catalog, extraction logic, data flow, and mock data from requirements.
+                {t(
+                  'Generates selection parameters, field catalog, extraction logic, data flow, and mock data from requirements.',
+                  '업무 요구사항을 바탕으로 선택 화면, 필드 카탈로그, 추출 로직, 흐름도 및 테스트 데이터를 자동 생성합니다.'
+                )}
               </p>
             </div>
           </div>
@@ -216,8 +235,8 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-white p-1 rounded cursor-pointer"
-            title="Close"
-            aria-label="Close"
+            title={t('Close', '닫기')}
+            aria-label={t('Close', '닫기')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -239,7 +258,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Full Draft
+              {t('Full Draft', '신규 전체 초안')}
             </button>
             <button
               type="button"
@@ -253,28 +272,44 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Incremental Patch
+              {t('Incremental Patch', '부분 증분 수정')}
             </button>
           </div>
 
           {copilotMode === 'patch' && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-[11.5px] text-emerald-900">
-              <b>Incremental Patch ({currentSpec.program_id})</b>: Preserves existing selection parameters, field catalog, and logic while appending requested items.
+              <b>{t(`Incremental Patch (${currentSpec.program_id})`, `부분 증분 수정 (${currentSpec.program_id})`)}</b>:{' '}
+              {t(
+                'Preserves existing selection parameters, field catalog, and logic while appending requested items.',
+                '기존 선택 화면, 필드 카탈로그, 로직을 유지한 채 요청한 항목만 안전하게 추가합니다.'
+              )}
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {[
-                  'Add Plant (S_WERKS) and Material Group (S_MATKL) to Selection Screen',
-                  'Add Net Price (NETPR), Currency (WAERS), and Batch Approve toolbar button',
-                  'Add V_VBAK_VKO authority check and SE91 no-data error message',
-                ].map((sample) => (
-                  <button
-                    key={sample}
-                    type="button"
-                    onClick={() => setRequirementPrompt(sample)}
-                    className="px-2 py-0.5 rounded bg-white hover:bg-emerald-100 border border-emerald-300 text-[10.5px] text-emerald-800 cursor-pointer"
-                  >
-                    + {sample}
-                  </button>
-                ))}
+                  {
+                    en: 'Add Plant (S_WERKS) and Material Group (S_MATKL) to Selection Screen',
+                    ko: '조회 조건에 플랜트(S_WERKS)와 자재그룹(S_MATKL) 추가',
+                  },
+                  {
+                    en: 'Add Net Price (NETPR), Currency (WAERS), and Batch Approve toolbar button',
+                    ko: 'ALV에 단가(NETPR), 통화(WAERS) 컬럼과 일괄 승인 툴바 버튼 추가',
+                  },
+                  {
+                    en: 'Add V_VBAK_VKO authority check and SE91 no-data error message',
+                    ko: 'V_VBAK_VKO 권한 점검과 SE91 데이터 없음 오류 메시지 추가',
+                  },
+                ].map((sample) => {
+                  const text = lang === 'ko' ? sample.ko : sample.en;
+                  return (
+                    <button
+                      key={sample.en}
+                      type="button"
+                      onClick={() => setRequirementPrompt(text)}
+                      className="px-2 py-0.5 rounded bg-white hover:bg-emerald-100 border border-emerald-300 text-[10.5px] text-emerald-800 cursor-pointer"
+                    >
+                      + {text}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -284,7 +319,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
               <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                <span>Quick Examples (Click to Populate)</span>
+                <span>{t('Quick Examples (Click to Populate)', '빠른 예시 (클릭 시 입력)')}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {QUICK_PROMPTS.map((q) => (
@@ -292,13 +327,13 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
                     key={q.label}
                     type="button"
                     onClick={() => {
-                      setRequirementPrompt(q.prompt);
+                      setRequirementPrompt(lang === 'ko' ? q.promptKo : q.prompt);
                       setSelectedModule(q.module);
                       setSampleType(q.sampleType);
                     }}
                     className="px-2.5 py-1 bg-white hover:bg-blue-50 hover:border-blue-300 border border-slate-200 rounded text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer"
                   >
-                    [{q.module}] {q.label}
+                    [{q.module}] {lang === 'ko' ? q.labelKo : q.label}
                   </button>
                 ))}
               </div>
@@ -309,13 +344,16 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
           <div className="space-y-3">
             <div>
               <label className="block font-bold text-slate-800 mb-1">
-                Business Requirements <span className="text-rose-500">*</span>
+                {t('Business Requirements', '업무 요구사항')} <span className="text-rose-500">*</span>
               </label>
               <textarea
                 rows={4}
                 value={requirementPrompt}
                 onChange={(e) => setRequirementPrompt(e.target.value)}
-                placeholder="e.g., Design an ALV report displaying overdue purchase orders by company code, plant, and PO date with red traffic-light indicators and ME23N drilldown."
+                placeholder={t(
+                  'e.g., Design an ALV report displaying overdue purchase orders by company code, plant, and PO date with red traffic-light indicators and ME23N drilldown.',
+                  '예: 회사코드, 플랜트, 발주일 기준으로 납기 지연 구매오더를 조회하고 빨간 신호등 표시 및 ME23N 드릴다운을 지원하는 ALV 리포트를 설계해 주세요.'
+                )}
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
               />
             </div>
@@ -323,26 +361,26 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
             {copilotMode === 'full' && (
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">SAP Module</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{t('SAP Module', 'SAP 모듈')}</label>
                   <select
                     value={selectedModule}
                     onChange={(e) => setSelectedModule(e.target.value as SapModule | 'AUTO')}
                     className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 font-semibold text-slate-800 focus:bg-white focus:border-blue-500 cursor-pointer"
                   >
-                    <option value="AUTO">Auto Detect</option>
-                    <option value="SD">SD (Sales & Distribution)</option>
-                    <option value="MM">MM (Materials Management)</option>
-                    <option value="FI">FI (Financial Accounting)</option>
-                    <option value="CO">CO (Controlling)</option>
-                    <option value="PP">PP (Production Planning)</option>
-                    <option value="HR">HR (Human Resources)</option>
-                    <option value="QM">QM (Quality Management)</option>
-                    <option value="PM">PM (Plant Maintenance)</option>
+                    <option value="AUTO">{t('Auto Detect', '자동 판별')}</option>
+                    <option value="SD">SD ({t('Sales & Distribution', '영업/출하')})</option>
+                    <option value="MM">MM ({t('Materials Management', '구매/자재')})</option>
+                    <option value="FI">FI ({t('Financial Accounting', '재무회계')})</option>
+                    <option value="CO">CO ({t('Controlling', '관리회계')})</option>
+                    <option value="PP">PP ({t('Production Planning', '생산관리')})</option>
+                    <option value="HR">HR ({t('Human Resources', '인사관리')})</option>
+                    <option value="QM">QM ({t('Quality Management', '품질관리')})</option>
+                    <option value="PM">PM ({t('Plant Maintenance', '설비보전')})</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Screen Pattern</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{t('Screen Pattern', '화면 유형')}</label>
                   <select
                     value={sampleType}
                     onChange={(e) => setSampleType(e.target.value)}
@@ -356,23 +394,23 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Program ID (Optional)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{t('Program ID (Optional)', 'Program ID (선택)')}</label>
                   <input
                     type="text"
                     value={programId}
                     onChange={(e) => setProgramId(e.target.value.toUpperCase())}
-                    placeholder="Auto (Z...)"
+                    placeholder={t('Auto (Z...)', '자동 생성 (Z...)')}
                     className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold uppercase text-blue-900 focus:bg-white focus:border-blue-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">T-Code (Optional)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{t('T-Code (Optional)', 'T-Code (선택)')}</label>
                   <input
                     type="text"
                     value={tcode}
                     onChange={(e) => setTcode(e.target.value.toUpperCase())}
-                    placeholder="Auto (Z...)"
+                    placeholder={t('Auto (Z...)', '자동 생성 (Z...)')}
                     className="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold uppercase text-blue-900 focus:bg-white focus:border-blue-500"
                   />
                 </div>
@@ -382,8 +420,8 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
             <div className="flex items-center justify-between pt-1">
               <span className="text-[11px] text-slate-500">
                 {copilotMode === 'patch'
-                  ? 'Review the incremental patch preview below before merging into the current spec.'
-                  : 'Preview the generated spec below before applying it to the current program.'}
+                  ? t('Review the incremental patch preview below before merging into the current spec.', '아래 증분 패치 미리보기를 확인한 뒤 현재 사양서에 병합하세요.')
+                  : t('Preview the generated spec below before applying it to the current program.', '아래 생성된 사양서 초안을 검토한 뒤 현재 프로그램에 적용하세요.')}
               </span>
               <button
                 type="button"
@@ -394,22 +432,22 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
                 {isGenerating ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{copilotMode === 'patch' ? 'Analyzing patch...' : 'Generating draft...'}</span>
+                    <span>{copilotMode === 'patch' ? t('Analyzing patch...', '패치 분석 중...') : t('Generating draft...', '초안 생성 중...')}</span>
                   </>
                 ) : copilotMode === 'patch' ? (
                   <>
                     <Wand2 className="w-4 h-4" />
-                    <span>Generate Patch</span>
+                    <span>{t('Generate Patch', '패치 생성')}</span>
                   </>
                 ) : draft ? (
                   <>
                     <RefreshCw className="w-4 h-4" />
-                    <span>Regenerate Draft</span>
+                    <span>{t('Regenerate Draft', '초안 다시 생성')}</span>
                   </>
                 ) : (
                   <>
                     <Wand2 className="w-4 h-4" />
-                    <span>Generate Full Draft</span>
+                    <span>{t('Generate Full Draft', '전체 초안 생성')}</span>
                   </>
                 )}
               </button>
@@ -432,27 +470,27 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
                   <span className="font-bold text-slate-900">{patchResult.patch.summary}</span>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-emerald-200 text-emerald-700">
-                  {patchResult.source === 'ai' ? 'AI Patch' : 'Deterministic Patch'}
+                  {patchResult.source === 'ai' ? t('AI Patch', 'AI 패치') : t('Deterministic Patch', '규칙 기반 패치')}
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] tabular-nums">
                 <div className="bg-white border border-slate-200 rounded p-2">
-                  <span className="text-slate-500">Added Selection:</span>{' '}
+                  <span className="text-slate-500">{t('Added Selection:', '추가 조회 조건:')}</span>{' '}
                   <b>{patchResult.patch.add_selection_params?.length || 0}</b>
                 </div>
                 <div className="bg-white border border-slate-200 rounded p-2">
-                  <span className="text-slate-500">Added ALV Columns:</span>{' '}
+                  <span className="text-slate-500">{t('Added ALV Columns:', '추가 ALV 컬럼:')}</span>{' '}
                   <b>{patchResult.patch.add_field_catalog?.length || 0}</b>
                 </div>
                 <div className="bg-white border border-slate-200 rounded p-2">
-                  <span className="text-slate-500">Auth / Messages:</span>{' '}
+                  <span className="text-slate-500">{t('Auth / Messages:', '권한 / 메시지:')}</span>{' '}
                   <b>
                     {(patchResult.patch.add_authority_checks?.length || 0) +
                       (patchResult.patch.add_messages?.length || 0)}
                   </b>
                 </div>
                 <div className="bg-white border border-slate-200 rounded p-2">
-                  <span className="text-slate-500">Added Toolbar:</span>{' '}
+                  <span className="text-slate-500">{t('Added Toolbar:', '추가 툴바:')}</span>{' '}
                   <b>{patchResult.patch.add_toolbar_buttons?.length || 0}</b>
                 </div>
               </div>
@@ -474,7 +512,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
                     {draft.program_id} / {draft.tcode}
                   </span>
                   <span className="text-[11px] font-bold px-2 py-0.5 bg-blue-600 text-white rounded">
-                    {draft.module} · Type {draft.sample_type}
+                    {draft.module} · {t('Type', '유형')} {draft.sample_type}
                   </span>
                 </div>
                 {draftResult.detectedTables.length > 0 && (
@@ -497,38 +535,41 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
                     <Sliders className="w-3 h-3 text-blue-600" />
-                    <span>Selection Screen</span>
+                    <span>{t('Selection Screen', '조회 조건')}</span>
                   </div>
                   <div className="text-sm font-bold text-slate-900 mt-0.5 tabular-nums">
-                    {draft.selection_params.length} fields ({distinctBoxes.length} boxes)
+                    {t(
+                      `${draft.selection_params.length} fields (${distinctBoxes.length} boxes)`,
+                      `${draft.selection_params.length}개 (${distinctBoxes.length}박스)`
+                    )}
                   </div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
                     <Table className="w-3 h-3 text-indigo-600" />
-                    <span>ALV Field Catalog</span>
+                    <span>{t('ALV Field Catalog', 'ALV 필드 카탈로그')}</span>
                   </div>
                   <div className="text-sm font-bold text-slate-900 mt-0.5 tabular-nums">
-                    {draft.field_catalog.length} columns
-                    {draft.item_grid ? ` + ${draft.item_grid.field_catalog.length} items` : ''}
+                    {draft.field_catalog.length} {t('columns', '컬럼')}
+                    {draft.item_grid ? ` + ${draft.item_grid.field_catalog.length} ${t('items', '품목')}` : ''}
                   </div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
                     <Layers className="w-3 h-3 text-emerald-600" />
-                    <span>Mock Data & Tests</span>
+                    <span>{t('Mock Data & Tests', '테스트 데이터 및 시나리오')}</span>
                   </div>
                   <div className="text-sm font-bold text-slate-900 mt-0.5 tabular-nums">
-                    {draft.mock_rows.length} rows · {draft.test_cases.length} TCs
+                    {draft.mock_rows.length} {t('rows', '행')} · {draft.test_cases.length} TCs
                   </div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
                   <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
                     <Sparkles className="w-3 h-3 text-amber-600" />
-                    <span>Custom Toolbar</span>
+                    <span>{t('Custom Toolbar', '커스텀 툴바')}</span>
                   </div>
                   <div className="text-sm font-bold text-slate-900 mt-0.5 tabular-nums">
-                    {draft.custom_toolbar.length} custom buttons
+                    {draft.custom_toolbar.length} {t('custom buttons', '개 버튼')}
                   </div>
                 </div>
               </div>
@@ -537,7 +578,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="bg-white border border-slate-200 rounded-lg p-3">
                   <div className="text-[11px] font-bold text-slate-700 mb-1.5">
-                    Generated Selection Parameters
+                    {t('Generated Selection Parameters', '생성된 조회 조건 파라미터')}
                   </div>
                   <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
                     {draft.selection_params.map((p) => (
@@ -568,7 +609,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
 
                 <div className="bg-white border border-slate-200 rounded-lg p-3">
                   <div className="text-[11px] font-bold text-slate-700 mb-1.5">
-                    Generated ALV Columns (Field Catalog)
+                    {t('Generated ALV Columns (Field Catalog)', '생성된 ALV 컬럼 (필드 카탈로그)')}
                   </div>
                   <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
                     {draft.field_catalog.map((f) => (
@@ -611,7 +652,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
             onClick={onClose}
             className="px-3.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-md font-semibold cursor-pointer"
           >
-            Cancel
+            {t('Cancel', '취소')}
           </button>
           {copilotMode === 'patch' ? (
             <button
@@ -621,7 +662,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
               className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-md font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Merge Patch</span>
+              <span>{t('Merge Patch', '패치 병합')}</span>
             </button>
           ) : (
             <button
@@ -631,7 +672,7 @@ export const AiSpecCopilotModal: React.FC<AiSpecCopilotModalProps> = ({
               className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-md font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Apply Draft</span>
+              <span>{t('Apply Draft', '초안 적용')}</span>
             </button>
           )}
         </div>

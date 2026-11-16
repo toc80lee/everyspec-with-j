@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { AlvField, ProgramSpec } from '../types/sap';
 import { SapGuiTheme, SAP_GUI_THEMES } from '../data/sapGuiThemes';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SapPivotBrowserProps {
   spec: ProgramSpec;
@@ -136,6 +137,7 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
   theme = 'blue_crystal',
   onDrilldown,
 }) => {
+  const { lang, t } = useLanguage();
   const _currentTheme = SAP_GUI_THEMES[theme] || SAP_GUI_THEMES.blue_crystal;
 
   const [activeTab, setActiveTab] = useState<'columns' | 'layouts' | 'actions' | 'history'>('columns');
@@ -172,7 +174,12 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
     setFields((prev) =>
       prev.map((f) => (f.key === key ? { ...f, checked: !f.checked } : f))
     );
-    setStatusNotice(`Field [${key}] toggled: Group By & Sum dynamically recalculated.`);
+    setStatusNotice(
+      t(
+        `Field [${key}] toggled: Group By & Sum dynamically recalculated.`,
+        `필드 [${key}] 전환됨: Group By 및 합계가 실시간으로 재계산되었습니다.`
+      )
+    );
     setTimeout(() => setStatusNotice(null), 3000);
   };
 
@@ -183,7 +190,12 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
         checked: keysToEnable.includes(f.key),
       }))
     );
-    setStatusNotice(`Preset [${keysToEnable.join(', ')}] applied.`);
+    setStatusNotice(
+      t(
+        `Preset [${keysToEnable.join(', ')}] applied.`,
+        `프리셋 [${keysToEnable.join(', ')}]이 적용되었습니다.`
+      )
+    );
     setTimeout(() => setStatusNotice(null), 3000);
   };
 
@@ -296,24 +308,27 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
     return [
       {
         name: '/SUMMARY_TOP2',
-        badge: 'Compact',
-        desc: `Primary 2 Dimensions (${dims.slice(0, 2).join(', ') || 'All'})`,
+        badge: t('Compact', '요약'),
+        desc: t(
+          `Primary 2 Dimensions (${dims.slice(0, 2).join(', ') || 'All'})`,
+          `주요 2개 차원 (${dims.slice(0, 2).join(', ') || '전체'})`
+        ),
         keys: [...dims.slice(0, 2), ...measures],
       },
       {
         name: '/STANDARD',
-        badge: 'Standard',
-        desc: 'Standard Dimensions & Aggregated Measures',
+        badge: t('Standard', '표준'),
+        desc: t('Standard Dimensions & Aggregated Measures', '표준 차원 및 집계 측정값'),
         keys: [...dims.slice(0, 4), ...measures],
       },
       {
         name: '/DETAILED_ALL',
-        badge: 'Full Breakdown',
-        desc: 'All Dimensions, Texts, and Measures',
+        badge: t('Full Breakdown', '전체 상세'),
+        desc: t('All Dimensions, Texts, and Measures', '모든 차원, 텍스트 및 측정값'),
         keys: [...dims, ...texts, ...measures],
       },
     ];
-  }, [spec.pivot_config?.preset_layouts, fields]);
+  }, [spec.pivot_config?.preset_layouts, fields, t]);
 
   const sqlSourceTable = useMemo(() => {
     if (spec.pivot_config?.source_table_or_cds) return spec.pivot_config.source_table_or_cds.toUpperCase();
@@ -331,7 +346,7 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <Table className="w-4 h-4 text-blue-900" />
           <span className="font-bold text-slate-900 text-[13px]">
-            {spec.title || 'Pivot Browser'}
+            {spec.title || t('Pivot Browser', '피벗 브라우저')}
           </span>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-bold border border-blue-200">
             04 (Pivot Browser)
@@ -340,7 +355,7 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
             [{spec.program_id || 'ZRALV0040'}]
           </span>
           <span className="text-[11px] text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-300 font-mono tabular-nums">
-            Rows: <strong className="text-blue-900">{pivotResult.rows.length}</strong>
+            {t('Rows:', '행 수:')} <strong className="text-blue-900">{pivotResult.rows.length}</strong>
           </span>
         </div>
       </div>
@@ -355,17 +370,17 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
                 Group By Sum
               </span>
               <span className="text-[11px] text-slate-600 truncate">
-                Dimensions:{' '}
+                {t('Dimensions:', '차원:')}{' '}
                 <strong className="text-blue-900 font-mono">
                   {checkedDimFields.length > 0
                     ? checkedDimFields.map((f) => f.coltext).join(', ')
-                    : '(All Records Sum)'}
+                    : t('(All Records Sum)', '(전체 레코드 합계)')}
                 </strong>
               </span>
             </div>
 
             <div className="text-[11px] text-slate-600 font-mono tabular-nums shrink-0">
-              Aggregated Rows: <strong className="text-blue-900">{pivotResult.rows.length}</strong>
+              {t('Aggregated Rows:', '집계 행:')} <strong className="text-blue-900">{pivotResult.rows.length}</strong>
             </div>
           </div>
 
@@ -473,10 +488,10 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
           <div className="bg-[#e2edf8] border-b border-[#9bbadb] flex items-center justify-between px-2 pt-1.5 shrink-0">
             <div className="flex items-center gap-1">
               {[
-                { id: 'columns' as const, label: 'Columns' },
-                { id: 'layouts' as const, label: 'Layouts' },
-                { id: 'actions' as const, label: 'Actions' },
-                { id: 'history' as const, label: 'History' },
+                { id: 'columns' as const, label: t('Columns', '컬럼') },
+                { id: 'layouts' as const, label: t('Layouts', '레이아웃') },
+                { id: 'actions' as const, label: t('Actions', 'SQL 동작') },
+                { id: 'history' as const, label: t('History', '이력') },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -495,12 +510,12 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
           </div>
 
           <div className="bg-[#f0f4f9] px-2.5 py-1.5 border-b border-[#9bbadb] flex items-center justify-between gap-1 text-xs shrink-0">
-            <span className="text-[11px] font-semibold text-slate-600">Select Dimensions & Measures</span>
+            <span className="text-[11px] font-semibold text-slate-600">{t('Select Dimensions & Measures', '차원 및 측정값 선택')}</span>
             <div className="relative">
               <Search className="w-3 h-3 text-slate-400 absolute left-2 top-1.5" />
               <input
                 type="text"
-                placeholder="Search field..."
+                placeholder={t('Search field...', '필드 검색...')}
                 value={fieldSearch}
                 onChange={(e) => setFieldSearch(e.target.value)}
                 className="bg-white border border-slate-300 rounded pl-6 pr-2 py-0.5 text-[11px] w-28 focus:w-36 transition-all text-slate-800"
@@ -513,10 +528,10 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-[#e9f0f8] border-b border-[#9bbadb] text-[10px] uppercase font-bold text-slate-700 sticky top-0 z-5">
                   <tr>
-                    <th className="px-2 py-1 w-10 text-center">Type</th>
-                    <th className="px-2 py-1">Field Name</th>
-                    <th className="px-2 py-1 text-center w-12">Visible</th>
-                    <th className="px-2 py-1">Field Description</th>
+                    <th className="px-2 py-1 w-10 text-center">{t('Type', '유형')}</th>
+                    <th className="px-2 py-1">{t('Field Name', '필드명')}</th>
+                    <th className="px-2 py-1 text-center w-12">{t('Visible', '표시')}</th>
+                    <th className="px-2 py-1">{t('Field Description', '필드 설명')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
@@ -546,7 +561,7 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
                                 ? 'bg-emerald-600'
                                 : 'bg-slate-400'
                             }`}
-                            title={field.art === 'DIM' ? 'Dimension' : field.art === 'MEASURE' ? 'Measure (SUM)' : 'Text Attribute'}
+                            title={field.art === 'DIM' ? t('Dimension', '차원 (Dimension)') : field.art === 'MEASURE' ? t('Measure (SUM)', '측정값 (SUM)') : t('Text Attribute', '텍스트 속성')}
                           />
                         </td>
                         <td className="px-2 py-1 font-bold text-slate-800">{field.fieldname}</td>
@@ -570,7 +585,7 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
 
           {activeTab === 'layouts' && (
             <div className="flex-1 p-3 text-xs space-y-3 bg-white overflow-auto">
-              <span className="font-bold text-slate-800 block text-xs">Saved Layout Variants:</span>
+              <span className="font-bold text-slate-800 block text-xs">{t('Saved Layout Variants:', '저장된 레이아웃 변형:')}</span>
               <div className="space-y-2 font-sans">
                 {layoutPresets.map((l) => (
                   <div
@@ -596,7 +611,7 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
 
           {activeTab === 'actions' && (
             <div className="flex-1 p-3 text-xs space-y-3 bg-white overflow-auto font-sans">
-              <span className="font-bold text-slate-800 block text-xs">Dynamic Open SQL Engine Query:</span>
+              <span className="font-bold text-slate-800 block text-xs">{t('Dynamic Open SQL Engine Query:', '동적 Open SQL 엔진 쿼리:')}</span>
               <pre className="p-2.5 bg-slate-900 text-emerald-400 rounded text-[11px] font-mono leading-relaxed overflow-x-auto shadow-inner border border-slate-800">
 {`SELECT ${checkedDimFields.length > 0 ? checkedDimFields.map((f) => f.key).join(',\n       ') : '*'}${
   checkedMeasureFields.length > 0
@@ -617,10 +632,13 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
 }`}
               </pre>
               <div className="text-[11px] text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded border border-slate-200">
-                <div className="font-semibold text-slate-800">Dynamic Group By Summary:</div>
+                <div className="font-semibold text-slate-800">{t('Dynamic Group By Summary:', '동적 Group By 요약:')}</div>
                 <p>
-                  Checked dimensions compile into <strong>GROUP BY</strong> pushdown on <strong>{sqlSourceTable}</strong>.{' '}
-                  {rawRows.length} source rows aggregated into <strong>{pivotResult.rows.length} groups</strong>.
+                  {lang === 'ko' ? (
+                    <>선택한 차원이 <strong>{sqlSourceTable}</strong>의 <strong>GROUP BY</strong> 푸시다운으로 컴파일됩니다. 원본 {rawRows.length}건이 <strong>{pivotResult.rows.length}개 그룹</strong>으로 집계되었습니다.</>
+                  ) : (
+                    <>Checked dimensions compile into <strong>GROUP BY</strong> pushdown on <strong>{sqlSourceTable}</strong>. {rawRows.length} source rows aggregated into <strong>{pivotResult.rows.length} groups</strong>.</>
+                  )}
                 </p>
               </div>
             </div>
@@ -628,17 +646,17 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
 
           {activeTab === 'history' && (
             <div className="flex-1 p-3 text-xs space-y-2 bg-white overflow-auto font-mono text-[11px]">
-              <div className="text-slate-500 pb-1 border-b">Activity History:</div>
-              <div className="text-emerald-700">● Dynamic Group By executed ({pivotResult.rows.length} rows)</div>
-              <div className="text-blue-700">● Source Dataset: {sqlSourceTable} ({rawRows.length} raw records)</div>
-              <div className="text-slate-600">● Active Measures: {checkedMeasureFields.map((m) => m.key).join(', ') || 'None'}</div>
+              <div className="text-slate-500 pb-1 border-b">{t('Activity History:', '실행 이력:')}</div>
+              <div className="text-emerald-700">● {t(`Dynamic Group By executed (${pivotResult.rows.length} rows)`, `동적 Group By 실행됨 (${pivotResult.rows.length}행)`)}</div>
+              <div className="text-blue-700">● {t(`Source Dataset: ${sqlSourceTable} (${rawRows.length} raw records)`, `원본 데이터셋: ${sqlSourceTable} (원본 ${rawRows.length}건)`)}</div>
+              <div className="text-slate-600">● {t(`Active Measures: ${checkedMeasureFields.map((m) => m.key).join(', ') || 'None'}`, `활성 측정값: ${checkedMeasureFields.map((m) => m.key).join(', ') || '없음'}`)}</div>
             </div>
           )}
 
           <div className="bg-[#e9f0f8] px-3 py-1.5 border-t border-[#9bbadb] text-[11px] text-slate-600 flex items-center justify-between shrink-0 font-sans">
-            <span>Selected Columns: <strong>{checkedFields.length}</strong></span>
+            <span>{t('Selected Columns:', '선택된 컬럼:')} <strong>{checkedFields.length}</strong></span>
             <div className="text-[10px] text-slate-500 font-mono">
-              Engine: SAP Open SQL ({sqlSourceTable})
+              {t('Engine:', '엔진:')} SAP Open SQL ({sqlSourceTable})
             </div>
           </div>
         </div>
@@ -649,7 +667,7 @@ export const SapPivotBrowser: React.FC<SapPivotBrowserProps> = ({
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shrink-0" />
           <span className="font-medium">
-            {statusNotice || `${pivotResult.rows.length} aggregated group row(s) loaded.`}
+            {statusNotice || t(`${pivotResult.rows.length} aggregated group row(s) loaded.`, `집계된 그룹 행 ${pivotResult.rows.length}건이 로드되었습니다.`)}
           </span>
         </div>
         <div className="flex items-center gap-2 text-[11px] text-slate-500">

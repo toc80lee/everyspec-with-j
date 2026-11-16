@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Search } from 'lucide-react';
 import { AlvField } from '../types/sap';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface AlvDetailModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export const AlvDetailModal: React.FC<AlvDetailModalProps> = ({
   title,
   detailinit = true,
 }) => {
+  const { t } = useLanguage();
   if (!isOpen || !record) return null;
 
   const displayedFields = fieldCatalog.filter((field) => {
@@ -43,10 +45,10 @@ export const AlvDetailModal: React.FC<AlvDetailModalProps> = ({
           <div className="flex items-center gap-1.5">
             <Search className="w-3.5 h-3.5 text-sky-300" />
             <span>
-              {title ? `${title} - ` : ''}ALV Detail View - Row {rowIndex + 1} / {totalRows}
+              {title ? `${title} - ` : ''}{t('ALV Detail View - Row', 'ALV 상세 보기 - 행')} {rowIndex + 1} / {totalRows}
             </span>
           </div>
-          <button onClick={onClose} title="Close" aria-label="Close" className="rounded p-0.5 hover:bg-white/20 transition-colors">
+          <button onClick={onClose} title={t('Close', '닫기')} aria-label={t('Close', '닫기')} className="rounded p-0.5 hover:bg-white/20 transition-colors">
             <X className="w-4 h-4 text-white" />
           </button>
         </div>
@@ -90,21 +92,21 @@ export const AlvDetailModal: React.FC<AlvDetailModalProps> = ({
               disabled={rowIndex <= 0}
               className="px-2.5 py-1 text-[11px] bg-[#F4F2E6] border border-slate-400 disabled:opacity-40 hover:bg-white"
             >
-              ◀ Prev Row
+              {t('◀ Prev Row', '◀ 이전 행')}
             </button>
             <button
               onClick={onNextRow}
               disabled={rowIndex >= totalRows - 1}
               className="px-2.5 py-1 text-[11px] bg-[#F4F2E6] border border-slate-400 disabled:opacity-40 hover:bg-white"
             >
-              Next Row ▶
+              {t('Next Row ▶', '다음 행 ▶')}
             </button>
           </div>
           <button
             onClick={onClose}
             className="px-4 py-1 text-[11px] font-semibold text-white bg-[#2B547E] border border-[#1A385C] hover:bg-[#1E3F66]"
           >
-            Close (Enter)
+            {t('Close (Enter)', '닫기 (Enter)')}
           </button>
         </div>
       </div>

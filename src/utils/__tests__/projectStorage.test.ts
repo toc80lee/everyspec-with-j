@@ -294,4 +294,49 @@ describe('projectStorage', () => {
     const p2609 = cleanedProjects.find((p) => p.code === '2609')!;
     expect(p2609.members).toEqual(['Josh Lee']);
   });
+
+  it('scopes member additions and removals strictly to the target project without altering 2602, COMM, or TEMP', () => {
+    const initial = getProjects();
+    const p2601 = initial.find((p) => p.code === '2601')!;
+    const p2602 = initial.find((p) => p.code === '2602')!;
+    const comm = initial.find((p) => p.code === COMMON_PROJECT_CODE)!;
+    const temp = initial.find((p) => p.code === TEMP_PROJECT_CODE)!;
+
+    expect(comm.members).toEqual(['Josh Lee']);
+    expect(temp.members).toEqual(['Josh Lee']);
+    expect(p2601.members).toEqual(['Josh Lee']);
+    expect(p2602.members).toEqual(['Josh Lee']);
+
+    // Add Alice Kim only to 2601
+    const addedTo2601 = saveProject({
+      ...p2601,
+      members: [...p2601.members, 'Alice Kim'],
+    });
+    expect(addedTo2601.success).toBe(true);
+
+    const afterAdd = getProjects();
+    expect(afterAdd.find((p) => p.code === '2601')?.members).toEqual(['Josh Lee', 'Alice Kim']);
+    expect(afterAdd.find((p) => p.code === '2602')?.members).toEqual(['Josh Lee']);
+    expect(afterAdd.find((p) => p.code === COMMON_PROJECT_CODE)?.members).toEqual(['Josh Lee']);
+    expect(afterAdd.find((p) => p.code === TEMP_PROJECT_CODE)?.members).toEqual(['Josh Lee']);
+
+    // Add Bob Park to 2602, then remove Alice Kim only from 2601
+    const afterBob = saveProject({
+      ...afterAdd.find((p) => p.code === '2602')!,
+      members: ['Josh Lee', 'Bob Park'],
+    });
+    expect(afterBob.success).toBe(true);
+
+    const removedFrom2601 = saveProject({
+      ...afterAdd.find((p) => p.code === '2601')!,
+      members: ['Josh Lee'],
+    });
+    expect(removedFrom2601.success).toBe(true);
+
+    const finalProjects = getProjects();
+    expect(finalProjects.find((p) => p.code === '2601')?.members).toEqual(['Josh Lee']);
+    expect(finalProjects.find((p) => p.code === '2602')?.members).toEqual(['Josh Lee', 'Bob Park']);
+    expect(finalProjects.find((p) => p.code === COMMON_PROJECT_CODE)?.members).toEqual(['Josh Lee']);
+    expect(finalProjects.find((p) => p.code === TEMP_PROJECT_CODE)?.members).toEqual(['Josh Lee']);
+  });
 });

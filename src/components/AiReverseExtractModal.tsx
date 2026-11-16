@@ -17,6 +17,7 @@ import {
   SuggestedFieldCatalogItem,
   SuggestedSelectionParamItem,
 } from '../utils/aiLogicGenerator';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface AiReverseExtractModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
   initialFocus = 'all',
   onApply,
 }) => {
+  const { t } = useLanguage();
   const [logicInput, setLogicInput] = useState(spec.data_extraction_logic || '');
   const [purposeInput, setPurposeInput] = useState(spec.business_purpose || '');
   const [showEditor, setShowEditor] = useState(false);
@@ -51,7 +53,12 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
 
   const runAnalysis = async (purposeText: string, logicText: string) => {
     if (!purposeText.trim() && !logicText.trim()) {
-      setErrorMsg('Business Purpose or Data Extraction & Logic text is required for analysis.');
+      setErrorMsg(
+        t(
+          'Business Purpose or Data Extraction & Logic text is required for analysis.',
+          '분석을 위해 Business Purpose 또는 Data Extraction & Logic 내용이 필요합니다.'
+        )
+      );
       return;
     }
     setIsAnalyzing(true);
@@ -71,7 +78,13 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
       setSelectedParamNames(new Set(result.suggestedSelectionParams.map((p) => p.name)));
       setSelectedFieldNames(new Set(result.suggestedFieldCatalog.map((f) => f.fieldname)));
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to analyze specification for reverse extraction.');
+      setErrorMsg(
+        err?.message ||
+          t(
+            'Failed to analyze specification for reverse extraction.',
+            '역추출 사양 분석 중 오류가 발생했습니다.'
+          )
+      );
     } finally {
       setIsAnalyzing(false);
     }
@@ -201,10 +214,16 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold leading-tight">
-                AI Reverse Extraction (Logic ↔ Selection & Field Catalog)
+                {t(
+                  'AI Reverse Extraction (Logic ↔ Selection & Field Catalog)',
+                  'AI 역추출 (로직 ↔ 선택화면 & 필드 카탈로그)'
+                )}
               </h3>
               <p className="text-[11px] text-slate-300">
-                Analyzes business purpose and extraction logic to recommend missing selection parameters and ALV columns.
+                {t(
+                  'Analyzes business purpose and extraction logic to recommend missing selection parameters and ALV columns.',
+                  '업무 목적과 데이터 추출 로직을 분석하여 누락된 조회 조건과 ALV 컬럼을 추천합니다.'
+                )}
               </p>
             </div>
           </div>
@@ -212,8 +231,8 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-white p-1 rounded cursor-pointer"
-            title="Close"
-            aria-label="Close"
+            title={t('Close', '닫기')}
+            aria-label={t('Close', '닫기')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -227,7 +246,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-slate-700 flex items-center gap-1">
                   <Database className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Detected SAP Tables:</span>
+                  <span>{t('Detected SAP Tables:', '탐지된 SAP 테이블:')}</span>
                 </span>
                 {detectedTables.length > 0 ? (
                   detectedTables.map((tbl) => (
@@ -239,7 +258,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                     </span>
                   ))
                 ) : (
-                  <span className="text-slate-400">Pending analysis</span>
+                  <span className="text-slate-400">{t('Pending analysis', '분석 대기 중')}</span>
                 )}
               </div>
 
@@ -249,7 +268,9 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                   onClick={() => setShowEditor((v) => !v)}
                   className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded text-[11px] font-semibold text-slate-700 cursor-pointer"
                 >
-                  {showEditor ? 'Hide Logic Text' : 'Edit Logic Text'}
+                  {showEditor
+                    ? t('Hide Logic Text', '로직 원문 접기')
+                    : t('Edit Logic Text', '로직 원문 편집')}
                 </button>
                 <button
                   type="button"
@@ -262,7 +283,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                   ) : (
                     <RefreshCw className="w-3 h-3" />
                   )}
-                  <span>Re-analyze</span>
+                  <span>{t('Re-analyze', '재분석')}</span>
                 </button>
               </div>
             </div>
@@ -271,7 +292,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Business Purpose
+                    {t('Business Purpose', '업무 목적 (Business Purpose)')}
                   </label>
                   <textarea
                     rows={4}
@@ -282,7 +303,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                    Data Extraction & Logic
+                    {t('Data Extraction & Logic', '추출 및 처리 로직 (Data Extraction & Logic)')}
                   </label>
                   <textarea
                     rows={4}
@@ -306,7 +327,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              All ({paramSuggestions.length + fieldSuggestions.length})
+              {t('All', '전체')} ({paramSuggestions.length + fieldSuggestions.length})
             </button>
             <button
               type="button"
@@ -318,7 +339,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
               }`}
             >
               <Sliders className="w-3.5 h-3.5" />
-              <span>Selection Screen ({paramSuggestions.length})</span>
+              <span>{t('Selection Screen', '선택 화면')} ({paramSuggestions.length})</span>
             </button>
             <button
               type="button"
@@ -330,7 +351,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
               }`}
             >
               <Table className="w-3.5 h-3.5" />
-              <span>Field Catalog ({fieldSuggestions.length})</span>
+              <span>{t('Field Catalog', '필드 카탈로그')} ({fieldSuggestions.length})</span>
             </button>
           </div>
 
@@ -345,7 +366,10 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
             <div className="py-12 flex flex-col items-center justify-center text-slate-500 gap-2">
               <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
               <p className="font-semibold text-slate-700">
-                Extracting SAP tables, WHERE conditions, and output columns...
+                {t(
+                  'Extracting SAP tables, WHERE conditions, and output columns...',
+                  'SAP 테이블, WHERE 조건 및 출력 컬럼을 추출하는 중...'
+                )}
               </p>
             </div>
           ) : (
@@ -356,7 +380,10 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                   <div className="px-3.5 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
                     <div className="flex items-center gap-2 font-bold text-slate-800">
                       <Sliders className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Recommended Selection Parameters ({paramSuggestions.length})</span>
+                      <span>
+                        {t('Recommended Selection Parameters', '추천 조회 조건 (Selection Screen)')} (
+                        {paramSuggestions.length})
+                      </span>
                     </div>
                     {paramSuggestions.length > 0 && (
                       <div className="flex items-center gap-2 text-[11px]">
@@ -367,7 +394,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                           }
                           className="text-blue-700 hover:underline font-semibold cursor-pointer"
                         >
-                          Select All
+                          {t('Select All', '전체 선택')}
                         </button>
                         <span className="text-slate-300">|</span>
                         <button
@@ -375,7 +402,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                           onClick={() => setSelectedParamNames(new Set())}
                           className="text-slate-600 hover:underline cursor-pointer"
                         >
-                          Clear
+                          {t('Clear', '해제')}
                         </button>
                       </div>
                     )}
@@ -383,7 +410,10 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
 
                   {paramSuggestions.length === 0 ? (
                     <div className="p-4 text-center text-slate-400">
-                      No missing selection parameters detected from the current logic.
+                      {t(
+                        'No missing selection parameters detected from the current logic.',
+                        '현재 로직에서 추가할 누락 조회 조건이 발견되지 않았습니다.'
+                      )}
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-100">
@@ -457,7 +487,10 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                   <div className="px-3.5 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
                     <div className="flex items-center gap-2 font-bold text-slate-800">
                       <Table className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Recommended ALV Field Catalog Columns ({fieldSuggestions.length})</span>
+                      <span>
+                        {t('Recommended ALV Field Catalog Columns', '추천 ALV 출력 필드 (Field Catalog)')} (
+                        {fieldSuggestions.length})
+                      </span>
                     </div>
                     {fieldSuggestions.length > 0 && (
                       <div className="flex items-center gap-2 text-[11px]">
@@ -470,7 +503,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                           }
                           className="text-indigo-700 hover:underline font-semibold cursor-pointer"
                         >
-                          Select All
+                          {t('Select All', '전체 선택')}
                         </button>
                         <span className="text-slate-300">|</span>
                         <button
@@ -478,7 +511,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
                           onClick={() => setSelectedFieldNames(new Set())}
                           className="text-slate-600 hover:underline cursor-pointer"
                         >
-                          Clear
+                          {t('Clear', '해제')}
                         </button>
                       </div>
                     )}
@@ -486,7 +519,10 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
 
                   {fieldSuggestions.length === 0 ? (
                     <div className="p-4 text-center text-slate-400">
-                      No missing ALV columns detected from the current logic.
+                      {t(
+                        'No missing ALV columns detected from the current logic.',
+                        '현재 로직에서 추가할 누락 ALV 필드가 발견되지 않았습니다.'
+                      )}
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-100">
@@ -551,10 +587,14 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
         {/* Footer */}
         <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0 text-xs">
           <div className="text-slate-600 tabular-nums">
-            Selected:{' '}
-            <strong className="text-blue-700">{selectedParamNames.size} Selection</strong>
+            {t('Selected:', '선택됨:')}{' '}
+            <strong className="text-blue-700">
+              {selectedParamNames.size} {t('Selection', '조회 조건')}
+            </strong>
             {' · '}
-            <strong className="text-indigo-700">{selectedFieldNames.size} Field Catalog</strong>
+            <strong className="text-indigo-700">
+              {selectedFieldNames.size} {t('Field Catalog', '필드 카탈로그')}
+            </strong>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -562,7 +602,7 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
               onClick={onClose}
               className="px-3.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-md font-semibold cursor-pointer"
             >
-              Cancel
+              {t('Cancel', '취소')}
             </button>
             <button
               type="button"
@@ -571,7 +611,9 @@ export const AiReverseExtractModal: React.FC<AiReverseExtractModalProps> = ({
               className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-md font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Apply Selected ({totalSelectedCount})</span>
+              <span>
+                {t('Apply Selected', '선택 항목 적용')} ({totalSelectedCount})
+              </span>
             </button>
           </div>
         </div>

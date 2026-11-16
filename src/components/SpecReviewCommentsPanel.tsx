@@ -14,6 +14,7 @@ import {
   UserProjectRole,
 } from '../types/sap';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { subscribeSpecReviewComments } from '../services/firestoreSync';
 import {
   addReviewComment,
@@ -68,8 +69,17 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
   onCommentsUpdated,
   onNotify,
 }) => {
+  const { t } = useLanguage();
   const { isFirebaseAuthenticated } = useAuth();
   const projectCode = (spec.project_code || 'TEMP').toUpperCase();
+
+  const sectionLabels: Record<SpecReviewSection, string> = {
+    general: t('General', '기본 정보'),
+    selection: t('Selection Screen', '조회 조건'),
+    field_catalog: t('Field Catalog', '필드 카탈로그'),
+    data_logic: t('Data Logic', '추출 로직'),
+    governance: t('Governance / Perf', '거버넌스/성능'),
+  };
 
   const [comments, setComments] = useState<SpecReviewComment[]>(() =>
     getReviewCommentsForSpec(projectCode, spec.id)
@@ -129,7 +139,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
     setComments(getReviewCommentsForSpec(projectCode, spec.id));
     setNewBody('');
     onCommentsUpdated?.();
-    onNotify?.('Review comment posted.');
+    onNotify?.(t('Review comment posted.', '리뷰 코멘트가 등록되었습니다.'));
   };
 
   const handleSubmitReply = (commentId: string) => {
@@ -152,7 +162,11 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
     setComments(getReviewCommentsForSpec(projectCode, spec.id));
     onCommentsUpdated?.();
     if (updated) {
-      onNotify?.(updated.resolved ? 'Marked comment as resolved.' : 'Reopened review comment.');
+      onNotify?.(
+        updated.resolved
+          ? t('Marked comment as resolved.', '코멘트를 해결 완료로 표시했습니다.')
+          : t('Reopened review comment.', '리뷰 코멘트를 다시 열었습니다.')
+      );
     }
   };
 
@@ -161,7 +175,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
     deleteReviewComment(commentId);
     setComments(getReviewCommentsForSpec(projectCode, spec.id));
     onCommentsUpdated?.();
-    onNotify?.('Review comment deleted.');
+    onNotify?.(t('Review comment deleted.', '리뷰 코멘트가 삭제되었습니다.'));
   };
 
   return (
@@ -171,10 +185,10 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
         <div className="flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-blue-600 shrink-0" />
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-            Section Review Comments
+            {t('Section Review Comments', '섹션별 설계 리뷰 코멘트')}
           </h4>
           <span className="font-mono tabular-nums text-[11px] font-semibold text-slate-600">
-            Open {unresolvedCount} / Total {comments.length}
+            {t(`Open ${unresolvedCount} / Total ${comments.length}`, `미해결 ${unresolvedCount} / 전체 ${comments.length}`)}
           </span>
         </div>
 
@@ -185,7 +199,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
             onChange={(e) => setShowResolved(e.target.checked)}
             className="rounded border-slate-300 text-blue-600"
           />
-          <span>Show Resolved</span>
+          <span>{t('Show Resolved', '해결된 항목 표시')}</span>
         </label>
       </div>
 
@@ -200,7 +214,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           }`}
         >
-          All ({comments.length})
+          {t('All', '전체')} ({comments.length})
         </button>
         {ALL_SECTIONS.map((sec) => {
           const cnt = comments.filter((c) => c.section === sec && !c.resolved).length;
@@ -215,7 +229,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {SECTION_LABELS[sec]}
+              {sectionLabels[sec]}
               {cnt > 0 ? ` (${cnt})` : ''}
             </button>
           );
@@ -227,14 +241,14 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
         <form onSubmit={handleSubmitComment} className="space-y-2 bg-slate-50 border border-slate-200 rounded-lg p-3">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <select
-              aria-label="Review target section"
+              aria-label={t('Review target section', '리뷰 대상 섹션')}
               value={newSection}
               onChange={(e) => setNewSection(e.target.value as SpecReviewSection)}
               className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-semibold text-slate-800 cursor-pointer sm:w-44"
             >
               {ALL_SECTIONS.map((sec) => (
                 <option key={sec} value={sec}>
-                  Target: {SECTION_LABELS[sec]}
+                  {t('Target:', '대상:')} {sectionLabels[sec]}
                 </option>
               ))}
             </select>
@@ -242,7 +256,10 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
               type="text"
               value={newBody}
               onChange={(e) => setNewBody(e.target.value)}
-              placeholder="Add review comment or question for functional/ABAP team..."
+              placeholder={t(
+                'Add review comment or question for functional/ABAP team...',
+                '설계/ABAP 팀을 위한 리뷰 코멘트 또는 질문을 입력하세요...'
+              )}
               className="flex-1 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500"
             />
             <button
@@ -251,13 +268,16 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
               className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>Post Comment</span>
+              <span>{t('Post Comment', '등록')}</span>
             </button>
           </div>
         </form>
       ) : (
         <div className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-          Review comments are disabled on read-only COMM samples. Copy to a project to start a review.
+          {t(
+            'Review comments are disabled on read-only COMM samples. Copy to a project to start a review.',
+            'COMM 읽기 전용 샘플에는 리뷰 코멘트를 작성할 수 없습니다. 프로젝트로 복사 후 리뷰를 진행하세요.'
+          )}
         </div>
       )}
 
@@ -265,8 +285,8 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
       {filteredComments.length === 0 ? (
         <div className="py-5 text-center text-xs text-slate-400">
           {comments.length === 0
-            ? 'No design review comments yet.'
-            : 'No comments match the selected filter.'}
+            ? t('No design review comments yet.', '등록된 설계 리뷰 코멘트가 없습니다.')
+            : t('No comments match the selected filter.', '선택한 필터에 해당하는 코멘트가 없습니다.')}
         </div>
       ) : (
         <div className="divide-y divide-slate-200 border border-slate-200 rounded-lg bg-white">
@@ -285,7 +305,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                     <span className="font-mono font-bold text-blue-700">
-                      [{SECTION_LABELS[cmt.section] || cmt.section}]
+                      [{sectionLabels[cmt.section] || SECTION_LABELS[cmt.section] || cmt.section}]
                     </span>
                     <span className="font-semibold text-slate-900">{cmt.author_name}</span>
                     {cmt.author_role && (
@@ -301,7 +321,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
                       <span className="text-emerald-700 font-semibold inline-flex items-center gap-1">
                         <span className="text-slate-300" aria-hidden="true">·</span>
                         <CheckCircle2 className="w-3 h-3" />
-                        Resolved ({cmt.resolved_by || '-'})
+                        {t('Resolved', '해결됨')} ({cmt.resolved_by || '-'})
                       </span>
                     )}
                   </div>
@@ -316,7 +336,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
                         }}
                         className="px-2 py-1 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded whitespace-nowrap shrink-0 cursor-pointer"
                       >
-                        Reply
+                        {t('Reply', '답글')}
                       </button>
                       <button
                         type="button"
@@ -330,12 +350,12 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
                         {cmt.resolved ? (
                           <>
                             <RotateCcw className="w-3 h-3" />
-                            <span>Reopen</span>
+                            <span>{t('Reopen', '다시 열기')}</span>
                           </>
                         ) : (
                           <>
                             <CheckCircle2 className="w-3 h-3" />
-                            <span>Resolve</span>
+                            <span>{t('Resolve', '해결 완료')}</span>
                           </>
                         )}
                       </button>
@@ -343,7 +363,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
                         <button
                           type="button"
                           onClick={() => handleDelete(cmt.id)}
-                          title="Delete comment"
+                          title={t('Delete comment', '코멘트 삭제')}
                           className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -398,7 +418,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
                           handleSubmitReply(cmt.id);
                         }
                       }}
-                      placeholder="Write a reply and press Enter..."
+                      placeholder={t('Write a reply and press Enter...', '답글을 입력하고 Enter를 누르세요...')}
                       autoFocus
                       className="flex-1 px-2.5 py-1 bg-slate-50 border border-slate-300 rounded text-xs focus:bg-white focus:border-blue-500"
                     />
@@ -408,7 +428,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
                       onClick={() => handleSubmitReply(cmt.id)}
                       className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
                     >
-                      Post
+                      {t('Post', '등록')}
                     </button>
                   </div>
                 )}

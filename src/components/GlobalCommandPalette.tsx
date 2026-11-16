@@ -10,6 +10,7 @@ import {
 import { ProgramSpec, ProjectMeetingMinute } from '../types/sap';
 import { SavedProgramSpecItem } from '../utils/specStorage';
 import { getDD02LTables, getDD03LFields } from '../utils/sapDdicStorage';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface GlobalCommandPaletteProps {
   isOpen: boolean;
@@ -43,6 +44,7 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
   onSelectMinute,
   onSelectDdicTable,
 }) => {
+  const { t } = useLanguage();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<SearchCategory>('ALL');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -91,8 +93,8 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
             category: 'MINUTE',
             primaryText: m.title,
             secondaryText: m.generated_program_id
-              ? `Linked Spec: ${m.generated_program_id}`
-              : 'Open meeting minutes',
+              ? t(`Linked Spec: ${m.generated_program_id}`, `연결 스펙: ${m.generated_program_id}`)
+              : t('Open meeting minutes', '회의록 열기'),
             metaText: `${m.project_code} · ${m.author} · ${m.updated_at}`,
             minute: m,
           });
@@ -156,7 +158,7 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Global Quick Search"
+        aria-label={t('Global Quick Search', '전체 빠른 검색')}
         className="w-full max-w-3xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden text-slate-900"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
@@ -191,15 +193,18 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search Program ID, T-Code, title, meeting minutes, or DDIC table (VBAK, ACDOCA...)"
+            placeholder={t(
+              'Search Program ID, T-Code, title, meeting minutes, or DDIC table (VBAK, ACDOCA...)',
+              'Program ID, T-Code, 제목, 회의록, DDIC 테이블 검색 (VBAK, ACDOCA...)'
+            )}
             className="flex-1 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
           />
           <button
             type="button"
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
-            title="Close"
-            aria-label="Close"
+            title={t('Close', '닫기')}
+            aria-label={t('Close', '닫기')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -210,10 +215,10 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
           <div className="flex items-center gap-1.5">
             {(
               [
-                { key: 'ALL', label: 'All' },
-                { key: 'SPEC', label: 'Specs' },
-                { key: 'MINUTE', label: 'Minutes' },
-                { key: 'DDIC', label: 'DDIC Tables' },
+                { key: 'ALL', label: t('All', '전체') },
+                { key: 'SPEC', label: t('Specs', '사양서') },
+                { key: 'MINUTE', label: t('Minutes', '회의록') },
+                { key: 'DDIC', label: t('DDIC Tables', 'DDIC 테이블') },
               ] as { key: SearchCategory; label: string }[]
             ).map((tab) => (
               <button
@@ -241,7 +246,10 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
             {results.length === 0 ? (
               <div className="py-12 text-center text-xs text-slate-400">
-                No matching specs, meeting minutes, or DDIC tables found.
+                {t(
+                  'No matching specs, meeting minutes, or DDIC tables found.',
+                  '일치하는 사양서, 회의록 또는 DDIC 테이블이 없습니다.'
+                )}
               </div>
             ) : (
               results.map((item, idx) => {
@@ -297,7 +305,7 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
           {activeItem?.category === 'DDIC' && activeDdicFields.length > 0 && (
             <aside className="hidden md:block w-64 border-l border-slate-200 bg-slate-50 p-3 overflow-y-auto shrink-0 space-y-2">
               <div className="text-[11px] font-mono font-bold text-indigo-700">
-                {activeItem.ddicTabname} Key Fields
+                {activeItem.ddicTabname} {t('Key Fields', '주요 필드')}
               </div>
               <div className="space-y-1">
                 {activeDdicFields.map((fld) => (
@@ -322,11 +330,11 @@ export const GlobalCommandPalette: React.FC<GlobalCommandPaletteProps> = ({
         {/* Footer Hints */}
         <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
           <div className="flex items-center gap-3 font-mono">
-            <span>↑↓ Navigate</span>
-            <span>Enter Open</span>
-            <span>Esc Close</span>
+            <span>{t('↑↓ Navigate', '↑↓ 이동')}</span>
+            <span>{t('Enter Open', 'Enter 열기')}</span>
+            <span>{t('Esc Close', 'Esc 닫기')}</span>
           </div>
-          <span>Select a DDIC item to open in SE11 Table Manager</span>
+          <span>{t('Select a DDIC item to open in SE11 Table Manager', 'DDIC 항목을 선택하면 SE11 테이블 관리에서 열립니다')}</span>
         </div>
       </div>
     </div>

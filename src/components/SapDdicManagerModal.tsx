@@ -33,6 +33,7 @@ import {
   syncCustomDdicTableToFirestore,
   deleteCustomDdicTableFromFirestore,
 } from '../services/firestoreSync';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SapDdicManagerModalProps {
   isOpen: boolean;
@@ -47,6 +48,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
   onDataChanged,
   initialTabname,
 }) => {
+  const { lang, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'tables' | 'fields'>('tables');
   const [tables, setTables] = useState<SapDD02LTable[]>(() => getDD02LTables());
   const [fields, setFields] = useState<SapDD03LField[]>(() => getDD03LFields());
@@ -163,7 +165,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
 
   // Delete table
   const handleDeleteTable = (tabname: string) => {
-    if (window.confirm(`Delete table '${tabname}' and all its DD03L fields?`)) {
+    if (window.confirm(t(`Delete table '${tabname}' and all its DD03L fields?`, `테이블 '${tabname}' 및 모든 DD03L 필드를 삭제하시겠습니까?`))) {
       const { tables: upTables, fields: upFields } = deleteDD02LTable(tabname);
       setTables(upTables);
       setFields(upFields);
@@ -230,7 +232,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
 
   // Delete field
   const handleDeleteField = (id: string, name: string) => {
-    if (window.confirm(`Delete field '${name}'?`)) {
+    if (window.confirm(t(`Delete field '${name}'?`, `필드 '${name}'을(를) 삭제하시겠습니까?`))) {
       const saved = deleteDD03LField(id);
       setFields(saved);
       const parentTable = tables.find((t) => t.tabname.toUpperCase() === selectedTabname.toUpperCase());
@@ -244,7 +246,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
 
   // Reset to SAP Standard
   const handleResetStandard = () => {
-    if (window.confirm('Reset SAP standard DD02L tables and DD03L fields to defaults? Custom changes will be lost.')) {
+    if (window.confirm(t('Reset SAP standard DD02L tables and DD03L fields to defaults? Custom changes will be lost.', 'SAP 표준 DD02L 테이블 및 DD03L 필드를 기본값으로 초기화할까요? 사용자 정의 변경 사항은 사라집니다.'))) {
       const res = resetDdicToStandard();
       setTables(res.tables);
       setFields(res.fields);
@@ -267,22 +269,22 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold tracking-tight">
-                  SAP Data Dictionary (DDIC) Manager — DD02L & DD03L
+                  {t('SAP Data Dictionary (DDIC) Manager — DD02L & DD03L', 'SAP 데이터 딕셔너리 (DDIC) 관리 — DD02L & DD03L')}
                 </h3>
                 <span className="bg-blue-500/30 text-blue-300 border border-blue-400/40 text-[10px] font-mono px-2 py-0.5 rounded font-semibold">
                   T-Code: SE11 / SE80
                 </span>
               </div>
               <p className="text-[11px] text-slate-300">
-                Manage DD02L table headers and DD03L field definitions.
+                {t('Manage DD02L table headers and DD03L field definitions.', 'DD02L 테이블 헤더 및 DD03L 필드 정의를 관리합니다.')}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            title="Close"
-            aria-label="Close"
+            title={t('Close', '닫기')}
+            aria-label={t('Close', '닫기')}
             className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -302,7 +304,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
               }`}
             >
               <Table className="w-3.5 h-3.5" />
-              <span>DD02L: Tables ({tables.length})</span>
+              <span>{t(`DD02L: Tables (${tables.length})`, `DD02L: 테이블 (${tables.length})`)}</span>
             </button>
 
             <button
@@ -315,7 +317,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>DD03L: Table Fields ({currentTableFields.length} in {selectedTabname})</span>
+              <span>{t(`DD03L: Table Fields (${currentTableFields.length} in ${selectedTabname})`, `DD03L: 테이블 필드 (${selectedTabname}: ${currentTableFields.length}개)`)}</span>
             </button>
           </div>
 
@@ -323,12 +325,12 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
             <button
               type="button"
               onClick={handleResetStandard}
-              title="Reset to SAP standard DDIC"
-              aria-label="Reset to SAP standard DDIC"
+              title={t('Reset to SAP standard DDIC', 'SAP 표준 DDIC로 초기화')}
+              aria-label={t('Reset to SAP standard DDIC', 'SAP 표준 DDIC로 초기화')}
               className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-white hover:bg-slate-200 border border-slate-300 rounded transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Reset to Standard</span>
+              <span>{t('Reset to Standard', '표준으로 초기화')}</span>
             </button>
           </div>
         </div>
@@ -346,14 +348,14 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                     type="text"
                     value={tableSearch}
                     onChange={(e) => setTableSearch(e.target.value)}
-                    placeholder="Search table name / text..."
+                    placeholder={t('Search table name / text...', '테이블명 / 설명 검색...')}
                     className="text-xs pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-56"
                   />
                 </div>
 
                 {/* Module filter */}
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md border border-slate-200 text-xs">
-                  <span className="text-[11px] font-semibold text-slate-500 px-1">Module:</span>
+                  <span className="text-[11px] font-semibold text-slate-500 px-1">{t('Module:', '모듈:')}</span>
                   {['ALL', 'SD', 'MM', 'FI', 'CO', 'PP', 'CUSTOM'].map((mod) => (
                     <button
                       key={mod}
@@ -375,7 +377,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add Table</span>
+                <span>{t('Add Table', '테이블 추가')}</span>
               </button>
             </div>
 
@@ -394,14 +396,14 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredTables.map((t, idx) => {
-                    const fieldCount = fields.filter((f) => f.tabname.toUpperCase() === t.tabname.toUpperCase()).length;
-                    const isSelected = selectedTabname.toUpperCase() === t.tabname.toUpperCase();
+                  {filteredTables.map((tbl, idx) => {
+                    const fieldCount = fields.filter((f) => f.tabname.toUpperCase() === tbl.tabname.toUpperCase()).length;
+                    const isSelected = selectedTabname.toUpperCase() === tbl.tabname.toUpperCase();
 
                     return (
                       <tr
-                        key={t.tabname}
-                        onClick={() => setSelectedTabname(t.tabname)}
+                        key={tbl.tabname}
+                        onClick={() => setSelectedTabname(tbl.tabname)}
                         className={`cursor-pointer transition-colors ${
                           isSelected ? 'bg-blue-50/80 ring-1 ring-inset ring-blue-300' : 'hover:bg-slate-50'
                         }`}
@@ -409,8 +411,8 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                         <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
                         <td className="py-2 px-3 font-mono font-bold text-blue-900 flex items-center gap-1.5">
                           <Table className="w-3.5 h-3.5 text-blue-600" />
-                          <span>{t.tabname}</span>
-                          {t.is_custom && (
+                          <span>{tbl.tabname}</span>
+                          {tbl.is_custom && (
                             <span className="px-1.5 py-0.2 text-[9px] bg-amber-100 text-amber-800 border border-amber-300 rounded font-sans font-medium">
                               Custom
                             </span>
@@ -418,22 +420,22 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                         </td>
                         <td className="py-2 px-3 text-center font-bold">
                           <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
-                            {t.module}
+                            {tbl.module}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-slate-800 font-medium">{t.ddtext}</td>
-                        <td className="py-2 px-3 font-mono text-[11px] text-slate-500">{t.tabclass || 'TRANSP'}</td>
+                        <td className="py-2 px-3 text-slate-800 font-medium">{tbl.ddtext}</td>
+                        <td className="py-2 px-3 font-mono text-[11px] text-slate-500">{tbl.tabclass || 'TRANSP'}</td>
                         <td className="py-2 px-3 text-center">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedTabname(t.tabname);
+                              setSelectedTabname(tbl.tabname);
                               setActiveTab('fields');
                             }}
                             className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
                           >
-                            {fieldCount} fields ➔
+                            {fieldCount} {t('fields', '필드')} ➔
                           </button>
                         </td>
                         <td className="py-2 px-3 text-center">
@@ -442,10 +444,10 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleOpenEditTable(t);
+                                handleOpenEditTable(tbl);
                               }}
                               className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded"
-                              title="Edit Table"
+                              title={t('Edit Table', '테이블 수정')}
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -453,10 +455,10 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDeleteTable(t.tabname);
+                                handleDeleteTable(tbl.tabname);
                               }}
                               className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
-                              title="Delete Table"
+                              title={t('Delete Table', '테이블 삭제')}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -478,15 +480,15 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                  <span className="text-xs font-bold text-slate-700">Target Table:</span>
+                  <span className="text-xs font-bold text-slate-700">{t('Target Table:', '대상 테이블:')}</span>
                   <select
                     value={selectedTabname}
                     onChange={(e) => setSelectedTabname(e.target.value)}
                     className="text-xs font-mono font-bold bg-white border border-slate-300 rounded px-2 py-1 text-blue-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
-                    {tables.map((t) => (
-                      <option key={t.tabname} value={t.tabname}>
-                        {t.tabname} — {t.ddtext}
+                    {tables.map((tbl) => (
+                      <option key={tbl.tabname} value={tbl.tabname}>
+                        {tbl.tabname} — {tbl.ddtext}
                       </option>
                     ))}
                   </select>
@@ -499,7 +501,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                     type="text"
                     value={fieldSearch}
                     onChange={(e) => setFieldSearch(e.target.value)}
-                    placeholder="Search field name / label..."
+                    placeholder={t('Search field name / label...', '필드명 / 라벨 검색...')}
                     className="text-xs pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-52"
                   />
                 </div>
@@ -511,7 +513,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add Field</span>
+                <span>{t('Add Field', '필드 추가')}</span>
               </button>
             </div>
 
@@ -534,7 +536,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                   {currentTableFields.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-10 text-center text-slate-400">
-                        No fields registered for this table. Click 'Add Field' above to create one.
+                        {t("No fields registered for this table. Click 'Add Field' above to create one.", "이 테이블에 등록된 필드가 없습니다. 상단의 '필드 추가' 버튼을 눌러 추가하세요.")}
                       </td>
                     </tr>
                   ) : (
@@ -565,7 +567,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                               type="button"
                               onClick={() => handleOpenEditField(f)}
                               className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded cursor-pointer"
-                              title="Edit Field"
+                              title={t('Edit Field', '필드 수정')}
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -573,7 +575,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                               type="button"
                               onClick={() => handleDeleteField(f.id, f.fieldname)}
                               className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
-                              title="Delete Field"
+                              title={t('Delete Field', '필드 삭제')}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -594,11 +596,11 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
             <div className="bg-white rounded-lg shadow-xl border border-slate-300 w-full max-w-md p-5 animate-in zoom-in-95">
               <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
                 <Table className="w-4 h-4 text-blue-600" />
-                <span>Table Settings (DD02L Entry)</span>
+                <span>{t('Table Settings (DD02L Entry)', '테이블 설정 (DD02L 항목)')}</span>
               </h4>
               <form onSubmit={handleSaveTable} className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">Table Name</label>
+                  <label className="block text-slate-700 font-bold mb-1">{t('Table Name', '테이블명')}</label>
                   <input
                     type="text"
                     required
@@ -609,19 +611,19 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">Short Text (DDTEXT)</label>
+                  <label className="block text-slate-700 font-bold mb-1">{t('Short Text (DDTEXT)', '단문 설명 (DDTEXT)')}</label>
                   <input
                     type="text"
                     required
                     value={tableFormData.ddtext || ''}
                     onChange={(e) => setTableFormData({ ...tableFormData, ddtext: e.target.value })}
-                    placeholder="e.g. Custom Sales Delivery Status Table"
+                    placeholder={t('e.g. Custom Sales Delivery Status Table', '예: 판매 납품 상태 관리 테이블')}
                     className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-slate-700 font-bold mb-1">MODULE</label>
+                    <label className="block text-slate-700 font-bold mb-1">{t('MODULE', '모듈')}</label>
                     <select
                       value={tableFormData.module || 'SD'}
                       onChange={(e) => setTableFormData({ ...tableFormData, module: e.target.value as any })}
@@ -633,7 +635,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-slate-700 font-bold mb-1">TABLE TYPE</label>
+                    <label className="block text-slate-700 font-bold mb-1">{t('TABLE TYPE', '테이블 유형')}</label>
                     <select
                       value={tableFormData.tabclass || 'TRANSP'}
                       onChange={(e) => setTableFormData({ ...tableFormData, tabclass: e.target.value as any })}
@@ -646,12 +648,12 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                   </div>
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">Description</label>
+                  <label className="block text-slate-700 font-bold mb-1">{t('Description', '설명')}</label>
                   <textarea
                     rows={2}
                     value={tableFormData.description || ''}
                     onChange={(e) => setTableFormData({ ...tableFormData, description: e.target.value })}
-                    placeholder="Describe table purpose and business process"
+                    placeholder={t('Describe table purpose and business process', '테이블 용도 및 업무 프로세스 설명')}
                     className="w-full px-2.5 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -661,13 +663,13 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                     onClick={() => setIsEditingTable(false)}
                     className="px-3 py-1.5 border border-slate-300 rounded text-slate-600 hover:bg-slate-100 cursor-pointer"
                   >
-                    Cancel
+                    {t('Cancel', '취소')}
                   </button>
                   <button
                     type="submit"
                     className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold cursor-pointer"
                   >
-                    Save
+                    {t('Save', '저장')}
                   </button>
                 </div>
               </form>
@@ -681,11 +683,11 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
             <div className="bg-white rounded-lg shadow-xl border border-slate-300 w-full max-w-md p-5 animate-in zoom-in-95">
               <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-blue-600" />
-                <span>Field Settings (DD03L Entry in {selectedTabname})</span>
+                <span>{t(`Field Settings (DD03L Entry in ${selectedTabname})`, `필드 설정 (${selectedTabname} DD03L 항목)`)}</span>
               </h4>
               <form onSubmit={handleSaveField} className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">Field Name</label>
+                  <label className="block text-slate-700 font-bold mb-1">{t('Field Name', '필드명')}</label>
                   <input
                     type="text"
                     required
@@ -696,19 +698,19 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">Field Label (SCRTEXT_L)</label>
+                  <label className="block text-slate-700 font-bold mb-1">{t('Field Label (SCRTEXT_L)', '필드 라벨 (SCRTEXT_L)')}</label>
                   <input
                     type="text"
                     required
                     value={fieldFormData.scrtext_l || ''}
                     onChange={(e) => setFieldFormData({ ...fieldFormData, scrtext_l: e.target.value })}
-                    placeholder="e.g. Progress Status"
+                    placeholder={t('e.g. Progress Status', '예: 진행 상태')}
                     className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-slate-700 font-bold mb-1">DATA TYPE</label>
+                    <label className="block text-slate-700 font-bold mb-1">{t('DATA TYPE', '데이터 유형')}</label>
                     <select
                       value={fieldFormData.datatype || 'CHAR'}
                       onChange={(e) => setFieldFormData({ ...fieldFormData, datatype: e.target.value as SapDataType })}
@@ -720,7 +722,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-slate-700 font-bold mb-1">LENGTH</label>
+                    <label className="block text-slate-700 font-bold mb-1">{t('LENGTH', '길이')}</label>
                     <input
                       type="number"
                       required
@@ -732,7 +734,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-700 font-bold mb-1">POSITION</label>
+                    <label className="block text-slate-700 font-bold mb-1">{t('POSITION', '순번')}</label>
                     <input
                       type="number"
                       min={1}
@@ -751,16 +753,16 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                     className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                   />
                   <label htmlFor="chkKeyflag" className="text-slate-800 font-bold cursor-pointer">
-                    Primary Key Field (KEYFLAG = &apos;X&apos;)
+                    {t("Primary Key Field (KEYFLAG = 'X')", "기본 키 필드 (KEYFLAG = 'X')")}
                   </label>
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-bold mb-1">Description</label>
+                  <label className="block text-slate-700 font-bold mb-1">{t('Description', '설명')}</label>
                   <input
                     type="text"
                     value={fieldFormData.ddtext || ''}
                     onChange={(e) => setFieldFormData({ ...fieldFormData, ddtext: e.target.value })}
-                    placeholder="Field business meaning and definition"
+                    placeholder={t('Field business meaning and definition', '필드 업무 의미 및 정의')}
                     className="w-full px-2.5 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -770,13 +772,13 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
                     onClick={() => setIsEditingField(false)}
                     className="px-3 py-1.5 border border-slate-300 rounded text-slate-600 hover:bg-slate-100 cursor-pointer"
                   >
-                    Cancel
+                    {t('Cancel', '취소')}
                   </button>
                   <button
                     type="submit"
                     className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold cursor-pointer"
                   >
-                    Save
+                    {t('Save', '저장')}
                   </button>
                 </div>
               </form>
@@ -787,14 +789,18 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
         {/* Footer */}
         <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 shrink-0">
           <div>
-            Changes are saved locally and immediately available in <strong>SAP Search Help (F4)</strong>.
+            {lang === 'ko' ? (
+              <>변경 사항은 로컬에 저장되며 <strong>SAP 탐색 도움말(F4)</strong>에서 즉시 사용할 수 있습니다.</>
+            ) : (
+              <>Changes are saved locally and immediately available in <strong>SAP Search Help (F4)</strong>.</>
+            )}
           </div>
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-bold cursor-pointer shadow-xs"
           >
-            Close
+            {t('Close', '닫기')}
           </button>
         </div>
       </div>

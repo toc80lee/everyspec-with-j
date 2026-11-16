@@ -33,6 +33,7 @@ import {
   exportTemplatesAsJson,
   importTemplateFromJson,
 } from '../utils/templateStorage';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface ProgramTemplateModalProps {
   isOpen: boolean;
@@ -47,11 +48,14 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
   currentSpec,
   onSelectTemplate,
 }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'predefined' | 'saved' | 'save_current'>('predefined');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [savedTemplates, setSavedTemplates] = useState<SavedUserTemplate[]>([]);
   const [previewTemplate, setPreviewTemplate] = useState<PredefinedTemplate | SavedUserTemplate | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Form state for saving current spec as new template
   const [newTemplateName, setNewTemplateName] = useState<string>('');
@@ -123,21 +127,24 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
     );
 
     setSavedTemplates(getSavedUserTemplates());
-    setSaveSuccessNotice(`Template "${saved.name}" successfully saved!`);
+    setSaveSuccessNotice(t(`Template "${saved.name}" successfully saved!`, `템플릿 "${saved.name}"이(가) 저장되었습니다!`));
     setTimeout(() => {
       setActiveTab('saved');
       setSaveSuccessNotice(null);
     }, 1200);
   };
 
-  // Handle Delete Template
-  const handleDeleteSavedTemplate = (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete template "${name}"?`)) {
-      const updated = deleteUserTemplate(id);
-      setSavedTemplates(updated);
-      if (previewTemplate?.id === id) {
-        setPreviewTemplate(null);
-      }
+  // Handle Delete Template (2-click inline confirmation)
+  const handleDeleteSavedTemplate = (id: string) => {
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+    const updated = deleteUserTemplate(id);
+    setSavedTemplates(updated);
+    setConfirmDeleteId(null);
+    if (previewTemplate?.id === id) {
+      setPreviewTemplate(null);
     }
   };
 
@@ -153,10 +160,12 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
       if (imported) {
         setSavedTemplates(getSavedUserTemplates());
         setActiveTab('saved');
-        setSaveSuccessNotice(`Successfully imported template: ${imported.name}`);
+        setImportError(null);
+        setSaveSuccessNotice(t(`Successfully imported template: ${imported.name}`, `템플릿을 가져왔습니다: ${imported.name}`));
         setTimeout(() => setSaveSuccessNotice(null), 3000);
       } else {
-        alert('Invalid template JSON file format.');
+        setImportError(t('Invalid template JSON file format.', '올바르지 않은 템플릿 JSON 파일 형식입니다.'));
+        setTimeout(() => setImportError(null), 4000);
       }
     };
     reader.readAsText(file);
@@ -169,31 +178,31 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
       case 'Header-Detail':
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
-            Header-Detail
+            {t('Header-Detail', '헤더-디테일')}
           </span>
         );
       case 'Single-Table':
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-200">
-            Single-Table
+            {t('Single-Table', '단일 테이블')}
           </span>
         );
       case 'OData-based':
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-200">
-            OData-based
+            {t('OData-based', 'OData 기반')}
           </span>
         );
       case 'Interface / Batch':
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
-            Interface / Batch
+            {t('Interface / Batch', '인터페이스 / 배치')}
           </span>
         );
       default:
         return (
           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
-            Custom
+            {t('Custom', '사용자 정의')}
           </span>
         );
     }
@@ -211,14 +220,17 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white tracking-tight">
-                  SAP Program Template Library
+                  {t('SAP Program Template Library', 'SAP 프로그램 템플릿 라이브러리')}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                  Predefined & Custom
+                  {t('Predefined & Custom', '기본 제공 & 사용자 정의')}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Load predefined SAP program blueprints (Header-Detail, Single-Table, OData-based, Interface) or save your own specifications as templates.
+                {t(
+                  'Load predefined SAP program blueprints (Header-Detail, Single-Table, OData-based, Interface) or save your own specifications as templates.',
+                  '기본 SAP 프로그램 템플릿(헤더-디테일, 단일 테이블, OData, 인터페이스)을 불러오거나 현재 사양서를 템플릿으로 저장합니다.'
+                )}
               </p>
             </div>
           </div>
@@ -227,6 +239,8 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
             <button
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              title={t('Close', '닫기')}
+              aria-label={t('Close', '닫기')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -247,7 +261,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              <span>Predefined Blueprints</span>
+              <span>{t('Predefined Blueprints', '기본 블루프린트')}</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800 font-bold">
                 {PREDEFINED_TEMPLATES.length}
               </span>
@@ -263,7 +277,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
               }`}
             >
               <Bookmark className="w-3.5 h-3.5 text-amber-600" />
-              <span>My Saved Templates</span>
+              <span>{t('My Saved Templates', '내 저장 템플릿')}</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 font-bold">
                 {savedTemplates.length}
               </span>
@@ -279,7 +293,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
               }`}
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Save Current Spec as Template</span>
+              <span>{t('Save Current Spec as Template', '현재 사양을 템플릿으로 저장')}</span>
             </button>
           </div>
 
@@ -287,10 +301,10 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
           <div className="flex items-center gap-2">
             <label
               className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="Import specification JSON file as template"
+              title={t('Import specification JSON file as template', '사양서 JSON 파일을 템플릿으로 가져오기')}
             >
               <Upload className="w-3.5 h-3.5 text-slate-600" />
-              <span>Import JSON</span>
+              <span>{t('Import JSON', 'JSON 가져오기')}</span>
               <input
                 type="file"
                 accept=".json"
@@ -303,13 +317,19 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
               type="button"
               onClick={() => exportTemplatesAsJson([...PREDEFINED_TEMPLATES, ...savedTemplates])}
               className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer transition-colors"
-              title="Export all templates as a backup JSON file"
+              title={t('Export all templates as a backup JSON file', '모든 템플릿을 백업 JSON 파일로 내보내기')}
             >
               <Download className="w-3.5 h-3.5 text-slate-600" />
-              <span>Export All</span>
+              <span>{t('Export All', '전체 내보내기')}</span>
             </button>
           </div>
         </div>
+
+        {importError && (
+          <div className="px-6 py-2 bg-rose-50 border-b border-rose-200 text-xs text-rose-800 font-semibold shrink-0">
+            {importError}
+          </div>
+        )}
 
         {/* Filter Toolbar (Visible on Predefined & Saved tabs) */}
         {activeTab !== 'save_current' && (
@@ -317,11 +337,11 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
             {/* Category Filter Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-medium">
               {[
-                { id: 'ALL', label: 'All Architecture Types' },
-                { id: 'Single-Table', label: 'Single-Table' },
-                { id: 'Header-Detail', label: 'Header-Detail' },
-                { id: 'OData-based', label: 'OData-based' },
-                { id: 'Interface / Batch', label: 'Interface / Batch' },
+                { id: 'ALL', label: t('All Architecture Types', '전체 아키텍처 유형') },
+                { id: 'Single-Table', label: t('Single-Table', '단일 테이블') },
+                { id: 'Header-Detail', label: t('Header-Detail', '헤더-디테일') },
+                { id: 'OData-based', label: t('OData-based', 'OData 기반') },
+                { id: 'Interface / Batch', label: t('Interface / Batch', '인터페이스 / 배치') },
               ].map((cat) => (
                 <button
                   key={cat.id}
@@ -345,7 +365,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search templates by title, code, module..."
+                placeholder={t('Search templates by title, code, module...', '템플릿 제목, 코드, 모듈 검색...')}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-1.5 text-xs focus:bg-white focus:border-blue-500 focus:outline-none"
               />
             </div>
@@ -369,7 +389,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                         <div className="flex items-center gap-2">
                           {renderCategoryBadge(tmpl.category)}
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                            {tmpl.module} MODULE
+                            {tmpl.module} {t('MODULE', '모듈')}
                           </span>
                         </div>
                         <span className="text-[11px] font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
@@ -388,21 +408,21 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                       {/* Architectural Metrics Badges */}
                       <div className="grid grid-cols-3 gap-2 p-2 bg-slate-50 rounded-lg border border-slate-200 text-[11px] text-slate-600 mb-3 font-mono">
                         <div>
-                          <span className="block text-[10px] text-slate-400 uppercase">Params</span>
+                          <span className="block text-[10px] text-slate-400 uppercase">{t('Params', '조회 조건')}</span>
                           <span className="font-bold text-slate-800">
-                            {tmpl.spec.selection_params.length} items
+                            {t(`${tmpl.spec.selection_params.length} items`, `${tmpl.spec.selection_params.length}건`)}
                           </span>
                         </div>
                         <div>
-                          <span className="block text-[10px] text-slate-400 uppercase">Field Cat</span>
+                          <span className="block text-[10px] text-slate-400 uppercase">{t('Field Cat', '필드 카탈로그')}</span>
                           <span className="font-bold text-slate-800">
-                            {tmpl.spec.field_catalog.length} fields
+                            {t(`${tmpl.spec.field_catalog.length} fields`, `${tmpl.spec.field_catalog.length}개`)}
                           </span>
                         </div>
                         <div>
-                          <span className="block text-[10px] text-slate-400 uppercase">Target</span>
+                          <span className="block text-[10px] text-slate-400 uppercase">{t('Target', '구조')}</span>
                           <span className="font-bold text-blue-900 truncate block">
-                            {tmpl.spec.item_grid ? 'Dual Grid' : 'Single Grid'}
+                            {tmpl.spec.item_grid ? t('Dual Grid', '이중 그리드') : t('Single Grid', '단일 그리드')}
                           </span>
                         </div>
                       </div>
@@ -428,7 +448,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                         className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Preview Spec</span>
+                        <span>{t('Preview Spec', '미리보기')}</span>
                       </button>
 
                       <button
@@ -439,7 +459,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                         }}
                         className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
-                        <span>Load Template</span>
+                        <span>{t('Load Template', '템플릿 적용')}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -456,10 +476,13 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center max-w-lg mx-auto">
                   <Bookmark className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                   <h4 className="text-sm font-bold text-slate-800 mb-1">
-                    No custom templates saved yet
+                    {t('No custom templates saved yet', '저장된 사용자 템플릿이 없습니다')}
                   </h4>
                   <p className="text-xs text-slate-500 mb-4">
-                    Save your current specification as a template or import an existing JSON blueprint to reuse it in future projects.
+                    {t(
+                      'Save your current specification as a template or import an existing JSON blueprint to reuse it in future projects.',
+                      '현재 작업 중인 사양서를 템플릿으로 저장하거나 기존 JSON 템플릿을 가져와 재사용할 수 있습니다.'
+                    )}
                   </p>
                   <button
                     type="button"
@@ -467,7 +490,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer inline-flex items-center gap-1.5"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Save Current Spec as Template</span>
+                    <span>{t('Save Current Spec as Template', '현재 사양을 템플릿으로 저장')}</span>
                   </button>
                 </div>
               ) : (
@@ -483,7 +506,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                           <div className="flex items-center gap-2">
                             {renderCategoryBadge(tmpl.category)}
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                              {tmpl.module} MODULE
+                              {tmpl.module} {t('MODULE', '모듈')}
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-400 font-mono">
@@ -508,15 +531,15 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                             </span>
                           </div>
                           <div>
-                            <span className="block text-[10px] text-slate-400 uppercase">Field Cat</span>
+                            <span className="block text-[10px] text-slate-400 uppercase">{t('Field Cat', '필드 카탈로그')}</span>
                             <span className="font-bold text-slate-800">
-                              {tmpl.spec.field_catalog.length} fields
+                              {t(`${tmpl.spec.field_catalog.length} fields`, `${tmpl.spec.field_catalog.length}개`)}
                             </span>
                           </div>
                           <div>
-                            <span className="block text-[10px] text-slate-400 uppercase">Type</span>
+                            <span className="block text-[10px] text-slate-400 uppercase">{t('Type', '유형')}</span>
                             <span className="font-bold text-slate-800">
-                              {tmpl.spec.item_grid ? 'Dual ALV' : 'Single ALV'}
+                              {tmpl.spec.item_grid ? t('Dual ALV', '이중 ALV') : t('Single ALV', '단일 ALV')}
                             </span>
                           </div>
                         </div>
@@ -531,26 +554,36 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                             className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                           >
                             <Eye className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Preview</span>
+                            <span>{t('Preview', '미리보기')}</span>
                           </button>
 
                           <button
                             type="button"
                             onClick={() => exportTemplatesAsJson([tmpl], `${tmpl.spec.program_id}_TEMPLATE.json`)}
                             className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
-                            title="Export as JSON file"
+                            title={t('Export as JSON file', 'JSON 파일로 내보내기')}
                           >
                             <Download className="w-3.5 h-3.5" />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSavedTemplate(tmpl.id, tmpl.name)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
-                            title="Delete template"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {confirmDeleteId === tmpl.id ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSavedTemplate(tmpl.id)}
+                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded hover:bg-rose-700 cursor-pointer"
+                            >
+                              {t('Confirm?', '삭제 확인')}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSavedTemplate(tmpl.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                              title={t('Delete template', '템플릿 삭제')}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
 
                         <button
@@ -561,7 +594,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                           }}
                           className="px-4 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                         >
-                          <span>Load Template</span>
+                          <span>{t('Load Template', '템플릿 적용')}</span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -581,10 +614,13 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900">
-                    Save Current Workspace as Template
+                    {t('Save Current Workspace as Template', '현재 작업 사양을 템플릿으로 저장')}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    Create a reusable blueprint from your active specification (selection parameters, field catalogs, layout, mock test data).
+                    {t(
+                      'Create a reusable blueprint from your active specification (selection parameters, field catalogs, layout, mock test data).',
+                      '현재 활성 사양서(조회 조건, 필드 카탈로그, 레이아웃, 테스트 데이터)로 재사용 가능한 템플릿을 만듭니다.'
+                    )}
                   </p>
                 </div>
               </div>
@@ -600,14 +636,14 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 {/* Template Name */}
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Template Name <span className="text-red-500">*</span>
+                    {t('Template Name', '템플릿 이름')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={newTemplateName}
                     onChange={(e) => setNewTemplateName(e.target.value)}
-                    placeholder="e.g. Sales Order Header-Item Monitoring Report"
+                    placeholder={t('e.g. Sales Order Header-Item Monitoring Report', '예: 판매오더 헤더-아이템 현황 리포트')}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium focus:bg-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
@@ -615,31 +651,31 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 {/* Architecture Category */}
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Architecture Category <span className="text-red-500">*</span>
+                    {t('Architecture Category', '아키텍처 분류')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={newTemplateCategory}
                     onChange={(e) => setNewTemplateCategory(e.target.value as TemplateCategory)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium focus:bg-white focus:border-blue-500 focus:outline-none"
                   >
-                    <option value="Single-Table">Single-Table (Standard ALV Grid)</option>
-                    <option value="Header-Detail">Header-Detail (Master-Detail Dual ALV Grids)</option>
-                    <option value="OData-based">OData-based (SAP Gateway & RAP Service)</option>
-                    <option value="Interface / Batch">Interface / Batch (Mass Upload & BAPI Execution)</option>
-                    <option value="Custom">Custom Architecture</option>
+                    <option value="Single-Table">{t('Single-Table (Standard ALV Grid)', '단일 테이블 (표준 ALV 그리드)')}</option>
+                    <option value="Header-Detail">{t('Header-Detail (Master-Detail Dual ALV Grids)', '헤더-디테일 (마스터-디테일 이중 그리드)')}</option>
+                    <option value="OData-based">{t('OData-based (SAP Gateway & RAP Service)', 'OData 기반 (SAP Gateway & RAP 서비스)')}</option>
+                    <option value="Interface / Batch">{t('Interface / Batch (Mass Upload & BAPI Execution)', '인터페이스 / 배치 (대량 업로드 & BAPI 실행)')}</option>
+                    <option value="Custom">{t('Custom Architecture', '사용자 정의 아키텍처')}</option>
                   </select>
                 </div>
 
                 {/* Description */}
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Description & Architectural Purpose
+                    {t('Description & Architectural Purpose', '설명 및 설계 목적')}
                   </label>
                   <textarea
                     rows={3}
                     value={newTemplateDesc}
                     onChange={(e) => setNewTemplateDesc(e.target.value)}
-                    placeholder="Briefly describe the business purpose, tables, and target release..."
+                    placeholder={t('Briefly describe the business purpose, tables, and target release...', '업무 목적, 주요 테이블 및 대상 SAP 버전을 간략히 입력하세요...')}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-medium focus:bg-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
@@ -647,7 +683,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 {/* Snapshot Summary of Current Specification */}
                 <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="text-[11px] font-bold text-slate-600 uppercase mb-2">
-                    Current Specification Snapshot
+                    {t('Current Specification Snapshot', '현재 사양서 스냅샷')}
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 font-mono text-[11px]">
                     <div className="bg-white p-2 rounded border border-slate-200">
@@ -655,17 +691,17 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                       <span className="font-bold text-blue-900">{currentSpec.program_id}</span>
                     </div>
                     <div className="bg-white p-2 rounded border border-slate-200">
-                      <span className="text-[10px] text-slate-400 block">MODULE</span>
+                      <span className="text-[10px] text-slate-400 block">{t('MODULE', '모듈')}</span>
                       <span className="font-bold text-slate-800">{currentSpec.module}</span>
                     </div>
                     <div className="bg-white p-2 rounded border border-slate-200">
-                      <span className="text-[10px] text-slate-400 block">SELECTION PARAMS</span>
-                      <span className="font-bold text-slate-800">{currentSpec.selection_params.length} items</span>
+                      <span className="text-[10px] text-slate-400 block">{t('SELECTION PARAMS', '조회 조건')}</span>
+                      <span className="font-bold text-slate-800">{t(`${currentSpec.selection_params.length} items`, `${currentSpec.selection_params.length}건`)}</span>
                     </div>
                     <div className="bg-white p-2 rounded border border-slate-200">
-                      <span className="text-[10px] text-slate-400 block">FIELD CATALOG</span>
+                      <span className="text-[10px] text-slate-400 block">{t('FIELD CATALOG', '필드 카탈로그')}</span>
                       <span className="font-bold text-slate-800">
-                        {currentSpec.field_catalog.length} fields {currentSpec.item_grid ? `(+${currentSpec.item_grid.field_catalog.length} items)` : ''}
+                        {t(`${currentSpec.field_catalog.length} fields`, `${currentSpec.field_catalog.length}개`)} {currentSpec.item_grid ? `(+${currentSpec.item_grid.field_catalog.length})` : ''}
                       </span>
                     </div>
                   </div>
@@ -678,14 +714,14 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                     onClick={() => setActiveTab('predefined')}
                     className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-semibold cursor-pointer"
                   >
-                    Cancel
+                    {t('Cancel', '취소')}
                   </button>
                   <button
                     type="submit"
                     className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <Bookmark className="w-4 h-4" />
-                    <span>Save Template</span>
+                    <span>{t('Save Template', '템플릿 저장')}</span>
                   </button>
                 </div>
               </form>
@@ -698,7 +734,10 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
           <div className="flex items-center gap-2">
             <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span>
-              Templates include selection screen definitions, field catalog attributes, ALV layout modes, and mock test scenarios.
+              {t(
+                'Templates include selection screen definitions, field catalog attributes, ALV layout modes, and mock test scenarios.',
+                '템플릿에는 조회 조건, 필드 카탈로그 속성, ALV 레이아웃 설정 및 테스트 시나리오가 모두 포함됩니다.'
+              )}
             </span>
           </div>
           <button
@@ -706,7 +745,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
             onClick={onClose}
             className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-semibold cursor-pointer"
           >
-            Close
+            {t('Close', '닫기')}
           </button>
         </div>
       </div>
@@ -720,7 +759,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
               <div className="flex items-center gap-2">
                 <FileCode className="w-4 h-4 text-blue-400" />
                 <h4 className="text-sm font-bold text-white">
-                  Template Preview: {previewTemplate.name}
+                  {t('Template Preview:', '템플릿 미리보기:')} {previewTemplate.name}
                 </h4>
               </div>
               <button
@@ -750,17 +789,17 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
               <div>
                 <h5 className="font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
                   <Sliders className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Selection Parameters ({previewTemplate.spec.selection_params.length})</span>
+                  <span>{t(`Selection Parameters (${previewTemplate.spec.selection_params.length})`, `조회 조건 파라미터 (${previewTemplate.spec.selection_params.length})`)}</span>
                 </h5>
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                   <table className="w-full text-left">
                     <thead className="bg-slate-100 text-[10px] text-slate-600 font-bold uppercase">
                       <tr>
-                        <th className="p-2">Kind</th>
-                        <th className="p-2">Field Name</th>
-                        <th className="p-2">Label</th>
-                        <th className="p-2">Type</th>
-                        <th className="p-2">Ref Table</th>
+                        <th className="p-2">{t('Kind', '유형')}</th>
+                        <th className="p-2">{t('Field Name', '필드명')}</th>
+                        <th className="p-2">{t('Label', '라벨')}</th>
+                        <th className="p-2">{t('Type', '타입')}</th>
+                        <th className="p-2">{t('Ref Table', '참조 테이블')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-[11px] font-mono">
@@ -782,7 +821,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
               <div>
                 <h5 className="font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
                   <Database className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Field Catalog ({previewTemplate.spec.field_catalog.length} fields)</span>
+                  <span>{t(`Field Catalog (${previewTemplate.spec.field_catalog.length} fields)`, `필드 카탈로그 (${previewTemplate.spec.field_catalog.length}개 필드)`)}</span>
                 </h5>
                 <div className="border border-slate-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
                   <table className="w-full text-left">
@@ -790,8 +829,8 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                       <tr>
                         <th className="p-2">POS</th>
                         <th className="p-2">Fieldname</th>
-                        <th className="p-2">Column Text</th>
-                        <th className="p-2">Type</th>
+                        <th className="p-2">{t('Column Text', '컬럼명')}</th>
+                        <th className="p-2">{t('Type', '타입')}</th>
                         <th className="p-2">Key</th>
                         <th className="p-2">Hotspot</th>
                         <th className="p-2">Sum</th>
@@ -819,7 +858,10 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 <div className="p-2.5 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-lg flex items-center gap-2">
                   <Layers className="w-4 h-4 text-indigo-700 shrink-0" />
                   <span className="text-[11px]">
-                    Includes synchronized Item ALV Grid ({previewTemplate.spec.item_grid.field_catalog.length} item fields linked by foreign key <strong>{previewTemplate.spec.item_grid.foreign_key || 'VBELN'}</strong>).
+                    {t(
+                      `Includes synchronized Item ALV Grid (${previewTemplate.spec.item_grid.field_catalog.length} item fields linked by foreign key ${previewTemplate.spec.item_grid.foreign_key || 'VBELN'}).`,
+                      `연동 아이템 ALV 그리드 포함 (외래키 ${previewTemplate.spec.item_grid.foreign_key || 'VBELN'}로 연결된 ${previewTemplate.spec.item_grid.field_catalog.length}개 아이템 필드).`
+                    )}
                   </span>
                 </div>
               )}
@@ -832,7 +874,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 onClick={() => setPreviewTemplate(null)}
                 className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded font-semibold cursor-pointer"
               >
-                Back
+                {t('Back', '뒤로')}
               </button>
 
               <button
@@ -844,7 +886,7 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                 }}
                 className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded shadow-xs flex items-center gap-1.5 cursor-pointer"
               >
-                <span>Load This Template</span>
+                <span>{t('Load This Template', '이 템플릿 적용')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

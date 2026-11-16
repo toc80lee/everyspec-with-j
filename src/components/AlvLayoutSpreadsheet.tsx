@@ -19,6 +19,7 @@ import {
 import { AlvLayout } from '../types/sap';
 import { copyTsvToClipboard, parseSpreadsheetText } from '../utils/spreadsheetClipboard';
 import { InspectableSelect } from './InspectableSelect';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export interface AlvLayoutSpreadsheetProps {
   layout: AlvLayout;
@@ -385,11 +386,152 @@ function parseBooleanFromExcel(str: any): boolean {
   return false;
 }
 
+const CATEGORY_KO_MAP: Record<string, string> = {
+  'Display & Appearance': '표시 및 외관',
+  'Columns & Sorting': '컬럼 및 정렬',
+  'Totals & Calculations': '합계 및 계산',
+  'Selection Mode & Detail': '선택 모드 및 상세 팝업',
+  'Color & Style Fields': '색상 및 스타일 필드',
+};
+
+const ITEM_KO_MAP: Record<
+  string,
+  {
+    description: string;
+    detailHint?: string;
+    placeholder?: string;
+    options?: Record<string, string>;
+  }
+> = {
+  ZEBRA: {
+    description: '줄무늬 교차 행 배경 (Zebra 패턴)',
+    detailHint: "리스트 출력 및 미리보기에서 짝수/홀수 행 배경색을 교차 적용합니다 (gs_layo-zebra = 'X').",
+  },
+  SMALLTITLE: {
+    description: '그리드 제목 글꼴 크기를 컬럼 헤더와 동일하게 설정',
+    detailHint: 'ALV 제목 글꼴 크기를 작은 컬럼 헤더 크기에 맞춥니다.',
+  },
+  NO_HEADERS: {
+    description: '컬럼 헤더 숨기기',
+    detailHint: '그리드 상단의 컬럼 제목 헤더 행을 숨깁니다.',
+  },
+  NO_HGRIDLN: {
+    description: '가로 구분선 숨기기',
+    detailHint: '행 사이의 가로 구분선을 표시하지 않습니다.',
+  },
+  NO_VGRIDLN: {
+    description: '세로 구분선 숨기기',
+    detailHint: '컬럼 사이의 세로 구분선을 표시하지 않습니다.',
+  },
+  NO_TOOLBAR: {
+    description: 'ALV 상단 툴바 숨기기',
+    detailHint: '표준 및 사용자 정의 ALV 툴바를 모두 숨깁니다.',
+  },
+  NO_ROWMARK: {
+    description: '행 선택 마크 버튼 숨기기',
+    detailHint: '각 행 맨 앞의 행 선택 버튼을 숨깁니다 (선택 모드 A/D).',
+  },
+  GRID_TITLE: {
+    description: '그리드 제목 텍스트 (그리드와 툴바 사이 표시)',
+    detailHint: '그리드 컨트롤과 툴바 사이에 표시할 제목 텍스트입니다 (Char 70).',
+    placeholder: '예: 판매오더 현황 조회',
+  },
+  CWIDTH_OPT: {
+    description: '헤더 및 셀 값에 맞게 컬럼 너비 자동 최적화',
+    detailHint: '헤더와 셀 데이터 길이에 따라 컬럼 너비를 자동으로 조정합니다.',
+  },
+  SGL_CLK_HD: {
+    description: '컬럼 헤더 단일 클릭 정렬 활성화',
+    detailHint: '헤더 클릭 시 즉시 정렬합니다 (1회 클릭 오름차순, 2회 클릭 내림차순).',
+  },
+  NO_MERGING: {
+    description: '정렬 시 동일 값 셀 병합 비활성화',
+    detailHint: '정렬된 컬럼에서 연속된 동일 값 셀을 병합하지 않고 개별 표시합니다.',
+  },
+  KEYHOT: {
+    description: '모든 키(Key) 필드를 클릭 가능한 핫스팟으로 표시',
+    detailHint: '모든 키 컬럼을 단일 클릭으로 HOTSPOT_CLICK을 유발하는 링크로 만듭니다.',
+  },
+  TOTALS_BEF: {
+    description: '합계 행을 리스트 상단에 표시',
+    detailHint: '총계 행을 하단이 아닌 첫 번째 상단 행에 배치합니다.',
+  },
+  NO_TOTLINE: {
+    description: '총계(Grand Total)를 숨기고 소계만 표시',
+    detailHint: '전체 총계 행은 숨기고 소계(Subtotal) 행만 유지합니다.',
+  },
+  NO_TOTARR: {
+    description: '합계/소계 행의 범위 화살표 숨기기',
+    detailHint: '합계 행에 표시되는 보조 화살표 아이콘을 비활성화합니다.',
+  },
+  NO_TOTEXP: {
+    description: '소계 행의 펼치기/접기 아이콘 숨기기',
+    detailHint: '소계 행 옆의 계층 펼치기/접기 토글 아이콘을 숨깁니다.',
+  },
+  NUMC_TOTAL: {
+    description: 'NUMC 숫자형 문자 필드 합계 계산 허용',
+    detailHint: '숫자 텍스트(NUMC) 컬럼에 대해 합계 집계를 허용합니다.',
+  },
+  TOTALS_ONLY: {
+    description: '합계 라인만 표시 (개별 상세 행 숨김)',
+    detailHint: '개별 데이터 행을 숨기고 소계 및 총계 라인만 요약 표시합니다.',
+  },
+  SEL_MODE: {
+    description: '선택 모드 (A: 다중 행/열, B: 단일 행, C: 다중 행, D: 셀, SPACE: 기본값)',
+    detailHint: '사용자가 그리드 내에서 행, 열 또는 셀을 선택하는 방식을 정의합니다.',
+    options: {
+      A: 'A: 다중 행 및 열 선택',
+      B: 'B: 단일 행 선택',
+      C: 'C: 다중 행 선택',
+      D: 'D: 셀 선택',
+      SPACE: 'SPACE: 기본 모드',
+    },
+  },
+  DETAILTITL: {
+    description: '상세 팝업 창 제목',
+    detailHint: '행 상세 보기(&DETAIL) 모달의 헤더 제목입니다 (Char 30).',
+    placeholder: '예: 상세 데이터 보기',
+  },
+  DETAILINIT: {
+    description: '상세 팝업에 초기값/빈 필드도 표시',
+    detailHint: '행 상세 팝업에서 공백 또는 0인 필드도 함께 표시합니다.',
+  },
+  INFO_FNAME: {
+    description: '행 색상 필드명 (Char 4, 예: LINECOLOR)',
+    detailHint: '행 단위 색상 코드(예: C310, C500)를 저장하는 4자리 필드명입니다.',
+    placeholder: '예: LINECOLOR',
+  },
+  CTAB_FNAME: {
+    description: '셀 색상 테이블 필드명 (LVC_T_SCOL, 예: CELLCOLOR)',
+    detailHint: '셀별 색상 지정을 위한 인터널 테이블 필드명입니다 (LVC_T_SCOL).',
+    placeholder: '예: CELLCOLOR',
+  },
+  STYLEFNAME: {
+    description: '셀 스타일 테이블 필드명 (LVC_T_STYL, 예: CELLSTYLE)',
+    detailHint: '버튼/편집 가능 여부 등 셀 스타일 제어용 필드명입니다 (LVC_T_STYL).',
+    placeholder: '예: CELLSTYLE',
+  },
+  EXCP_FNAME: {
+    description: '예외 신호등 필드명 (Lights, 예: ZICON 또는 LIGHTS)',
+    detailHint: '상태 신호등 값(1-적색, 2-황색, 3-녹색)을 담는 필드명입니다.',
+    placeholder: '예: ZICON',
+  },
+  EXCP_LED: {
+    description: '예외 신호등에 원형 LED 스타일 사용',
+    detailHint: '예외 상태 표시기를 원형 LED 아이콘으로 출력합니다.',
+  },
+  SHOW_ROW_NUMBERS: {
+    description: '좌측 행 번호(No.) 표시',
+    detailHint: 'ALV 그리드 좌측 끝에 1부터 시작하는 순번 컬럼을 표시합니다.',
+  },
+};
+
 export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
   layout,
   onChange,
   isReadOnly = false,
 }) => {
+  const { lang, t } = useLanguage();
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [pasteModalOpen, setPasteModalOpen] = useState(false);
@@ -661,7 +803,12 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
 
     if (updatedCount > 0) {
       onChange(nextLayout);
-      setToastMessage(`Applied spreadsheet data (${updatedCount} attributes updated).`);
+      setToastMessage(
+        t(
+          `Applied spreadsheet data (${updatedCount} attributes updated).`,
+          `스프레드시트 데이터를 적용했습니다 (${updatedCount}개 속성 업데이트).`
+        )
+      );
     }
 
     return updatedCount;
@@ -723,7 +870,9 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
     const success = await copyTsvToClipboard(lines.join('\n'));
     if (success) {
       setCopyFeedback(true);
-      setToastMessage('Copied layout table to clipboard (TSV).');
+      setToastMessage(
+        t('Copied layout table to clipboard (TSV).', '레이아웃 테이블을 클립보드에 복사했습니다 (TSV).')
+      );
       setTimeout(() => setCopyFeedback(false), 2000);
     }
   };
@@ -739,7 +888,9 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
       }
     });
     onChange(next);
-    setToastMessage('Restored SAP standard layout defaults.');
+    setToastMessage(
+      t('Restored SAP standard layout defaults.', 'SAP 표준 레이아웃 기본값으로 복원했습니다.')
+    );
   };
 
   // Quick toggle all booleans
@@ -757,7 +908,11 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
       }
     });
     onChange(next);
-    setToastMessage(check ? 'Checked all boolean attributes.' : 'Unchecked all boolean attributes.');
+    setToastMessage(
+      check
+        ? t('Checked all boolean attributes.', '모든 체크박스 속성을 선택했습니다.')
+        : t('Unchecked all boolean attributes.', '모든 체크박스 속성을 해제했습니다.')
+    );
   };
   // Live detection of ALV attributes in pasteModalText
   const detectedAttrSummary = useMemo(() => {
@@ -792,7 +947,10 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
       setPasteModalError(null);
     } else {
       setPasteModalError(
-        'No recognized ALV attributes found. Verify that Attribute names (e.g., ZEBRA, GRID_TITLE) and values are included.'
+        t(
+          'No recognized ALV attributes found. Verify that Attribute names (e.g., ZEBRA, GRID_TITLE) and values are included.',
+          '인식된 ALV 속성이 없습니다. Attribute 이름(예: ZEBRA, GRID_TITLE)과 값이 포함되어 있는지 확인해 주세요.'
+        )
       );
     }
   };
@@ -820,7 +978,10 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             Configure the Layout
           </h3>
           <p className="text-xs text-slate-500">
-            Configure CL_GUI_ALV_GRID appearance, column width optimization, sorting, totals, selection mode, and color control parameters (LVC_S_LAYO).
+            {t(
+              'Configure CL_GUI_ALV_GRID appearance, column width optimization, sorting, totals, selection mode, and color control parameters (LVC_S_LAYO).',
+              'CL_GUI_ALV_GRID 외관, 컬럼 너비 최적화, 정렬, 합계, 선택 모드 및 색상 제어 파라미터(LVC_S_LAYO)를 설정합니다.'
+            )}
           </p>
         </div>
 
@@ -830,8 +991,8 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             type="button"
             onClick={handleCopyTableToExcel}
             className="p-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 hover:text-blue-700 border border-slate-300 rounded-md transition-colors flex items-center justify-center shadow-2xs cursor-pointer"
-            title="Copy to Excel"
-            aria-label="Copy to Excel"
+            title={t('Copy to Excel', '엑셀로 복사')}
+            aria-label={t('Copy to Excel', '엑셀로 복사')}
           >
             {copyFeedback ? (
               <Check className="w-4 h-4 text-emerald-600" />
@@ -845,8 +1006,8 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             disabled={isReadOnly}
             onClick={() => !isReadOnly && setPasteModalOpen(true)}
             className="p-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 hover:text-emerald-700 border border-slate-300 rounded-md transition-colors flex items-center justify-center shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Paste from Excel"
-            aria-label="Paste from Excel"
+            title={t('Paste from Excel', '엑셀에서 붙여넣기')}
+            aria-label={t('Paste from Excel', '엑셀에서 붙여넣기')}
           >
             <ClipboardPaste className="w-4 h-4 text-emerald-600" />
           </button>
@@ -856,8 +1017,8 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             disabled={isReadOnly}
             onClick={handleResetDefaults}
             className="p-2 text-xs font-medium text-slate-600 bg-white hover:bg-slate-100 hover:text-slate-900 border border-slate-300 rounded-md transition-colors flex items-center justify-center shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Reset Defaults"
-            aria-label="Reset Defaults"
+            title={t('Reset Defaults', '기본값 복원')}
+            aria-label={t('Reset Defaults', '기본값 복원')}
           >
             <RotateCcw className="w-4 h-4 text-slate-500" />
           </button>
@@ -869,7 +1030,15 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
         <div className="flex items-center gap-2">
           <FileSpreadsheet className="w-4 h-4 text-blue-600 shrink-0" />
           <span>
-            <strong>Spreadsheet Paste Supported:</strong> Copy cells from Excel (Ctrl+C) and press <strong>Ctrl+V</strong> directly inside this table to apply values.
+            {lang === 'ko' ? (
+              <>
+                <strong>스프레드시트 붙여넣기 지원:</strong> 엑셀에서 셀을 복사(Ctrl+C)한 뒤 표 안에서 <strong>Ctrl+V</strong>를 누르면 값이 바로 적용됩니다.
+              </>
+            ) : (
+              <>
+                <strong>Spreadsheet Paste Supported:</strong> Copy cells from Excel (Ctrl+C) and press <strong>Ctrl+V</strong> directly inside this table to apply values.
+              </>
+            )}
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -877,8 +1046,8 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             type="button"
             onClick={handleExpandAll}
             className="p-1.5 rounded hover:bg-white text-blue-700 hover:text-blue-900 border border-blue-200 bg-white/70 transition-colors shadow-2xs cursor-pointer"
-            title="Expand All Categories"
-            aria-label="Expand All Categories"
+            title={t('Expand All Categories', '모든 분류 펼치기')}
+            aria-label={t('Expand All Categories', '모든 분류 펼치기')}
           >
             <ChevronsDown className="w-3.5 h-3.5" />
           </button>
@@ -886,8 +1055,8 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             type="button"
             onClick={handleCollapseAll}
             className="p-1.5 rounded hover:bg-white text-blue-700 hover:text-blue-900 border border-blue-200 bg-white/70 transition-colors shadow-2xs cursor-pointer"
-            title="Collapse All Categories"
-            aria-label="Collapse All Categories"
+            title={t('Collapse All Categories', '모든 분류 접기')}
+            aria-label={t('Collapse All Categories', '모든 분류 접기')}
           >
             <ChevronsUp className="w-3.5 h-3.5" />
           </button>
@@ -897,8 +1066,8 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             disabled={isReadOnly}
             onClick={() => handleToggleAllBooleans(true)}
             className="p-1.5 rounded hover:bg-white text-blue-700 hover:text-blue-900 border border-blue-200 bg-white/70 transition-colors shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Check All"
-            aria-label="Check All"
+            title={t('Check All', '전체 선택')}
+            aria-label={t('Check All', '전체 선택')}
           >
             <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
           </button>
@@ -907,8 +1076,8 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             disabled={isReadOnly}
             onClick={() => handleToggleAllBooleans(false)}
             className="p-1.5 rounded hover:bg-white text-slate-600 hover:text-slate-900 border border-blue-200 bg-white/70 transition-colors shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Uncheck All"
-            aria-label="Uncheck All"
+            title={t('Uncheck All', '전체 해제')}
+            aria-label={t('Uncheck All', '전체 해제')}
           >
             <Square className="w-3.5 h-3.5 text-slate-500" />
           </button>
@@ -923,31 +1092,28 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
               <tr>
                 <th
                   className="py-2.5 px-2 text-center w-10 bg-slate-200 border-r border-slate-300 text-slate-500 font-mono text-[10px]"
-                  title="Spreadsheet Row Number / Toggle"
+                  title={t('Spreadsheet Row Number / Toggle', '스프레드시트 행 번호 / 토글')}
                 >
                   fx
                 </th>
                 <th className="py-2.5 px-3 w-52 border-r border-slate-300 font-bold">
-                  Category
+                  {t('Category', '분류')}
                 </th>
                 <th className="py-2.5 px-3 w-44 border-r border-slate-300 font-mono font-bold">
                   Attribute
                 </th>
                 <th className="py-2.5 px-3 border-r border-slate-300 font-bold">
-                  Description
+                  {t('Description', '설명')}
                 </th>
                 <th className="py-2.5 px-3 text-center w-48 font-bold">
-                  Value / Setting
+                  {t('Value / Setting', '값 / 설정')}
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-xs">
               {groupedCategories.map(({ category, items }) => {
                 const isExpanded = !!expandedCategories[category];
-                const activeCount = items.filter((item) => {
-                  const val = getItemValue(item);
-                  return item.type === 'boolean' ? !!val : !!val && val !== 'SPACE';
-                }).length;
+                const displayCategory = lang === 'ko' ? (CATEGORY_KO_MAP[category] || category) : category;
 
                 return (
                   <React.Fragment key={category}>
@@ -955,7 +1121,11 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                     <tr
                       onClick={() => toggleCategory(category)}
                       className="bg-slate-100/90 hover:bg-blue-50/80 cursor-pointer border-y border-slate-300 select-none transition-colors group"
-                      title={`Click to ${isExpanded ? 'collapse' : 'expand'} ${category}`}
+                      title={
+                        isExpanded
+                          ? t(`Click to collapse ${category}`, `클릭하여 ${displayCategory} 접기`)
+                          : t(`Click to expand ${category}`, `클릭하여 ${displayCategory} 펼치기`)
+                      }
                     >
                       <td className="py-2.5 px-2 text-center bg-slate-200 border-r border-slate-300 text-slate-600 font-mono text-[10px]">
                         {isExpanded ? (
@@ -965,7 +1135,7 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-3 border-r border-slate-300 font-bold text-slate-900">
-                        <span className="font-bold text-slate-900 text-xs">{category}</span>
+                        <span className="font-bold text-slate-900 text-xs">{displayCategory}</span>
                       </td>
                       <td className="py-2.5 px-3 border-r border-slate-300"></td>
                       <td className="py-2.5 px-3 border-r border-slate-300"></td>
@@ -986,6 +1156,10 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                         const globalIdx = LAYOUT_ITEMS_CONFIG.findIndex((i) => i.name === item.name);
                         const isSelected = selectedRowIndex === globalIdx;
                         const val = getItemValue(item);
+                        const koMeta = ITEM_KO_MAP[item.name];
+                        const displayDesc = lang === 'ko' && koMeta ? koMeta.description : item.description;
+                        const displayHint = lang === 'ko' && koMeta?.detailHint ? koMeta.detailHint : item.detailHint;
+                        const displayPlaceholder = lang === 'ko' && koMeta?.placeholder ? koMeta.placeholder : item.placeholder;
 
                         return (
                           <tr
@@ -1013,16 +1187,16 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                                 toggleCategory(category);
                               }}
                               className="py-2 px-3 border-r border-slate-200 text-slate-700 cursor-pointer hover:bg-blue-100/60 select-none"
-                              title="Click to collapse category"
+                              title={t('Click to collapse category', '클릭하여 분류 접기')}
                             >
                               <div className="flex items-center gap-1.5">
                                 <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-800 border border-slate-300">
-                                  {category}
+                                  {displayCategory}
                                 </span>
                               </div>
                             </td>
 
-                            {/* 3. Field Name Column */}
+                            {/* 3. Field Name Column (ALWAYS ENGLISH per RFQ v1.29) */}
                             <td className="py-2 px-3 border-r border-slate-200 font-mono font-bold text-blue-950 text-[11px]">
                               <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1.5 py-0.5 rounded">
                                 {item.name}
@@ -1032,11 +1206,11 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                             {/* 4. Description Column */}
                             <td className="py-2 px-3 border-r border-slate-200 text-slate-800">
                               <div className="font-semibold text-slate-900">
-                                {item.description}
+                                {displayDesc}
                               </div>
-                              {item.detailHint && (
+                              {displayHint && (
                                 <div className="text-[11px] text-slate-500 mt-0.5 font-normal">
-                                  {item.detailHint}
+                                  {displayHint}
                                 </div>
                               )}
                             </td>
@@ -1078,7 +1252,9 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                                 >
                                   {item.options?.map((opt) => (
                                     <option key={opt.value} value={opt.value}>
-                                      {opt.label}
+                                      {lang === 'ko' && koMeta?.options?.[opt.value]
+                                        ? koMeta.options[opt.value]
+                                        : opt.label}
                                     </option>
                                   ))}
                                 </InspectableSelect>
@@ -1087,7 +1263,7 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                                   type="text"
                                   value={String(val || '')}
                                   readOnly={isReadOnly}
-                                  placeholder={item.placeholder || ''}
+                                  placeholder={displayPlaceholder || ''}
                                   onChange={(e) => handleUpdateItem(item, e.target.value)}
                                   onClick={(e) => e.stopPropagation()}
                                   className="w-full bg-white border border-slate-300 rounded px-2.5 py-1 text-xs font-medium text-slate-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-2xs read-only:bg-slate-50 read-only:text-slate-600"
@@ -1117,18 +1293,18 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold tracking-tight">
-                    Paste Layout (LVC_S_LAYO) Attributes from Excel
+                    {t('Paste Layout (LVC_S_LAYO) Attributes from Excel', '엑셀에서 레이아웃 (LVC_S_LAYO) 속성 붙여넣기')}
                   </h3>
                   <p className="text-[11px] text-blue-200">
-                    Paste a copied range (Ctrl+C) from Excel or Google Sheets below.
+                    {t('Paste a copied range (Ctrl+C) from Excel or Google Sheets below.', '엑셀 또는 구글 시트에서 복사(Ctrl+C)한 범위를 아래에 붙여넣으세요.')}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setPasteModalOpen(false)}
-                aria-label="Close"
-                title="Close"
+                aria-label={t('Close', '닫기')}
+                title={t('Close', '닫기')}
                 className="p-1 rounded-md text-blue-200 hover:text-white hover:bg-blue-600/60 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1138,16 +1314,24 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
             {/* Guide & Status */}
             <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs space-y-2">
               <p className="text-slate-700">
-                Include attribute names (e.g., <strong>ZEBRA</strong>, <strong>GRID_TITLE</strong>, <strong>CWIDTH_OPT</strong>) and values (<strong>X</strong>, text, or blank).
+                {lang === 'ko' ? (
+                  <>
+                    속성명(예: <strong>ZEBRA</strong>, <strong>GRID_TITLE</strong>, <strong>CWIDTH_OPT</strong>)과 값(<strong>X</strong>, 텍스트 또는 공백)을 포함해 붙여넣으세요.
+                  </>
+                ) : (
+                  <>
+                    Include attribute names (e.g., <strong>ZEBRA</strong>, <strong>GRID_TITLE</strong>, <strong>CWIDTH_OPT</strong>) and values (<strong>X</strong>, text, or blank).
+                  </>
+                )}
               </p>
               {detectedAttrSummary && detectedAttrSummary.count > 0 && (
                 <div className="px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-md text-[11px] text-emerald-800 flex items-center gap-1.5 font-medium">
                   <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>
-                    Detected attributes: <strong>{detectedAttrSummary.count}</strong>
+                    {t('Detected attributes:', '감지된 속성:')} <strong>{detectedAttrSummary.count}</strong>
                     <span className="text-emerald-600 ml-1 font-mono text-[10px]">
                       ({detectedAttrSummary.list.slice(0, 6).join(', ')}
-                      {detectedAttrSummary.list.length > 6 ? ` +${detectedAttrSummary.list.length - 6} more` : ''})
+                      {detectedAttrSummary.list.length > 6 ? ` +${detectedAttrSummary.list.length - 6}${t(' more', '개 더')}` : ''})
                     </span>
                   </span>
                 </div>
@@ -1156,7 +1340,15 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                 <div className="px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-md text-[11px] text-amber-800 flex items-center gap-1.5 font-medium">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <span>
-                    No attributes detected. Include the <strong>Attribute</strong> column from Excel.
+                    {lang === 'ko' ? (
+                      <>
+                        감지된 속성이 없습니다. 엑셀의 <strong>Attribute</strong> 열을 포함해 주세요.
+                      </>
+                    ) : (
+                      <>
+                        No attributes detected. Include the <strong>Attribute</strong> column from Excel.
+                      </>
+                    )}
                   </span>
                 </div>
               )}
@@ -1193,7 +1385,7 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                 }}
                 className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg cursor-pointer transition-colors"
               >
-                Cancel
+                {t('Cancel', '취소')}
               </button>
               <button
                 type="button"
@@ -1202,7 +1394,7 @@ export const AlvLayoutSpreadsheet: React.FC<AlvLayoutSpreadsheetProps> = ({
                 className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg cursor-pointer transition-colors disabled:opacity-40 flex items-center gap-1.5 shadow-xs"
               >
                 <Check className="w-4 h-4" />
-                <span>Apply Attributes</span>
+                <span>{t('Apply Attributes', '속성 적용')}</span>
               </button>
             </div>
           </div>

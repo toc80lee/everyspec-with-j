@@ -38,58 +38,65 @@ import {
   exportBatchSpecsDocuments,
   exportProjectWricefIndexXlsx,
 } from '../utils/officeExport';
+import { useLanguage } from '../contexts/LanguageContext';
 
-const SAP_MODULES: { code: SapModule; label: string }[] = [
-  { code: 'SD', label: 'Sales & Dist.' },
-  { code: 'MM', label: 'Materials Mgmt' },
-  { code: 'FI', label: 'Financial Acctg' },
-  { code: 'CO', label: 'Controlling' },
-  { code: 'PP', label: 'Production' },
-  { code: 'HR', label: 'Human Capital' },
-  { code: 'QM', label: 'Quality Mgmt' },
-  { code: 'PM', label: 'Plant Maint.' },
-  { code: 'BC', label: 'Basis & System' },
-  { code: 'CM', label: 'Cross-Module' },
+const SAP_MODULES: { code: SapModule; labelEn: string; labelKo: string }[] = [
+  { code: 'SD', labelEn: 'Sales & Dist.', labelKo: '영업·출하' },
+  { code: 'MM', labelEn: 'Materials Mgmt', labelKo: '구매·자재' },
+  { code: 'FI', labelEn: 'Financial Acctg', labelKo: '재무회계' },
+  { code: 'CO', labelEn: 'Controlling', labelKo: '관리회계' },
+  { code: 'PP', labelEn: 'Production', labelKo: '생산관리' },
+  { code: 'HR', labelEn: 'Human Capital', labelKo: '인사관리' },
+  { code: 'QM', labelEn: 'Quality Mgmt', labelKo: '품질관리' },
+  { code: 'PM', labelEn: 'Plant Maint.', labelKo: '설비보전' },
+  { code: 'BC', labelEn: 'Basis & System', labelKo: 'Basis·시스템' },
+  { code: 'CM', labelEn: 'Cross-Module', labelKo: '공통 영역' },
 ];
 
 const LIFECYCLE_META: {
   status: SpecLifecycleStatus;
-  label: string;
+  labelEn: string;
+  labelKo: string;
   barColor: string;
   dotColor: string;
   badgeClass: string;
 }[] = [
   {
     status: 'draft',
-    label: 'Draft',
+    labelEn: 'Draft',
+    labelKo: '초안',
     barColor: 'bg-slate-400',
     dotColor: 'bg-slate-400',
     badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
   },
   {
     status: 'in_review',
-    label: 'In Review',
+    labelEn: 'In Review',
+    labelKo: '검토중',
     barColor: 'bg-amber-500',
     dotColor: 'bg-amber-500',
     badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
   },
   {
     status: 'approved',
-    label: 'Approved',
+    labelEn: 'Approved',
+    labelKo: '승인됨',
     barColor: 'bg-blue-600',
     dotColor: 'bg-blue-600',
     badgeClass: 'bg-blue-50 text-blue-800 border-blue-200',
   },
   {
     status: 'developed',
-    label: 'Developed',
+    labelEn: 'Developed',
+    labelKo: '개발완료',
     barColor: 'bg-indigo-600',
     dotColor: 'bg-indigo-600',
     badgeClass: 'bg-indigo-50 text-indigo-800 border-indigo-200',
   },
   {
     status: 'qa_passed',
-    label: 'QA Passed',
+    labelEn: 'QA Passed',
+    labelKo: 'QA 통과',
     barColor: 'bg-emerald-600',
     dotColor: 'bg-emerald-600',
     badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
@@ -106,12 +113,12 @@ const LIFECYCLE_META_MAP: Record<SpecLifecycleStatus, (typeof LIFECYCLE_META)[nu
 
 type ProgramSortCol = 'program_id' | 'module_tcode' | 'title' | 'status' | 'owner_updated';
 
-const SORTABLE_COLUMNS: { key: ProgramSortCol; label: string }[] = [
-  { key: 'program_id', label: 'Program ID' },
-  { key: 'module_tcode', label: 'Module · T-Code' },
-  { key: 'title', label: 'Title' },
-  { key: 'status', label: 'Status' },
-  { key: 'owner_updated', label: 'Owner · Updated' },
+const SORTABLE_COLUMNS: { key: ProgramSortCol; labelEn: string; labelKo: string }[] = [
+  { key: 'program_id', labelEn: 'Program ID', labelKo: '프로그램 ID' },
+  { key: 'module_tcode', labelEn: 'Module · T-Code', labelKo: '모듈 · T-Code' },
+  { key: 'title', labelEn: 'Title', labelKo: '프로그램명' },
+  { key: 'status', labelEn: 'Status', labelKo: '상태' },
+  { key: 'owner_updated', labelEn: 'Owner · Updated', labelKo: '작성자 · 수정일' },
 ];
 
 const STATUS_RANK: Record<SpecLifecycleStatus, number> = {
@@ -125,6 +132,7 @@ const STATUS_RANK: Record<SpecLifecycleStatus, number> = {
 interface ProjectOverviewDashboardProps {
   viewMode: 'overview' | 'program_list';
   currentUser: CurrentUser;
+  canManageProjects?: boolean;
   accessibleProjects: SapProject[];
   selectedProjectCode: string;
   onSelectProject: (code: string) => void;
@@ -146,6 +154,7 @@ interface ProjectOverviewDashboardProps {
 export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> = ({
   viewMode,
   currentUser,
+  canManageProjects = false,
   accessibleProjects,
   selectedProjectCode,
   onSelectProject,
@@ -163,6 +172,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
   onOpenMeetingMinute,
   onNotify,
 }) => {
+  const { lang, t } = useLanguage();
   const [selectedModuleFilter, setSelectedModuleFilter] = useState<'ALL' | SapModule>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [sampleTypeFilter, setSampleTypeFilter] = useState<string>('ALL');
@@ -468,7 +478,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
   const handleExportWricefIndex = () => {
     setIsExportMenuOpen(false);
     if (!activeProject || projectSpecs.length === 0) {
-      onNotify?.('No project specs available to export.');
+      onNotify?.(t('No project specs available to export.', '내보낼 프로젝트 사양서가 없습니다.'));
       return;
     }
     const filename = exportProjectWricefIndexXlsx(
@@ -476,7 +486,12 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
       projectSpecs.map((item) => item.spec),
       unresolvedCommentCounts
     );
-    onNotify?.(`Downloaded WRICEF Master List (${filename}).`);
+    onNotify?.(
+      t(
+        `Downloaded WRICEF Master List (${filename}).`,
+        `WRICEF 마스터 목록(${filename})을 다운로드했습니다.`
+      )
+    );
   };
 
   const handleBatchExportSelected = async (format: 'xlsx' | 'docx') => {
@@ -489,7 +504,12 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
     setIsBatchExporting(true);
     try {
       const files = await exportBatchSpecsDocuments(targetSpecs, format);
-      onNotify?.(`Downloaded ${files.length} .${format} spec file(s).`);
+      onNotify?.(
+        t(
+          `Downloaded ${files.length} .${format} spec file(s).`,
+          `${files.length}개의 .${format} 사양서 파일을 다운로드했습니다.`
+        )
+      );
     } finally {
       setIsBatchExporting(false);
     }
@@ -497,16 +517,23 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
 
   const handleDeleteItem = (item: SavedProgramSpecItem) => {
     if (isCommonProtectedSample(item.spec)) {
-      onNotify?.('Protected COMM sample originals cannot be deleted.');
+      onNotify?.(
+        t(
+          'Protected COMM sample originals cannot be deleted.',
+          '보호된 COMM 표준 샘플 원본은 삭제할 수 없습니다.'
+        )
+      );
       return;
     }
     const res = deleteSpecFromStorage(item.program_id, currentUser.name);
     if (!res.success) {
-      onNotify?.(res.message || 'Failed to delete spec.');
+      onNotify?.(res.message || t('Failed to delete spec.', '사양서 삭제에 실패했습니다.'));
       return;
     }
     onSpecsChanged(item.program_id);
-    onNotify?.(`Deleted spec '${item.program_id}'.`);
+    onNotify?.(
+      t(`Deleted spec '${item.program_id}'.`, `사양서 '${item.program_id}'를 삭제했습니다.`)
+    );
   };
 
   if (!activeProject) return null;
@@ -515,10 +542,19 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
   const isCommonProject = activeProject.code === COMMON_PROJECT_CODE;
 
   const visibilitySummary = isCommonProject
-    ? 'Company-Wide Common · Readable by all users (Originals protected)'
+    ? t(
+        'Company-Wide Common · Readable by all users (Originals protected)',
+        '전사 공통 영역 · 모든 사용자 조회 가능 (원본 보호)'
+      )
     : isTempProject
-    ? `Personal Workspace · Shows specs created by '${currentUser.name}' only`
-    : `Shared Project · ${activeProject.members.length} Members (${activeProject.members.join(' · ')})`;
+    ? t(
+        `Personal Workspace · Shows specs created by '${currentUser.name}' only`,
+        `개인 임시 영역 · '${currentUser.name}' 본인이 작성한 사양서만 표시`
+      )
+    : t(
+        `Shared Project · ${activeProject.members.length} Members (${activeProject.members.join(' · ')})`,
+        `공유 프로젝트 · 참여 인원 ${activeProject.members.length}명 (${activeProject.members.join(' · ')})`
+      );
 
   const newTargetProject = isCommonProject ? TEMP_PROJECT_CODE : activeProject.code;
   const completedPct =
@@ -540,7 +576,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                     onClick={() => onChangeViewMode('overview')}
                     className="text-blue-600 hover:underline font-medium cursor-pointer"
                   >
-                    Overview
+                    {t('Overview', '대시보드')}
                   </button>
                   <span aria-hidden="true">/</span>
                 </>
@@ -552,16 +588,19 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
             <div className="flex items-center gap-2 mt-0.5">
               <h1 className="text-xl font-bold tracking-tight text-slate-900">
                 {viewMode === 'overview'
-                  ? 'Project Spec Overview'
+                  ? t('Project Spec Overview', '프로젝트 사양서 현황')
                   : activeProject.name}
               </h1>
               {viewMode === 'program_list' && isCommonProject && (
                 <span
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-800 text-[11px] font-semibold"
-                  title="COMM sample originals (ZRALV0010–ZRALV0040) are protected. Use Copy on each row to clone into your project or TEMP."
+                  title={t(
+                    'COMM sample originals (ZRALV0010–ZRALV0040) are protected. Use Copy on each row to clone into your project or TEMP.',
+                    'COMM 표준 샘플(ZRALV0010–ZRALV0040) 원본은 보호됩니다. 복사 버튼으로 내 프로젝트나 TEMP에 복제하여 사용하세요.'
+                  )}
                 >
                   <Lock className="w-3 h-3" />
-                  <span>Protected</span>
+                  <span>{t('Protected', '보호됨')}</span>
                 </span>
               )}
             </div>
@@ -572,8 +611,8 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
               type="button"
               onClick={() => onOpenMeetingWizard()}
               className="w-9 h-9 bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-2xs flex items-center justify-center transition-colors shrink-0 cursor-pointer"
-              title="AI Spec from Meeting"
-              aria-label="AI Spec from Meeting"
+              title={t('AI Spec from Meeting', '회의록 기반 AI 사양서 생성')}
+              aria-label={t('AI Spec from Meeting', '회의록 기반 AI 사양서 생성')}
             >
               <Mic className="w-4 h-4 text-blue-300" />
             </button>
@@ -599,7 +638,10 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   setLifecycleFilter('ALL');
                   setSelectedProgramIds(new Set());
                 }}
-                title={`${proj.name} · Updated ${stats.latestUpdated || '-'} · Mine ${stats.myCount}`}
+                title={t(
+                  `${proj.name} · Updated ${stats.latestUpdated || '-'} · Mine ${stats.myCount}`,
+                  `${proj.name} · 최근 수정 ${stats.latestUpdated || '-'} · 내 사양서 ${stats.myCount}건`
+                )}
                 className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                   isSelected
                     ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
@@ -637,7 +679,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                     </span>
                     <span
                       className="text-slate-400 hover:text-slate-700 cursor-help inline-flex"
-                      title={`${activeProject.description || 'SAP ABAP Specification Management'}\n${visibilitySummary}`}
+                      title={`${activeProject.description || t('SAP ABAP Specification Management', 'SAP ABAP 사양서 관리')}\n${visibilitySummary}`}
                     >
                       <Info className="w-3.5 h-3.5" />
                     </span>
@@ -650,10 +692,11 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                 <div className="flex items-center gap-5 shrink-0">
                   <div className="text-right text-xs text-slate-600 font-mono tabular-nums space-y-0.5">
                     <div>
-                      Dev & QA <strong className="text-slate-900">{completedPct}%</strong>
+                      {t('Dev & QA', '개발·QA 완료율')}{' '}
+                      <strong className="text-slate-900">{completedPct}%</strong>
                     </div>
                     <div>
-                      Open Reviews{' '}
+                      {t('Open Reviews', '미해결 리뷰')}{' '}
                       <strong
                         className={
                           totalUnresolvedReviews > 0 ? 'text-amber-700' : 'text-slate-900'
@@ -667,15 +710,18 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   <button
                     type="button"
                     onClick={() => handleOpenModuleList('ALL')}
-                    title="Click to view program list"
-                    aria-label={`View ${activeProject.name} program list (${projectSpecs.length} specs)`}
+                    title={t('Click to view program list', '클릭하여 프로그램 목록 보기')}
+                    aria-label={t(
+                      `View ${activeProject.name} program list (${projectSpecs.length} specs)`,
+                      `${activeProject.name} 프로그램 목록 보기 (${projectSpecs.length}건)`
+                    )}
                     className="group flex items-baseline gap-1.5 px-3 py-1.5 rounded-lg hover:bg-blue-50/80 border border-slate-200 hover:border-blue-300 transition-colors cursor-pointer"
                   >
                     <span className="text-2xl font-bold font-mono tabular-nums text-slate-900 group-hover:text-blue-700">
                       {projectSpecs.length}
                     </span>
                     <span className="text-xs font-medium text-slate-500 group-hover:text-blue-700">
-                      Specs
+                      {t('Specs', '건')}
                     </span>
                   </button>
                 </div>
@@ -688,12 +734,13 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                     const cnt = lifecycleCounts[meta.status] || 0;
                     if (cnt === 0) return null;
                     const pct = (cnt / projectSpecs.length) * 100;
+                    const label = lang === 'ko' ? meta.labelKo : meta.labelEn;
                     return (
                       <div
                         key={`bar-${meta.status}`}
                         style={{ width: `${pct}%` }}
                         className={`${meta.barColor} h-full transition-all`}
-                        title={`${meta.label}: ${cnt} (${Math.round(pct)}%)`}
+                        title={`${label}: ${cnt} (${Math.round(pct)}%)`}
                       />
                     );
                   })}
@@ -703,6 +750,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
               <div className="flex flex-wrap items-center gap-2">
                 {LIFECYCLE_META.map((meta) => {
                   const cnt = lifecycleCounts[meta.status] || 0;
+                  const label = lang === 'ko' ? meta.labelKo : meta.labelEn;
                   return (
                     <button
                       key={`stat-${meta.status}`}
@@ -712,11 +760,14 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                         setSelectedModuleFilter('ALL');
                         onChangeViewMode('program_list');
                       }}
-                      title={`View ${meta.label} specs in list`}
+                      title={t(
+                        `View ${meta.labelEn} specs in list`,
+                        `${meta.labelKo} 상태 사양서 보기`
+                      )}
                       className="px-2.5 py-1 bg-slate-50 hover:bg-blue-50/60 border border-slate-200 hover:border-blue-300 rounded-md text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <span className={`w-2 h-2 rounded-full ${meta.dotColor}`} />
-                      <span className="font-medium text-slate-700">{meta.label}</span>
+                      <span className="font-medium text-slate-700">{label}</span>
                       <span className="font-mono tabular-nums font-bold text-slate-900">
                         {cnt}
                       </span>
@@ -732,14 +783,17 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                 <div className="flex items-center gap-2">
                   <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
                   <h3 className="text-sm font-bold text-slate-900">
-                    Starred Specs
+                    {t('Starred Specs', '즐겨찾기 사양서')}
                   </h3>
                   <span className="font-mono text-xs font-semibold text-amber-700">
                     ({displayedFavoriteSpecs.length})
                   </span>
                   <span
                     className="text-slate-400 hover:text-slate-700 cursor-help inline-flex"
-                    title="Star frequently used specs (★) to access them quickly from any project."
+                    title={t(
+                      'Star frequently used specs (★) to access them quickly from any project.',
+                      '자주 참조하는 사양서에 별표(★)를 누르면 어느 프로젝트에서나 빠르게 열 수 있습니다.'
+                    )}
                   >
                     <Info className="w-3.5 h-3.5" />
                   </span>
@@ -756,7 +810,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      All ({accessibleFavoriteSpecs.length})
+                      {t('All', '전체')} ({accessibleFavoriteSpecs.length})
                     </button>
                     <button
                       type="button"
@@ -776,8 +830,14 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
               {displayedFavoriteSpecs.length === 0 ? (
                 <div className="px-5 py-5 text-center text-xs text-slate-500">
                   {accessibleFavoriteSpecs.length === 0
-                    ? 'No starred specs yet. Click ★ in the list or editor header to pin here.'
-                    : `No starred specs in '${activeProject.code}'.`}
+                    ? t(
+                        'No starred specs yet. Click ★ in the list or editor header to pin here.',
+                        '즐겨찾기된 사양서가 없습니다. 목록 또는 편집기 상단의 ★ 아이콘을 눌러 고정하세요.'
+                      )
+                    : t(
+                        `No starred specs in '${activeProject.code}'.`,
+                        `'${activeProject.code}' 프로젝트에 즐겨찾기된 사양서가 없습니다.`
+                      )}
                 </div>
               ) : (
                 <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -813,8 +873,11 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                               type="button"
                               onClick={() => onRequestCopySpec(item.spec)}
                               className="p-1 text-blue-600 hover:bg-blue-100/70 rounded cursor-pointer"
-                              title="Copy to project"
-                              aria-label={`Copy ${item.program_id} to project`}
+                              title={t('Copy to project', '프로젝트로 복사')}
+                              aria-label={t(
+                                `Copy ${item.program_id} to project`,
+                                `${item.program_id} 프로젝트로 복사`
+                              )}
                             >
                               <Copy className="w-3.5 h-3.5" />
                             </button>
@@ -822,8 +885,11 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                           <button
                             type="button"
                             onClick={() => onToggleFavorite(item.program_id)}
-                            title="Remove from favorites"
-                            aria-label={`Unstar ${item.program_id}`}
+                            title={t('Remove from favorites', '즐겨찾기 해제')}
+                            aria-label={t(
+                              `Unstar ${item.program_id}`,
+                              `${item.program_id} 즐겨찾기 해제`
+                            )}
                             className="p-1 rounded hover:bg-amber-50 transition-colors cursor-pointer"
                           >
                             <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
@@ -841,7 +907,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold text-slate-900">
-                    Specs by Module
+                    {t('Specs by Module', '모듈별 사양서 현황')}
                   </h3>
                   {modulesWithSpecs.length > 0 && (
                     <span className="font-mono text-xs font-semibold text-blue-700">
@@ -850,19 +916,22 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   )}
                   <span
                     className="text-slate-400 hover:text-slate-700 cursor-help inline-flex"
-                    title="Only modules with registered specs are shown. Click a card to view its programs."
+                    title={t(
+                      'Only modules with registered specs are shown. Click a card to view its programs.',
+                      '등록된 사양서가 있는 모듈만 표시됩니다. 카드를 클릭하면 해당 모듈의 프로그램 목록으로 이동합니다.'
+                    )}
                   >
                     <Info className="w-3.5 h-3.5" />
                   </span>
                 </div>
-                {!isCommonProject && !isTempProject && (
+                {canManageProjects && !isCommonProject && !isTempProject && (
                   <button
                     type="button"
                     onClick={onOpenProjectManager}
                     className="text-xs font-semibold text-slate-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
                   >
                     <Settings className="w-3.5 h-3.5" />
-                    <span>Module Settings</span>
+                    <span>{t('Module Settings', '모듈 설정')}</span>
                   </button>
                 )}
               </div>
@@ -870,14 +939,17 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
               {modulesWithSpecs.length === 0 ? (
                 <div className="p-6 bg-white border border-slate-200 rounded-xl text-center space-y-2.5">
                   <p className="text-xs text-slate-500">
-                    No specs registered in this project yet.
+                    {t(
+                      'No specs registered in this project yet.',
+                      '아직 이 프로젝트에 등록된 사양서가 없습니다.'
+                    )}
                   </p>
                   {!isCommonProject && (
                     <button
                       type="button"
                       onClick={() => onCreateNewProgram(newTargetProject)}
-                      title="New Program"
-                      aria-label="New Program"
+                      title={t('New Program', '새 프로그램 작성')}
+                      aria-label={t('New Program', '새 프로그램 작성')}
                       className="w-9 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-lg cursor-pointer inline-flex items-center justify-center transition-colors"
                     >
                       <Plus className="w-4 h-4" />
@@ -903,7 +975,9 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                             {count}
                           </span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5">{mod.label}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {lang === 'ko' ? mod.labelKo : mod.labelEn}
+                        </div>
                       </button>
                     );
                   })}
@@ -927,7 +1001,10 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Program ID, Title, T-Code, Author..."
+                    placeholder={t(
+                      'Program ID, Title, T-Code, Author...',
+                      '프로그램 ID, 제목, T-Code, 작성자 검색...'
+                    )}
                     className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:bg-white focus:border-blue-500"
                   />
                 </div>
@@ -935,10 +1012,12 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                 <select
                   value={selectedModuleFilter}
                   onChange={(e) => setSelectedModuleFilter(e.target.value as 'ALL' | SapModule)}
-                  aria-label="Module Filter"
+                  aria-label={t('Module Filter', '모듈 필터')}
                   className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
                 >
-                  <option value="ALL">All Modules ({projectSpecs.length})</option>
+                  <option value="ALL">
+                    {t('All Modules', '전체 모듈')} ({projectSpecs.length})
+                  </option>
                   {modulesWithSpecs.map((mod) => (
                     <option key={mod.code} value={mod.code}>
                       {mod.code} ({moduleCounts[mod.code] || 0})
@@ -951,13 +1030,13 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   onChange={(e) =>
                     setLifecycleFilter(e.target.value as 'ALL' | SpecLifecycleStatus)
                   }
-                  aria-label="Status Filter"
+                  aria-label={t('Status Filter', '상태 필터')}
                   className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
                 >
-                  <option value="ALL">All Statuses</option>
+                  <option value="ALL">{t('All Statuses', '전체 상태')}</option>
                   {LIFECYCLE_META.map((m) => (
                     <option key={m.status} value={m.status}>
-                      {m.label} ({lifecycleCounts[m.status] || 0})
+                      {lang === 'ko' ? m.labelKo : m.labelEn} ({lifecycleCounts[m.status] || 0})
                     </option>
                   ))}
                 </select>
@@ -965,20 +1044,20 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                 <select
                   value={sampleTypeFilter}
                   onChange={(e) => setSampleTypeFilter(e.target.value)}
-                  aria-label="Sample Type Filter"
+                  aria-label={t('Sample Type Filter', '샘플 유형 필터')}
                   className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
                 >
-                  <option value="ALL">All Types</option>
-                  <option value="01">01 Single ALV</option>
-                  <option value="02">02 Master-Detail</option>
-                  <option value="03">03 Tree ALV</option>
-                  <option value="04">04 Pivot</option>
+                  <option value="ALL">{t('All Types', '전체 유형')}</option>
+                  <option value="01">{t('01 Single ALV', '01 단일 ALV')}</option>
+                  <option value="02">{t('02 Master-Detail', '02 헤더-아이템')}</option>
+                  <option value="03">{t('03 Tree ALV', '03 트리 ALV')}</option>
+                  <option value="04">{t('04 Pivot', '04 피벗 집계')}</option>
                 </select>
 
                 <button
                   type="button"
                   onClick={() => setFavoritesOnlyFilter((prev) => !prev)}
-                  title="Show starred specs only"
+                  title={t('Show starred specs only', '즐겨찾기 사양서만 보기')}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     favoritesOnlyFilter
                       ? 'bg-amber-50 border-amber-300 text-amber-900'
@@ -992,15 +1071,18 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                         : 'text-slate-400'
                     }`}
                   />
-                  <span>Starred</span>
+                  <span>{t('Starred', '즐겨찾기')}</span>
                 </button>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-[11px] font-mono tabular-nums text-slate-500 mr-1">
                   {selectedProgramIds.size > 0
-                    ? `${selectedProgramIds.size} selected`
-                    : `${sortedListSpecs.length}/${projectSpecs.length} items`}
+                    ? t(`${selectedProgramIds.size} selected`, `${selectedProgramIds.size}개 선택됨`)
+                    : t(
+                        `${sortedListSpecs.length}/${projectSpecs.length} items`,
+                        `${sortedListSpecs.length}/${projectSpecs.length}건`
+                      )}
                 </span>
 
                 {/* Multi-column Header Sort Controls */}
@@ -1008,8 +1090,11 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   <button
                     type="button"
                     onClick={() => handleApplySortDirection('asc')}
-                    title="Sort ascending by selected headers"
-                    aria-label="Sort ascending"
+                    title={t(
+                      'Sort ascending by selected headers',
+                      '선택한 열 기준 오름차순 정렬'
+                    )}
+                    aria-label={t('Sort ascending', '오름차순 정렬')}
                     className={`w-7 h-7 rounded flex items-center justify-center transition-colors cursor-pointer ${
                       sortDirection === 'asc'
                         ? 'bg-blue-600 text-white'
@@ -1021,8 +1106,11 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   <button
                     type="button"
                     onClick={() => handleApplySortDirection('desc')}
-                    title="Sort descending by selected headers"
-                    aria-label="Sort descending"
+                    title={t(
+                      'Sort descending by selected headers',
+                      '선택한 열 기준 내림차순 정렬'
+                    )}
+                    aria-label={t('Sort descending', '내림차순 정렬')}
                     className={`w-7 h-7 rounded flex items-center justify-center transition-colors cursor-pointer ${
                       sortDirection === 'desc'
                         ? 'bg-blue-600 text-white'
@@ -1035,8 +1123,8 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                     type="button"
                     onClick={handleClearSort}
                     disabled={selectedSortCols.length === 0 && !sortDirection}
-                    title="Clear sort selection"
-                    aria-label="Clear sort"
+                    title={t('Clear sort selection', '정렬 초기화')}
+                    aria-label={t('Clear sort', '정렬 초기화')}
                     className="w-7 h-7 rounded flex items-center justify-center text-slate-500 hover:bg-white hover:text-slate-900 disabled:opacity-35 transition-colors cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -1047,8 +1135,8 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   <button
                     type="button"
                     onClick={() => setIsExportMenuOpen((prev) => !prev)}
-                    title="Export"
-                    aria-label="Export"
+                    title={t('Export', '내보내기')}
+                    aria-label={t('Export', '내보내기')}
                     className="w-8 h-8 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg flex items-center justify-center transition-colors cursor-pointer shrink-0"
                   >
                     <Download className="w-4 h-4 text-blue-600" />
@@ -1063,7 +1151,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                         className="w-full px-3 py-2 text-left text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40 flex items-center gap-2 cursor-pointer"
                       >
                         <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>WRICEF Master List (.xlsx)</span>
+                        <span>{t('WRICEF Master List (.xlsx)', 'WRICEF 마스터 목록 (.xlsx)')}</span>
                       </button>
                       <div className="border-t border-slate-100 my-1" />
                       <button
@@ -1073,7 +1161,9 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                         className="w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50 disabled:opacity-40 flex items-center gap-2 cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        <span>Batch Export .xlsx ({selectedProgramIds.size})</span>
+                        <span>
+                          {t('Batch Export .xlsx', '일괄 내보내기 .xlsx')} ({selectedProgramIds.size})
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -1082,7 +1172,9 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                         className="w-full px-3 py-2 text-left text-slate-700 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40 flex items-center gap-2 cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <span>Batch Export .docx ({selectedProgramIds.size})</span>
+                        <span>
+                          {t('Batch Export .docx', '일괄 내보내기 .docx')} ({selectedProgramIds.size})
+                        </span>
                       </button>
                     </div>
                   )}
@@ -1099,7 +1191,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                       <th className="px-3 py-2.5 w-9 text-center">
                         <input
                           type="checkbox"
-                          aria-label="Select all visible programs"
+                          aria-label={t('Select all visible programs', '표시된 모든 프로그램 선택')}
                           checked={
                             sortedListSpecs.length > 0 &&
                             sortedListSpecs.every((item) =>
@@ -1119,7 +1211,10 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                             onMouseDown={(e) => handleHeaderMouseDown(col.key, e)}
                             onMouseEnter={() => handleHeaderMouseEnter(col.key)}
                             onClick={(e) => handleHeaderClick(col.key, e)}
-                            title="Click to select, Ctrl/Cmd+click or drag across headers for multi-column sort"
+                            title={t(
+                              'Click to select, Ctrl/Cmd+click or drag across headers for multi-column sort',
+                              '클릭하여 선택, Ctrl/Cmd+클릭 또는 드래그로 다중 열 정렬'
+                            )}
                             className={`px-3 py-2.5 cursor-pointer transition-colors whitespace-nowrap ${
                               isSelectedCol
                                 ? 'bg-blue-50 text-blue-900 ring-1 ring-inset ring-blue-300'
@@ -1127,7 +1222,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                             }`}
                           >
                             <div className="inline-flex items-center gap-1.5">
-                              <span>{col.label}</span>
+                              <span>{lang === 'ko' ? col.labelKo : col.labelEn}</span>
                               {isSelectedCol && (
                                 <span className="inline-flex items-center gap-0.5 text-[10px] font-mono tabular-nums font-bold text-blue-700">
                                   <span>{priorityIdx + 1}</span>
@@ -1139,14 +1234,17 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                           </th>
                         );
                       })}
-                      <th className="px-3 py-2.5 text-right">Actions</th>
+                      <th className="px-3 py-2.5 text-right">{t('Actions', '작업')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {sortedListSpecs.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-                          No program specs match the selected filters.
+                          {t(
+                            'No program specs match the selected filters.',
+                            '선택한 필터 조건에 맞는 프로그램 사양서가 없습니다.'
+                          )}
                         </td>
                       </tr>
                     ) : (
@@ -1162,6 +1260,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                             : 'v1.0';
                         const statusKey: SpecLifecycleStatus = item.spec.status || 'draft';
                         const statusMeta = LIFECYCLE_META_MAP[statusKey];
+                        const statusLabel = lang === 'ko' ? statusMeta.labelKo : statusMeta.labelEn;
                         const unresolvedCount = unresolvedCommentCounts[item.spec.id] || 0;
 
                         return (
@@ -1174,7 +1273,10 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                             <td className="px-3 py-2.5 text-center">
                               <input
                                 type="checkbox"
-                                aria-label={`Select ${item.program_id}`}
+                                aria-label={t(
+                                  `Select ${item.program_id}`,
+                                  `${item.program_id} 선택`
+                                )}
                                 checked={isSelectedRow}
                                 onChange={() => handleToggleRowSelection(item.program_id)}
                                 className="rounded border-slate-300 cursor-pointer"
@@ -1185,8 +1287,10 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                                 <button
                                   type="button"
                                   onClick={() => onToggleFavorite(item.program_id)}
-                                  title={isFav ? 'Unstar' : 'Star'}
-                                  aria-label={`${isFav ? 'Unstar' : 'Star'} ${item.program_id}`}
+                                  title={
+                                    isFav ? t('Unstar', '즐겨찾기 해제') : t('Star', '즐겨찾기 추가')
+                                  }
+                                  aria-label={`${isFav ? t('Unstar', '즐겨찾기 해제') : t('Star', '즐겨찾기 추가')} ${item.program_id}`}
                                   className="p-0.5 rounded hover:bg-amber-50 transition-colors cursor-pointer shrink-0"
                                 >
                                   <Star
@@ -1215,7 +1319,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                                 <span className="text-slate-700">{item.tcode}</span>
                               </div>
                               <div className="text-[10px] font-mono text-slate-400">
-                                Type {item.sample_type || '01'} · {latestVer}
+                                {t('Type', '유형')} {item.sample_type || '01'} · {latestVer}
                               </div>
                             </td>
                             <td className="px-3 py-2.5 max-w-sm">
@@ -1229,8 +1333,14 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                                     onClick={() =>
                                       onOpenMeetingMinute(item.spec.source_meeting_id!)
                                     }
-                                    title={`Open source meeting: ${item.spec.source_meeting_title || item.spec.source_meeting_id}`}
-                                    aria-label={`Open source meeting: ${item.spec.source_meeting_title || item.spec.source_meeting_id}`}
+                                    title={t(
+                                      `Open source meeting: ${item.spec.source_meeting_title || item.spec.source_meeting_id}`,
+                                      `원본 회의록 열기: ${item.spec.source_meeting_title || item.spec.source_meeting_id}`
+                                    )}
+                                    aria-label={t(
+                                      `Open source meeting: ${item.spec.source_meeting_title || item.spec.source_meeting_id}`,
+                                      `원본 회의록 열기: ${item.spec.source_meeting_title || item.spec.source_meeting_id}`
+                                    )}
                                     className="p-0.5 text-blue-600 hover:bg-blue-50 rounded shrink-0 cursor-pointer"
                                   >
                                     <Mic className="w-3.5 h-3.5" />
@@ -1246,12 +1356,15 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                                   {statusKey === 'qa_passed' && (
                                     <CheckCircle2 className="w-3 h-3 shrink-0" />
                                   )}
-                                  <span>{statusMeta.label}</span>
+                                  <span>{statusLabel}</span>
                                 </span>
                                 {unresolvedCount > 0 && (
                                   <span
                                     className="inline-flex items-center gap-0.5 text-[11px] font-mono font-bold text-amber-700"
-                                    title={`${unresolvedCount} open review comment(s)`}
+                                    title={t(
+                                      `${unresolvedCount} open review comment(s)`,
+                                      `미해결 리뷰 코멘트 ${unresolvedCount}건`
+                                    )}
                                   >
                                     <MessageSquare className="w-3 h-3 shrink-0" />
                                     <span>{unresolvedCount}</span>
@@ -1271,8 +1384,11 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                                   type="button"
                                   onClick={() => onRequestCopySpec(item.spec)}
                                   className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded cursor-pointer"
-                                  title="Copy to another project"
-                                  aria-label={`Copy ${item.program_id} to another project`}
+                                  title={t('Copy to another project', '다른 프로젝트로 복사')}
+                                  aria-label={t(
+                                    `Copy ${item.program_id} to another project`,
+                                    `${item.program_id} 다른 프로젝트로 복사`
+                                  )}
                                 >
                                   <Copy className="w-3.5 h-3.5" />
                                 </button>
@@ -1281,8 +1397,11 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                                     type="button"
                                     onClick={() => handleDeleteItem(item)}
                                     className="p-1.5 text-rose-600 hover:bg-rose-50 border border-slate-200 rounded cursor-pointer"
-                                    title="Delete spec"
-                                    aria-label={`Delete ${item.program_id}`}
+                                    title={t('Delete spec', '사양서 삭제')}
+                                    aria-label={t(
+                                      `Delete ${item.program_id}`,
+                                      `${item.program_id} 삭제`
+                                    )}
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>

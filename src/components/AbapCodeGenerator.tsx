@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AbapSyntaxMode, ProgramSourceCodeTabs, ProgramSpec } from '../types/sap';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import {
   assembleUnifiedAbapProgram,
   extractPfStatusFunctionsTable,
@@ -41,15 +42,15 @@ interface AbapCodeGeneratorProps {
 type CodeViewTab = 'full' | 'program' | 'top' | 's01' | 'c01' | 'mod' | 'f01' | 'symbols';
 type EditableIncludeTab = 'program' | 'top' | 's01' | 'c01' | 'mod' | 'f01';
 
-const VIEW_TABS: { id: CodeViewTab; label: string; desc: string }[] = [
-  { id: 'full', label: 'Full Program', desc: 'Combined ABAP program source (read-only)' },
-  { id: 'program', label: 'Program', desc: 'Main report source (REPORT <prog>)' },
-  { id: 'top', label: 'TOP', desc: 'Global variables & type declarations (INCLUDE <prog>TOP)' },
-  { id: 's01', label: 'S01', desc: 'Selection screen definition (INCLUDE <prog>S01)' },
-  { id: 'c01', label: 'C01', desc: 'Local classes & event handlers (INCLUDE <prog>C01)' },
-  { id: 'mod', label: 'MOD', desc: 'PBO / PAI screen modules (INCLUDE <prog>MOD)' },
-  { id: 'f01', label: 'F01', desc: 'Subroutines, AUTHORITY-CHECK, F4 & FORM logic (INCLUDE <prog>F01)' },
-  { id: 'symbols', label: 'Text Symbols · PF-STATUS', desc: 'SE38 Text Elements & SE41 PF-STATUS reference' },
+const VIEW_TABS: { id: CodeViewTab; label: string; labelKo: string; desc: string; descKo: string }[] = [
+  { id: 'full', label: 'Full Program', labelKo: '전체 프로그램', desc: 'Combined ABAP program source (read-only)', descKo: '통합 ABAP 프로그램 소스 (읽기 전용)' },
+  { id: 'program', label: 'Program', labelKo: 'Program', desc: 'Main report source (REPORT <prog>)', descKo: '메인 리포트 소스 (REPORT <prog>)' },
+  { id: 'top', label: 'TOP', labelKo: 'TOP', desc: 'Global variables & type declarations (INCLUDE <prog>TOP)', descKo: '전역 변수 및 타입 선언 (INCLUDE <prog>TOP)' },
+  { id: 's01', label: 'S01', labelKo: 'S01', desc: 'Selection screen definition (INCLUDE <prog>S01)', descKo: '선택 화면 정의 (INCLUDE <prog>S01)' },
+  { id: 'c01', label: 'C01', labelKo: 'C01', desc: 'Local classes & event handlers (INCLUDE <prog>C01)', descKo: '로컬 클래스 및 이벤트 핸들러 (INCLUDE <prog>C01)' },
+  { id: 'mod', label: 'MOD', labelKo: 'MOD', desc: 'PBO / PAI screen modules (INCLUDE <prog>MOD)', descKo: 'PBO / PAI 화면 모듈 (INCLUDE <prog>MOD)' },
+  { id: 'f01', label: 'F01', labelKo: 'F01', desc: 'Subroutines, AUTHORITY-CHECK, F4 & FORM logic (INCLUDE <prog>F01)', descKo: '서브루틴, AUTHORITY-CHECK, F4 및 FORM 로직 (INCLUDE <prog>F01)' },
+  { id: 'symbols', label: 'Text Symbols · PF-STATUS', labelKo: 'Text Symbols · PF-STATUS', desc: 'SE38 Text Elements & SE41 PF-STATUS reference', descKo: 'SE38 텍스트 요소 및 SE41 PF-STATUS 참조' },
 ];
 
 const EDITABLE_TABS: EditableIncludeTab[] = ['program', 'top', 's01', 'c01', 'mod', 'f01'];
@@ -60,6 +61,7 @@ function isEditableIncludeTab(tab: CodeViewTab): tab is EditableIncludeTab {
 
 export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUpdateSpec }) => {
   const { projectRole } = useAuth();
+  const { t, lang } = useLanguage();
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<CodeViewTab>('full');
   const [editorMode, setEditorMode] = useState<'view' | 'edit'>('view');
@@ -74,11 +76,11 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
   const isReadOnly = !onUpdateSpec || isProtectedCommon || isApprovedLocked;
 
   const readOnlyReason = isProtectedCommon
-    ? 'COMM standard samples are read-only. Copy to a project to edit.'
+    ? t('COMM standard samples are read-only. Copy to a project to edit.', 'COMM 표준 샘플은 읽기 전용입니다. 프로젝트로 복사 후 수정하세요.')
     : isApprovedLocked
-    ? 'Only PM/ADMIN can edit source code for Approved specs.'
+    ? t('Only PM/ADMIN can edit source code for Approved specs.', '승인됨(Approved) 상태는 PM/ADMIN만 소스를 수정할 수 있습니다.')
     : !onUpdateSpec
-    ? 'Currently in view-only mode.'
+    ? t('Currently in view-only mode.', '현재 보기 전용 모드입니다.')
     : '';
 
   const projectStandards = useMemo(
@@ -151,7 +153,11 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
         abap_syntax_mode: mode,
       });
     }
-    showToast(mode === 'modern_740' ? 'ABAP 7.40+ syntax applied' : 'Classic ABAP syntax applied');
+    showToast(
+      mode === 'modern_740'
+        ? t('ABAP 7.40+ syntax applied', 'ABAP 7.40+ 문법 적용됨')
+        : t('Classic ABAP syntax applied', 'Classic ABAP 문법 적용됨')
+    );
   };
 
   const handleSelectTab = (tabId: CodeViewTab) => {
@@ -193,7 +199,12 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
 
     const merged = mergeUserLogicRegions(rawDefault, currentIncludeCodes[viewMode]);
     handleCodeChange(merged);
-    showToast(`${viewMode.toUpperCase()} synced (USER LOGIC preserved)`);
+    showToast(
+      t(
+        `${viewMode.toUpperCase()} synced (USER LOGIC preserved)`,
+        `${viewMode.toUpperCase()} 동기화 완료 (USER LOGIC 보존)`
+      )
+    );
   };
 
   const handleSyncAllTabs = () => {
@@ -203,7 +214,7 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
       ...spec,
       source_code: nextTabs,
     });
-    showToast('All 6 Includes synced (USER LOGIC preserved)');
+    showToast(t('All 6 Includes synced (USER LOGIC preserved)', '6개 Include 전체 동기화 완료 (USER LOGIC 보존)'));
   };
 
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
@@ -234,12 +245,12 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
 
   const isEditingCanvas = !isReadOnly && editorMode === 'edit' && isEditableIncludeTab(viewMode);
   const metaTooltip = [
-    `Sample Type ${spec.sample_type || '01'}`,
+    `${t('Sample Type', '샘플 유형')} ${spec.sample_type || '01'}`,
     `MSG: ${spec.message_class || projectStandards.message_class}`,
     `Package: ${projectStandards.dev_package || '$TMP'}`,
     `Include: ${projectStandards.common_top_include} / ${projectStandards.common_form_include}`,
-    customEditCount > 0 ? `${customEditCount} custom Include edits merged` : null,
-    'Auto-syncs LVC_T_SORT, AUTHORITY-CHECK, F4 & SY-BATCH',
+    customEditCount > 0 ? t(`${customEditCount} custom Include edits merged`, `사용자 편집 Include ${customEditCount}개 병합됨`) : null,
+    t('Auto-syncs LVC_T_SORT, AUTHORITY-CHECK, F4 & SY-BATCH', 'LVC_T_SORT, AUTHORITY-CHECK, F4, SY-BATCH 자동 반영'),
   ]
     .filter(Boolean)
     .join(' · ');
@@ -253,7 +264,7 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
             <Terminal className="w-4 h-4" />
           </div>
           <span className="text-xs font-bold text-white tracking-wide font-mono truncate">
-            ABAP Source Code · {spec.program_id}
+            {t('ABAP Source Code', 'ABAP 소스 코드')} · {spec.program_id}
           </span>
           <span
             className="text-slate-400 hover:text-slate-200 cursor-help inline-flex items-center shrink-0"
@@ -264,7 +275,7 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
           {customEditCount > 0 && (
             <span
               className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"
-              title={`${customEditCount} custom Include edits saved`}
+              title={t(`${customEditCount} custom Include edits saved`, `사용자 편집 Include ${customEditCount}개 저장됨`)}
             />
           )}
           {isReadOnly && (
@@ -273,7 +284,7 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
               title={readOnlyReason}
             >
               <Lock className="w-3 h-3" />
-              <span>Read-Only</span>
+              <span>{t('Read-Only', '읽기 전용')}</span>
             </span>
           )}
           {actionToast && (
@@ -320,10 +331,10 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
                 className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                   editorMode === 'view' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
                 }`}
-                title="View syntax-highlighted source"
+                title={t('View syntax-highlighted source', '구문 강조 소스 보기')}
               >
                 <Eye className="w-3 h-3" />
-                <span>View</span>
+                <span>{t('View', '보기')}</span>
               </button>
               <button
                 type="button"
@@ -331,10 +342,10 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
                 className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap ${
                   editorMode === 'edit' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
                 }`}
-                title="Edit individual Include source directly (preserves USER LOGIC)"
+                title={t('Edit individual Include source directly (preserves USER LOGIC)', '개별 Include 소스 직접 편집 (USER LOGIC 보존)')}
               >
                 <Edit3 className="w-3 h-3" />
-                <span>Edit</span>
+                <span>{t('Edit', '편집')}</span>
               </button>
             </div>
           )}
@@ -345,19 +356,19 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
                 type="button"
                 onClick={handleSyncActiveTab}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-semibold border border-slate-700 transition-colors cursor-pointer whitespace-nowrap"
-                title="Re-sync current Include from spec (preserves *&--- BEGIN USER LOGIC)"
+                title={t('Re-sync current Include from spec (preserves *&--- BEGIN USER LOGIC)', '현재 Include 사양 재동기화 (*&--- BEGIN USER LOGIC 보존)')}
               >
                 <RotateCcw className="w-3 h-3 text-amber-400" />
-                <span>Sync</span>
+                <span>{t('Sync', '동기화')}</span>
               </button>
               <button
                 type="button"
                 onClick={handleSyncAllTabs}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-semibold border border-slate-700 transition-colors cursor-pointer whitespace-nowrap"
-                title="Sync all 6 Includes (Program–F01) from spec (preserves *&--- BEGIN USER LOGIC)"
+                title={t('Sync all 6 Includes (Program–F01) from spec (preserves *&--- BEGIN USER LOGIC)', '6개 Include 전체 재동기화 (*&--- BEGIN USER LOGIC 보존)')}
               >
                 <RefreshCw className="w-3 h-3 text-blue-400" />
-                <span>Sync All</span>
+                <span>{t('Sync All', '전체 동기화')}</span>
               </button>
             </>
           )}
@@ -370,12 +381,12 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
             {copied ? (
               <>
                 <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400">Copied</span>
+                <span className="text-emerald-400">{t('Copied', '복사됨')}</span>
               </>
             ) : (
               <>
                 <Copy className="w-3.5 h-3.5" />
-                <span>Copy</span>
+                <span>{t('Copy', '복사')}</span>
               </>
             )}
           </button>
@@ -403,7 +414,7 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
                 key={tab.id}
                 type="button"
                 onClick={() => handleSelectTab(tab.id)}
-                title={tab.desc}
+                title={lang === 'ko' ? tab.descKo : tab.desc}
                 className={`px-2.5 py-1 rounded text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-colors cursor-pointer ${
                   active
                     ? 'bg-blue-600 text-white'
@@ -411,13 +422,13 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
                 }`}
               >
                 <FileCode2 className="w-3 h-3" />
-                <span>{tab.label}</span>
+                <span>{lang === 'ko' ? tab.labelKo : tab.label}</span>
                 {hasOverride && (
                   <span
                     className={`w-1.5 h-1.5 rounded-full ${
                       active ? 'bg-white' : 'bg-emerald-400'
                     }`}
-                    title="Custom edits saved"
+                    title={t('Custom edits saved', '사용자 편집본 저장됨')}
                   />
                 )}
               </button>
@@ -426,7 +437,7 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
         </div>
 
         <div className="text-[11px] font-mono text-slate-400 whitespace-nowrap tabular-nums">
-          {projectStandards.dev_package || '$TMP'} · {lines.length} lines
+          {projectStandards.dev_package || '$TMP'} · {lines.length} {t('lines', '줄')}
         </div>
       </div>
 
@@ -437,26 +448,26 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <h4 className="text-xs font-bold text-slate-900">
-                  ABAP Text Elements (TEXT-001~)
+                  {t('ABAP Text Elements (TEXT-001~)', 'ABAP 텍스트 요소 (TEXT-001~)')}
                 </h4>
                 <span
                   className="text-slate-400 hover:text-slate-700 cursor-help inline-flex"
-                  title="Text Symbols registered in SE38 → Goto → Text Elements"
+                  title={t('Text Symbols registered in SE38 → Goto → Text Elements', 'SE38 → Goto → Text Elements에 등록할 텍스트 심볼')}
                 >
                   <Info className="w-3.5 h-3.5" />
                 </span>
               </div>
               <span className="font-mono text-xs font-semibold text-slate-600 tabular-nums">
-                {textSymbols.length} items
+                {textSymbols.length} {t('items', '개')}
               </span>
             </div>
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
                 <tr>
-                  <th className="px-4 py-2.5">Symbol</th>
-                  <th className="px-4 py-2.5">Usage</th>
-                  <th className="px-4 py-2.5">Text</th>
-                  <th className="px-4 py-2.5 text-right">Max Len</th>
+                  <th className="px-4 py-2.5">{t('Symbol', '심볼')}</th>
+                  <th className="px-4 py-2.5">{t('Usage', '용도')}</th>
+                  <th className="px-4 py-2.5">{t('Text', '텍스트')}</th>
+                  <th className="px-4 py-2.5 text-right">{t('Max Len', '최대 길이')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -478,27 +489,27 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <h4 className="text-xs font-bold text-slate-900">
-                  GUI Status (PF-STATUS 0100) & ALV Function Codes
+                  {t('GUI Status (PF-STATUS 0100) & ALV Function Codes', 'GUI Status (PF-STATUS 0100) 및 ALV 기능 코드')}
                 </h4>
                 <span
                   className="text-slate-400 hover:text-slate-700 cursor-help inline-flex"
-                  title="Function codes handled in SE41 GUI Status and handle_user_command"
+                  title={t('Function codes handled in SE41 GUI Status and handle_user_command', 'SE41 GUI Status 및 handle_user_command에서 처리되는 기능 코드')}
                 >
                   <Info className="w-3.5 h-3.5" />
                 </span>
               </div>
               <span className="font-mono text-xs font-semibold text-slate-600 tabular-nums">
-                {pfFunctions.length} items
+                {pfFunctions.length} {t('items', '개')}
               </span>
             </div>
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold">
                 <tr>
-                  <th className="px-4 py-2.5">Function Code</th>
-                  <th className="px-4 py-2.5">Category</th>
-                  <th className="px-4 py-2.5">Button Label</th>
-                  <th className="px-4 py-2.5">Shortcut</th>
-                  <th className="px-4 py-2.5">Action</th>
+                  <th className="px-4 py-2.5">{t('Function Code', '기능 코드')}</th>
+                  <th className="px-4 py-2.5">{t('Category', '구분')}</th>
+                  <th className="px-4 py-2.5">{t('Button Label', '버튼명')}</th>
+                  <th className="px-4 py-2.5">{t('Shortcut', '단축키')}</th>
+                  <th className="px-4 py-2.5">{t('Action', '동작 설명')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -548,7 +559,10 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
                 value={displayedCode}
                 onChange={(e) => handleCodeChange(e.target.value)}
                 onScroll={handleScroll}
-                placeholder={`Enter INCLUDE ${(spec.program_id || 'ZRALV0010').toLowerCase()}${viewMode === 'program' ? '' : viewMode} source code...`}
+                placeholder={t(
+                  `Enter INCLUDE ${(spec.program_id || 'ZRALV0010').toLowerCase()}${viewMode === 'program' ? '' : viewMode} source code...`,
+                  `INCLUDE ${(spec.program_id || 'ZRALV0010').toLowerCase()}${viewMode === 'program' ? '' : viewMode} 소스를 입력하세요...`
+                )}
                 spellCheck={false}
                 className="absolute inset-0 w-full h-full p-3 bg-transparent text-transparent caret-slate-900 font-mono text-xs leading-5 resize-none focus:outline-none border-none selection:bg-blue-200/80 selection:text-blue-900 whitespace-pre overflow-auto"
                 style={{
@@ -580,11 +594,11 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
         <div className="flex items-center gap-2 font-mono truncate">
           <span>
             {viewMode === 'full'
-              ? 'Full Program (Program + TOP + S01 + C01 + MOD + F01)'
+              ? t('Full Program (Program + TOP + S01 + C01 + MOD + F01)', '전체 프로그램 (Program + TOP + S01 + C01 + MOD + F01)')
               : viewMode === 'program'
               ? `REPORT ${(spec.program_id || 'ZRALV0010').toLowerCase()}`
               : viewMode === 'symbols'
-              ? 'Text Elements · PF-STATUS Reference'
+              ? t('Text Elements · PF-STATUS Reference', '텍스트 요소 · PF-STATUS 참조')
               : `INCLUDE ${(spec.program_id || 'ZRALV0010').toLowerCase()}${viewMode}`}
           </span>
           <span className="text-slate-600">|</span>
@@ -592,8 +606,8 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
         </div>
         <div className="text-slate-500 text-[10px] shrink-0">
           {isEditingCanvas
-            ? '*&--- BEGIN USER LOGIC blocks are preserved on re-sync'
-            : `Target: ${spec.target_sap_release || 'SAP S/4HANA & ECC 6.0'}`}
+            ? t('*&--- BEGIN USER LOGIC blocks are preserved on re-sync', '*&--- BEGIN USER LOGIC 구간은 재동기화 시 보존됩니다')
+            : `${t('Target', '대상')}: ${spec.target_sap_release || 'SAP S/4HANA & ECC 6.0'}`}
         </div>
       </div>
     </div>

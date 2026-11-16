@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronDown, Lock } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export interface InspectableOption {
   value: string;
@@ -69,6 +70,7 @@ export const InspectableSelect: React.FC<InspectableSelectProps> = ({
   readOnlyHint,
   ...rest
 }) => {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{
     top: number;
@@ -155,8 +157,8 @@ export const InspectableSelect: React.FC<InspectableSelectProps> = ({
         ref={triggerRef}
         type="button"
         onClick={handleToggleOpen}
-        title={title || readOnlyHint || 'Inspect options (read-only)'}
-        aria-label={rest['aria-label'] || title || 'Inspect options (read-only)'}
+        title={title || readOnlyHint || t('Inspect options (read-only)', '옵션 보기 (읽기 전용)')}
+        aria-label={rest['aria-label'] || title || t('Inspect options (read-only)', '옵션 보기 (읽기 전용)')}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         className={`${className} flex items-center justify-between gap-1.5 text-left cursor-pointer`}
@@ -173,7 +175,7 @@ export const InspectableSelect: React.FC<InspectableSelectProps> = ({
         <div
           ref={listboxRef}
           role="listbox"
-          aria-label={rest['aria-label'] || title || 'Options (read-only)'}
+          aria-label={rest['aria-label'] || title || t('Options (read-only)', '옵션 목록 (읽기 전용)')}
           style={{
             position: 'fixed',
             top: menuPos.top,
@@ -186,7 +188,7 @@ export const InspectableSelect: React.FC<InspectableSelectProps> = ({
         >
           <div className="px-2.5 py-1 text-[10px] font-semibold text-slate-500 bg-slate-50 border-b border-slate-200 flex items-center gap-1">
             <Lock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-            <span>Read-only · Inspect only</span>
+            <span>{t('Read-only · Inspect only', '읽기 전용 · 조회만 가능')}</span>
           </div>
           {options.map((opt, idx) => {
             const isSelected = opt.value === stringValue;

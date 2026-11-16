@@ -3,6 +3,7 @@ import { Sparkles, Loader2 } from 'lucide-react';
 import { AlvToolbarButton, ProgramSpec } from '../types/sap';
 import { DEFAULT_ALV_TOOLBAR_BUTTONS } from '../data/defaultToolbarButtons';
 import { SapGuiTheme } from '../data/sapGuiThemes';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface AlvToolbarProps {
   spec: ProgramSpec;
@@ -343,6 +344,7 @@ export const AlvToolbar: React.FC<AlvToolbarProps> = ({
   onGenerateMockData,
   isGeneratingMockData,
 }) => {
+  const { t } = useLanguage();
   const buttons: AlvToolbarButton[] = (spec.toolbar_buttons && spec.toolbar_buttons.length > 0)
     ? spec.toolbar_buttons
     : DEFAULT_ALV_TOOLBAR_BUTTONS;
@@ -541,8 +543,8 @@ export const AlvToolbar: React.FC<AlvToolbarProps> = ({
         {/* Active text filter badge */}
         {filterQuery && (
           <div className="flex items-center gap-1 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded text-[10px] text-amber-900">
-            <span>Filter: "{filterQuery}"</span>
-            <button onClick={onClearFilter} title="Clear Filter" aria-label="Clear Filter" className="font-bold hover:text-red-700 cursor-pointer">×</button>
+            <span>{t('Filter:', '필터:')} "{filterQuery}"</span>
+            <button onClick={onClearFilter} title={t('Clear Filter', '필터 해제')} aria-label={t('Clear Filter', '필터 해제')} className="font-bold hover:text-red-700 cursor-pointer">×</button>
           </div>
         )}
 
@@ -551,7 +553,7 @@ export const AlvToolbar: React.FC<AlvToolbarProps> = ({
           <button
             onClick={onGenerateMockData}
             disabled={isGeneratingMockData}
-            title="Generate realistic SAP sample records with Gemini AI based on field catalog"
+            title={t('Generate realistic SAP sample records with Gemini AI based on field catalog', '필드 카탈로그 기반으로 Gemini AI SAP 샘플 데이터 생성')}
             className={`h-6 px-2 rounded flex items-center justify-center gap-1 shadow-2xs text-[10px] font-bold hover:brightness-105 active:scale-95 cursor-pointer disabled:opacity-40 transition-all select-none border ${
               theme === 'belize'
                 ? 'bg-[#354a5f] text-white border-[#273747]'
@@ -570,13 +572,13 @@ export const AlvToolbar: React.FC<AlvToolbarProps> = ({
             ) : (
               <Sparkles className={`w-3 h-3 ${theme === 'blue_crystal' ? 'text-amber-700' : 'text-amber-300'}`} />
             )}
-            <span>{isGeneratingMockData ? 'Generating...' : 'Mock Data'}</span>
+            <span>{isGeneratingMockData ? t('Generating...', '생성 중...') : t('Mock Data', '샘플 데이터')}</span>
           </button>
         )}
 
         {/* Dynamic Status (Sta.) Multi-Select Filter Buttons - Default: all selected */}
         {statusSummaries.length > 0 && (
-          <div className="flex items-center gap-1" title="Status Light Filter (Multi-select: click to toggle visibility)">
+          <div className="flex items-center gap-1" title={t('Status Light Filter (Multi-select: click to toggle visibility)', '상태 신호등 필터 (다중 선택: 클릭하여 표시/숨김 전환)')}>
             {statusSummaries.map((s) => {
               const isSelected = selectedStatusFilters.includes(s.statusKey);
               let btnClass = '';
@@ -606,8 +608,8 @@ export const AlvToolbar: React.FC<AlvToolbarProps> = ({
                 <button
                   key={s.statusKey}
                   onClick={() => onToggleStatusFilter(s.statusKey)}
-                  title={`Sta. [${s.label}] Filter: ${s.count} (${
-                    isSelected ? 'Visible — click to hide' : 'Hidden — click to show'
+                  title={`${t('Sta.', '상태')} [${s.label}] ${t('Filter:', '필터:')} ${s.count} (${
+                    isSelected ? t('Visible — click to hide', '표시 중 — 클릭하여 숨김') : t('Hidden — click to show', '숨김 — 클릭하여 표시')
                   })`}
                   className={`h-6 px-1.5 rounded flex items-center gap-1 border transition-all cursor-pointer shadow-2xs select-none ${btnClass}`}
                   style={btnStyle}

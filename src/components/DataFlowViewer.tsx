@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { ZoomIn, ZoomOut, RotateCcw, Download, Maximize2 } from 'lucide-react';
 import { DataFlowDiagramConfig, DataFlowStep, DataFlowDatabase } from '../types/sap';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface DataFlowViewerProps {
   config: DataFlowDiagramConfig;
@@ -17,6 +18,7 @@ export const DataFlowViewer: React.FC<DataFlowViewerProps> = ({
   className = '',
   readOnly = false,
 }) => {
+  const { t } = useLanguage();
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -30,24 +32,24 @@ export const DataFlowViewer: React.FC<DataFlowViewerProps> = ({
   const db1 = config.databases?.[0] || { name: 'T004\nT004T' };
   const db2 = config.databases?.[1] || { name: 'SETHEADER\nSETHEADERT\nSETNODE\nSETLEAF' };
 
-  // Step texts (match legacy Korean or English step_no/label, fallback to concise English)
-  const startStep = findStep('시작') || findStep('Start') || { label: 'Start', id: 'start' };
-  const s1 = findStep('1)') || { label: '1) Init', id: 's1' };
-  const s2 = findStep('2)') || { label: '2) Selection', id: 's2' };
-  const s3 = findStep('3)') || { label: '3) Validation', id: 's3' };
-  const decOpt = findStep('옵션') || findStep('처리 옵션') || findStep('Option') || { label: 'Process Option', id: 'decOpt' };
-  const s4 = findStep('4)') || { label: '4) Query', id: 's4' };
-  const s5 = findStep('5)') || { label: '5) Create', id: 's5' };
-  const s5_1 = findStep('5-1)') || { label: '5-1) Excel Upload', id: 's5_1' };
-  const s6 = findStep('6)') || { label: '6) Process Data', id: 's6' };
-  const s7 = findStep('7)') || { label: '7) Call Screen 100', id: 's7' };
-  const decCmd = findStep('명령') || findStep('사용자 명령') || findStep('Command') || { label: 'User Command', id: 'decCmd' };
-  const s7_1 = findStep('7-1)') || { label: '7-1) Exit', id: 's7_1' };
-  const s7_2 = findStep('7-2)') || { label: '7-2) Create', id: 's7_2' };
-  const decBapi = findStep('BAPI') || findStep('BAPI 실행') || { label: 'Run BAPI', id: 'decBapi' };
-  const s7_2_1 = findStep('7-2-1)') || { label: '7-2-1) Success', id: 's7_2_1' };
-  const s7_2_2 = findStep('7-2-2)') || { label: '7-2-2) Failed', id: 's7_2_2' };
-  const endStep = findStep('종료') || findStep('End') || { label: 'End', id: 'end' };
+  // Step texts (match legacy Korean or English step_no/label, fallback to concise localized text)
+  const startStep = findStep('시작') || findStep('Start') || { label: t('Start', '시작'), id: 'start' };
+  const s1 = findStep('1)') || { label: t('1) Init', '1) 초기화'), id: 's1' };
+  const s2 = findStep('2)') || { label: t('2) Selection', '2) 선택화면'), id: 's2' };
+  const s3 = findStep('3)') || { label: t('3) Validation', '3) 입력값 점검'), id: 's3' };
+  const decOpt = findStep('옵션') || findStep('처리 옵션') || findStep('Option') || { label: t('Process Option', '처리 옵션'), id: 'decOpt' };
+  const s4 = findStep('4)') || { label: t('4) Query', '4) 조회'), id: 's4' };
+  const s5 = findStep('5)') || { label: t('5) Create', '5) 생성'), id: 's5' };
+  const s5_1 = findStep('5-1)') || { label: t('5-1) Excel Upload', '5-1) 엑셀 업로드'), id: 's5_1' };
+  const s6 = findStep('6)') || { label: t('6) Process Data', '6) 데이터 가공'), id: 's6' };
+  const s7 = findStep('7)') || { label: t('7) Call Screen 100', '7) 100번 화면 호출'), id: 's7' };
+  const decCmd = findStep('명령') || findStep('사용자 명령') || findStep('Command') || { label: t('User Command', '사용자 명령'), id: 'decCmd' };
+  const s7_1 = findStep('7-1)') || { label: t('7-1) Exit', '7-1) 종료'), id: 's7_1' };
+  const s7_2 = findStep('7-2)') || { label: t('7-2) Create', '7-2) 생성'), id: 's7_2' };
+  const decBapi = findStep('BAPI') || findStep('BAPI 실행') || { label: t('Run BAPI', 'BAPI 실행'), id: 'decBapi' };
+  const s7_2_1 = findStep('7-2-1)') || { label: t('7-2-1) Success', '7-2-1) 생성 성공'), id: 's7_2_1' };
+  const s7_2_2 = findStep('7-2-2)') || { label: t('7-2-2) Failed', '7-2-2) 생성 실패'), id: 's7_2_2' };
+  const endStep = findStep('종료') || findStep('End') || { label: t('End', '종료'), id: 'end' };
 
   const handleDownloadSvg = () => {
     if (!svgRef.current) return;
@@ -76,15 +78,15 @@ export const DataFlowViewer: React.FC<DataFlowViewerProps> = ({
       <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs">
         <div className="flex items-center gap-1.5 font-semibold text-slate-700">
           <span className="w-2 h-2 rounded-full bg-blue-600" />
-          <span>{config.title || 'Data Flow Diagram'}</span>
+          <span>{config.title || t('Data Flow Diagram', '데이터 흐름도')}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setZoom((z) => Math.min(z + 0.15, 2.0))}
             className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer"
-            title="Zoom In"
-            aria-label="Zoom In"
+            title={t('Zoom In', '확대')}
+            aria-label={t('Zoom In', '확대')}
           >
             <ZoomIn className="w-3.5 h-3.5" />
           </button>
@@ -92,8 +94,8 @@ export const DataFlowViewer: React.FC<DataFlowViewerProps> = ({
             type="button"
             onClick={() => setZoom((z) => Math.max(z - 0.15, 0.6))}
             className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer"
-            title="Zoom Out"
-            aria-label="Zoom Out"
+            title={t('Zoom Out', '축소')}
+            aria-label={t('Zoom Out', '축소')}
           >
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
@@ -101,8 +103,8 @@ export const DataFlowViewer: React.FC<DataFlowViewerProps> = ({
             type="button"
             onClick={() => setZoom(1)}
             className="p-1 hover:bg-slate-200 rounded text-slate-600 text-[11px] px-1.5 cursor-pointer tabular-nums"
-            title="Reset 100%"
-            aria-label="Reset 100%"
+            title={t('Reset 100%', '100% 초기화')}
+            aria-label={t('Reset 100%', '100% 초기화')}
           >
             100%
           </button>
@@ -110,8 +112,8 @@ export const DataFlowViewer: React.FC<DataFlowViewerProps> = ({
             type="button"
             onClick={handleDownloadSvg}
             className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer"
-            title="Download SVG"
-            aria-label="Download SVG"
+            title={t('Download SVG', 'SVG 다운로드')}
+            aria-label={t('Download SVG', 'SVG 다운로드')}
           >
             <Download className="w-3.5 h-3.5" />
           </button>
@@ -119,8 +121,8 @@ export const DataFlowViewer: React.FC<DataFlowViewerProps> = ({
             type="button"
             onClick={() => setIsFullscreen(!isFullscreen)}
             className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer"
-            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-            aria-label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            title={isFullscreen ? t('Exit Fullscreen', '전체 화면 종료') : t('Fullscreen', '전체 화면')}
+            aria-label={isFullscreen ? t('Exit Fullscreen', '전체 화면 종료') : t('Fullscreen', '전체 화면')}
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>

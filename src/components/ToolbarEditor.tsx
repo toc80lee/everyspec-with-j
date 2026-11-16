@@ -33,6 +33,7 @@ import {
   isTruthy,
 } from '../utils/spreadsheetClipboard';
 import { InspectableSelect } from './InspectableSelect';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface ToolbarEditorProps {
   spec: ProgramSpec;
@@ -45,6 +46,7 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
   onChange,
   isReadOnly = false,
 }) => {
+  const { lang, t } = useLanguage();
   const buttons = spec.toolbar_buttons && spec.toolbar_buttons.length > 0
     ? spec.toolbar_buttons
     : DEFAULT_ALV_TOOLBAR_BUTTONS;
@@ -75,7 +77,12 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
     }));
 
     onChange([...standardButtons, ...loadedButtons]);
-    setVariantToast(`Loaded variant '${found.id}' (${found.name}) — ${loadedButtons.length} custom buttons.`);
+    setVariantToast(
+      t(
+        `Loaded variant '${found.id}' (${found.name}) — ${loadedButtons.length} custom buttons.`,
+        `변형 '${found.id}' (${found.name})을 불러왔습니다 — 사용자 정의 버튼 ${loadedButtons.length}개.`
+      )
+    );
     setTimeout(() => setVariantToast(null), 3000);
   };
 
@@ -102,13 +109,13 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
     setNewVariantId('');
     setNewVariantName('');
     setNewVariantDesc('');
-    setVariantToast(`Saved variant '${cleanId}'.`);
+    setVariantToast(t(`Saved variant '${cleanId}'.`, `변형 '${cleanId}'을 저장했습니다.`));
     setTimeout(() => setVariantToast(null), 3000);
   };
 
   const handleDeleteVariant = (id: string) => {
     if (isReadOnly) return;
-    if (window.confirm(`Delete variant '${id}'?`)) {
+    if (window.confirm(t(`Delete variant '${id}'?`, `변형 '${id}'을 삭제하시겠습니까?`))) {
       const updated = deleteUserToolbarVariant(id);
       setVariants(updated);
       if (selectedVariantId === id) setSelectedVariantId('');
@@ -359,7 +366,14 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
   // Reset to default 16 standard buttons
   const handleResetDefaults = () => {
     if (isReadOnly) return;
-    if (window.confirm('Reset standard toolbar to SAP standard 16 buttons (&EXPORT follows &PRINT)?')) {
+    if (
+      window.confirm(
+        t(
+          'Reset standard toolbar to SAP standard 16 buttons (&EXPORT follows &PRINT)?',
+          '표준 툴바를 SAP 표준 16개 버튼(&PRINT 다음에 &EXPORT 배치)으로 초기화하시겠습니까?'
+        )
+      )
+    ) {
       onChange([...DEFAULT_ALV_TOOLBAR_BUTTONS, ...customButtons]);
     }
   };
@@ -397,6 +411,21 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
       onKeyDown={handleKeyDown}
       className="space-y-3 font-sans focus:outline-none"
     >
+      {/* Top Header (Matched to Layout tab) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">
+            Configure the Toolbar
+          </h3>
+          <p className="text-xs text-slate-500">
+            {t(
+              'Configure standard ALV grid toolbar visibility and define custom application buttons, function codes, icons, and variants.',
+              '표준 ALV 그리드 툴바 표시 여부를 설정하고 사용자 정의 버튼, 펑션 코드, 아이콘 및 변형(Variant)을 구성합니다.'
+            )}
+          </p>
+        </div>
+      </div>
+
       {/* Tab Switcher: Standard vs Custom */}
       <div className="flex items-center justify-between gap-3 flex-wrap border-b border-slate-200 pb-2">
         <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200">
@@ -413,7 +442,7 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
             }`}
           >
             <Layers className="w-3.5 h-3.5 text-blue-600" />
-            <span>Standard ({standardButtons.length})</span>
+            <span>{t(`Standard (${standardButtons.length})`, `표준 (${standardButtons.length})`)}</span>
           </button>
           <button
             type="button"
@@ -428,7 +457,7 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Custom ({customButtons.length})</span>
+            <span>{t(`Custom (${customButtons.length})`, `사용자 정의 (${customButtons.length})`)}</span>
           </button>
         </div>
 
@@ -439,8 +468,8 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
               type="button"
               disabled={isReadOnly}
               onClick={handleAddButton}
-              title="Add Custom Button"
-              aria-label="Add Custom Button"
+              title={t('Add Custom Button', '사용자 정의 버튼 추가')}
+              aria-label={t('Add Custom Button', '사용자 정의 버튼 추가')}
               className="p-1.5 text-white bg-blue-700 hover:bg-blue-800 rounded transition-colors flex items-center justify-center shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
@@ -452,8 +481,8 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
               type="button"
               disabled={isReadOnly}
               onClick={handleResetDefaults}
-              title="Restore Standard Toolbar (16 Buttons)"
-              aria-label="Restore Standard Toolbar"
+              title={t('Restore Standard Toolbar (16 Buttons)', '표준 툴바 복원 (16개 버튼)')}
+              aria-label={t('Restore Standard Toolbar', '표준 툴바 복원')}
               className="p-1.5 text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded transition-colors flex items-center justify-center cursor-pointer shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <RotateCcw className="w-4 h-4 text-slate-500" />
@@ -465,8 +494,8 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
             onClick={handleCopyTable}
             disabled={displayedButtons.length === 0}
             className="p-1.5 text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded transition-colors flex items-center justify-center shadow-2xs cursor-pointer disabled:opacity-40"
-            title="Copy Table to Excel"
-            aria-label="Copy Table to Excel"
+            title={t('Copy Table to Excel', '엑셀용 테이블 복사')}
+            aria-label={t('Copy Table to Excel', '엑셀용 테이블 복사')}
           >
             <Copy className="w-4 h-4 text-slate-500" />
           </button>
@@ -487,7 +516,7 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-950">
               <Bookmark className="w-4 h-4 text-emerald-600" />
-              <span>Custom Variant:</span>
+              <span>{t('Custom Variant:', '사용자 변형(Variant):')}</span>
             </div>
 
             <div className="w-56 sm:w-64">
@@ -495,13 +524,13 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
                 isReadOnly={isReadOnly}
                 value={selectedVariantId}
                 onChange={(e) => handleSelectVariant(e.target.value)}
-                aria-label="Custom Toolbar Variant"
+                aria-label={t('Custom Toolbar Variant', '사용자 툴바 변형')}
                 className="w-full text-xs font-medium bg-white border border-emerald-300 rounded px-2.5 py-1 text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs cursor-pointer"
               >
-                <option value="" disabled>-- Select Variant --</option>
+                <option value="" disabled>{t('-- Select Variant --', '-- 변형 선택 --')}</option>
                 {variants.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.id} {v.name ? `— ${v.name}` : ''} {v.is_builtin ? '(Standard)' : '(Custom)'}
+                    {v.id} {v.name ? `— ${v.name}` : ''} {v.is_builtin ? t('(Standard)', '(기본)') : t('(Custom)', '(사용자)')}
                   </option>
                 ))}
               </InspectableSelect>
@@ -511,29 +540,32 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
               type="button"
               disabled={isReadOnly}
               onClick={() => !isReadOnly && setIsSaveModalOpen(true)}
-              title="Save current custom toolbar buttons as a new variant"
-              aria-label="Save Variant"
+              title={t('Save current custom toolbar buttons as a new variant', '현재 사용자 정의 버튼 구성을 새 변형으로 저장')}
+              aria-label={t('Save Variant', '변형 저장')}
               className="px-2.5 py-1 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white rounded transition-colors shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>Save Variant</span>
+              <span>{t('Save Variant', '변형 저장')}</span>
             </button>
 
             <button
               type="button"
               disabled={isReadOnly}
               onClick={() => !isReadOnly && setIsManageModalOpen(true)}
-              title="Manage saved variants"
-              aria-label="Manage Variants"
+              title={t('Manage saved variants', '저장된 변형 관리')}
+              aria-label={t('Manage Variants', '변형 관리')}
               className="px-2 py-1 text-xs font-medium bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded transition-colors shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Settings className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Manage</span>
+              <span>{t('Manage', '관리')}</span>
             </button>
           </div>
 
           <div className="text-[11px] text-emerald-800 font-medium">
-            Apply a preset custom toolbar set or save the current buttons as a new variant.
+            {t(
+              'Apply a preset custom toolbar set or save the current buttons as a new variant.',
+              '저장된 사용자 정의 툴바 프리셋을 불러오거나 현재 구성을 새 변형으로 저장하세요.'
+            )}
           </div>
         </div>
       )}
@@ -546,7 +578,7 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search button text / code..."
+            placeholder={t('Search button text / code...', '버튼 텍스트 / 코드 검색...')}
             className="text-xs pl-8 pr-2.5 py-1.5 bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-52 shadow-2xs"
           />
         </div>
@@ -554,11 +586,22 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
         <div className="text-xs text-slate-600">
           {activeTab === 'standard' ? (
             <span className="text-slate-500">
-              SAP Standard sequence fixed (&EXPORT placed right after &PRINT). Order editing disabled.
+              {t(
+                'SAP Standard sequence fixed (&EXPORT placed right after &PRINT). Order editing disabled.',
+                'SAP 표준 순서가 고정되어 있습니다 (&PRINT 다음에 &EXPORT 위치). 순서 편집은 불가합니다.'
+              )}
             </span>
           ) : (
             <span className="text-slate-500">
-              Click & drag to select cells. <strong>Ctrl+C</strong> copy and <strong>Ctrl+V</strong> paste supported.
+              {lang === 'ko' ? (
+                <>
+                  셀을 클릭 및 드래그하여 선택하세요. <strong>Ctrl+C</strong> 복사 및 <strong>Ctrl+V</strong> 붙여넣기를 지원합니다.
+                </>
+              ) : (
+                <>
+                  Click &amp; drag to select cells. <strong>Ctrl+C</strong> copy and <strong>Ctrl+V</strong> paste supported.
+                </>
+              )}
             </span>
           )}
         </div>
@@ -572,8 +615,8 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
         <table className="w-full text-xs text-left border-collapse font-sans">
           <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-semibold text-[11px] select-none">
             <tr>
-              {/* Row index corner cell */}
-              <th className="py-2 px-1 text-center w-8 bg-slate-200 border-r border-slate-300 text-slate-500 font-mono text-[10px]" title="Spreadsheet Row Number">
+              {/* Row index corner cell (Table headers kept strictly English per RFQ v1.29) */}
+              <th className="py-2 px-1 text-center w-8 bg-slate-200 border-r border-slate-300 text-slate-500 font-mono text-[10px]" title={t('Spreadsheet Row Number', '스프레드시트 행 번호')}>
                 fx
               </th>
               <th className="py-1 px-1 text-center w-14 border-r border-slate-200">
@@ -619,13 +662,19 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
                   <div className="flex flex-col items-center justify-center gap-1.5">
                     <p className="font-medium">
                       {activeTab === 'standard'
-                        ? 'No standard toolbar buttons found.'
-                        : 'No custom toolbar buttons created yet.'}
+                        ? t('No standard toolbar buttons found.', '표준 툴바 버튼이 없습니다.')
+                        : t('No custom toolbar buttons created yet.', '생성된 사용자 정의 버튼이 없습니다.')}
                     </p>
                     <p className="text-xs text-slate-400">
                       {activeTab === 'custom'
-                        ? 'Click "+ Add Custom Button" or paste multi-line rows with Ctrl+V.'
-                        : 'Click "Restore Standard Toolbar" to restore standard buttons.'}
+                        ? t(
+                            'Click "+ Add Custom Button" or paste multi-line rows with Ctrl+V.',
+                            '상단의 추가(+) 버튼을 클릭하거나 Ctrl+V로 여러 행을 붙여넣으세요.'
+                          )
+                        : t(
+                            'Click "Restore Standard Toolbar" to restore standard buttons.',
+                            '표준 툴바 복원 버튼을 클릭해 표준 버튼을 복원하세요.'
+                          )}
                     </p>
                   </div>
                 </td>
@@ -843,8 +892,8 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
                             type="button"
                             onClick={() => handleMoveCustom(idx, 'up')}
                             disabled={isReadOnly || idx === 0}
-                            title="Move up"
-                            aria-label="Move up"
+                            title={t('Move up', '위로 이동')}
+                            aria-label={t('Move up', '위로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
@@ -853,8 +902,8 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
                             type="button"
                             onClick={() => handleMoveCustom(idx, 'down')}
                             disabled={isReadOnly || idx === customButtons.length - 1}
-                            title="Move down"
-                            aria-label="Move down"
+                            title={t('Move down', '아래로 이동')}
+                            aria-label={t('Move down', '아래로 이동')}
                             className="p-1 text-slate-400 hover:text-blue-700 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
@@ -863,8 +912,8 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
                             type="button"
                             disabled={isReadOnly}
                             onClick={() => handleDeleteCustom(btn.id)}
-                            title="Delete button"
-                            aria-label="Delete button"
+                            title={t('Delete button', '버튼 삭제')}
+                            aria-label={t('Delete button', '버튼 삭제')}
                             className="p-1 text-slate-400 hover:text-red-600 cursor-pointer transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -883,10 +932,21 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
       {/* Guide footer */}
       <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-xs flex items-center justify-between flex-wrap gap-2">
         <div>
-          <strong>Spreadsheet Tips:</strong> Click on any cell or drag across cells to select. Paste (<strong>Ctrl+V</strong>) directly to update. If pasted data contains more lines, new custom lines are automatically created.
+          {lang === 'ko' ? (
+            <>
+              <strong>스프레드시트 팁:</strong> 셀을 클릭하거나 드래그해 선택하고 <strong>Ctrl+V</strong>로 바로 붙여넣으세요. 붙여넣은 행 수가 많으면 사용자 정의 버튼 행이 자동 추가됩니다.
+            </>
+          ) : (
+            <>
+              <strong>Spreadsheet Tips:</strong> Click on any cell or drag across cells to select. Paste (<strong>Ctrl+V</strong>) directly to update. If pasted data contains more lines, new custom lines are automatically created.
+            </>
+          )}
         </div>
         <span className="font-mono text-[11px] text-slate-700 font-semibold bg-white px-2 py-0.5 rounded border border-slate-200">
-          Showing {displayedButtons.length} / Total {buttons.length} Buttons
+          {t(
+            `Showing ${displayedButtons.length} / Total ${buttons.length} Buttons`,
+            `표시 ${displayedButtons.length} / 전체 ${buttons.length}개 버튼`
+          )}
         </span>
       </div>
 
@@ -897,13 +957,15 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
               <div className="flex items-center gap-2">
                 <Bookmark className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-sm font-bold text-slate-900">Save Custom Toolbar Variant</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {t('Save Custom Toolbar Variant', '사용자 툴바 변형 저장')}
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsSaveModalOpen(false)}
-                aria-label="Close"
-                title="Close"
+                aria-label={t('Close', '닫기')}
+                title={t('Close', '닫기')}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -913,46 +975,56 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
             <form onSubmit={handleSaveVariant} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Variant ID <span className="text-rose-500">*</span>
+                  {t('Variant ID', '변형 ID')} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={newVariantId}
                   onChange={(e) => setNewVariantId(e.target.value.toUpperCase())}
-                  placeholder="e.g., /SD_DISPATCH, ZVAR_SALES_01"
+                  placeholder={t('e.g., /SD_DISPATCH, ZVAR_SALES_01', '예: /SD_DISPATCH, ZVAR_SALES_01')}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold uppercase focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
-                <p className="text-[10px] text-slate-500 mt-0.5">Recommended: Uppercase letters, numbers, '/' or '_'</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {t("Recommended: Uppercase letters, numbers, '/' or '_'", "권장: 영문 대문자, 숫자, '/' 또는 '_'")}
+                </p>
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Variant Name <span className="text-rose-500">*</span>
+                  {t('Variant Name', '변형 이름')} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={newVariantName}
                   onChange={(e) => setNewVariantName(e.target.value)}
-                  placeholder="e.g., Sales Dispatch & Billing Actions"
+                  placeholder={t('e.g., Sales Dispatch & Billing Actions', '예: 출하 및 청구 처리 툴바')}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Description</label>
+                <label className="block font-bold text-slate-700 mb-1">{t('Description', '설명')}</label>
                 <textarea
                   rows={2}
                   value={newVariantDesc}
                   onChange={(e) => setNewVariantDesc(e.target.value)}
-                  placeholder="Describe the business purpose and actions in this toolbar set"
+                  placeholder={t('Describe the business purpose and actions in this toolbar set', '이 툴바 세트의 업무 용도와 포함된 기능을 입력하세요')}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
 
               <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 text-emerald-900 text-xs">
-                <strong className="font-bold">{customButtons.length}</strong> custom button(s) will be saved under this variant ID.
+                {lang === 'ko' ? (
+                  <>
+                    <strong className="font-bold">{customButtons.length}</strong>개의 사용자 정의 버튼이 이 변형 ID로 저장됩니다.
+                  </>
+                ) : (
+                  <>
+                    <strong className="font-bold">{customButtons.length}</strong> custom button(s) will be saved under this variant ID.
+                  </>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
@@ -961,13 +1033,13 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
                   onClick={() => setIsSaveModalOpen(false)}
                   className="px-3.5 py-1.5 border border-slate-300 rounded text-slate-700 hover:bg-slate-100 font-medium cursor-pointer"
                 >
-                  Cancel
+                  {t('Cancel', '취소')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold transition-colors shadow-xs cursor-pointer"
                 >
-                  Save
+                  {t('Save', '저장')}
                 </button>
               </div>
             </form>
@@ -983,15 +1055,19 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
               <div className="flex items-center gap-2">
                 <Settings className="w-5 h-5 text-emerald-600" />
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Manage Custom Toolbar Variants</h3>
-                  <p className="text-[11px] text-slate-500">View, load, or delete saved toolbar variants</p>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {t('Manage Custom Toolbar Variants', '사용자 툴바 변형 관리')}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {t('View, load, or delete saved toolbar variants', '저장된 툴바 변형을 조회, 적용 또는 삭제합니다')}
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsManageModalOpen(false)}
-                aria-label="Close"
-                title="Close"
+                aria-label={t('Close', '닫기')}
+                title={t('Close', '닫기')}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1002,11 +1078,11 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
               <table className="w-full text-xs text-left border-collapse">
                 <thead className="bg-slate-100 text-slate-700 font-semibold sticky top-0 border-b border-slate-200">
                   <tr>
-                    <th className="py-2 px-3 font-mono">VARIANT ID</th>
-                    <th className="py-2 px-3 min-w-44">NAME</th>
-                    <th className="py-2 px-2 text-center w-20">TYPE</th>
-                    <th className="py-2 px-2 text-center w-16">BUTTONS</th>
-                    <th className="py-2 px-3 text-center w-28">ACTIONS</th>
+                    <th className="py-2 px-3 font-mono">{t('VARIANT ID', '변형 ID')}</th>
+                    <th className="py-2 px-3 min-w-44">{t('NAME', '이름')}</th>
+                    <th className="py-2 px-2 text-center w-20">{t('TYPE', '구분')}</th>
+                    <th className="py-2 px-2 text-center w-16">{t('BUTTONS', '버튼 수')}</th>
+                    <th className="py-2 px-3 text-center w-28">{t('ACTIONS', '작업')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1027,11 +1103,11 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
                         <td className="py-2 px-2 text-center">
                           {v.is_builtin ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 font-bold border border-slate-200">
-                              Standard
+                              {t('Standard', '기본')}
                             </span>
                           ) : (
                             <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
-                              Custom
+                              {t('Custom', '사용자')}
                             </span>
                           )}
                         </td>
@@ -1048,15 +1124,15 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
                               }}
                               className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold cursor-pointer transition-colors"
                             >
-                              Load
+                              {t('Load', '적용')}
                             </button>
                             {!v.is_builtin && (
                               <button
                                 type="button"
                                 onClick={() => handleDeleteVariant(v.id)}
                                 className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
-                                title="Delete Variant"
-                                aria-label="Delete Variant"
+                                title={t('Delete Variant', '변형 삭제')}
+                                aria-label={t('Delete Variant', '변형 삭제')}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1071,13 +1147,15 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
             </div>
 
             <div className="flex items-center justify-between pt-3 border-t border-slate-200 mt-3 text-xs">
-              <span className="text-slate-500">Total {variants.length} Custom Toolbar Variant(s)</span>
+              <span className="text-slate-500">
+                {t(`Total ${variants.length} Custom Toolbar Variant(s)`, `총 ${variants.length}개의 사용자 툴바 변형`)}
+              </span>
               <button
                 type="button"
                 onClick={() => setIsManageModalOpen(false)}
                 className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-bold cursor-pointer"
               >
-                Close
+                {t('Close', '닫기')}
               </button>
             </div>
           </div>

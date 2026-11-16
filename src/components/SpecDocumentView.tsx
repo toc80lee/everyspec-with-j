@@ -34,6 +34,7 @@ import {
 import { getSapAlvCellStyle } from './SapGuiMockup';
 import { validateSapTCode } from '../utils/sapValidation';
 import { PdfExportModal } from './PdfExportModal';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SpecDocumentViewProps {
   spec: ProgramSpec;
@@ -46,6 +47,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
   onImportSpec,
   onReturnToWorkspace,
 }) => {
+  const { t } = useLanguage();
   // Document customization & display toggles
   const [includeApproval, setIncludeApproval] = useState(true);
   const [includeRevision, setIncludeRevision] = useState(true);
@@ -73,45 +75,45 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
     const status = spec.status || 'draft';
     switch (status) {
       case 'in_review':
-        return { label: 'In Review', badgeClass: 'bg-amber-50 text-amber-800 border-amber-300', cellText: 'Pending', cellColor: 'text-amber-700' };
+        return { label: t('In Review', '검토 중'), badgeClass: 'bg-amber-50 text-amber-800 border-amber-300', cellText: t('Pending', '대기'), cellColor: 'text-amber-700' };
       case 'approved':
-        return { label: 'Approved', badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300', cellText: 'Approved', cellColor: 'text-emerald-700' };
+        return { label: t('Approved', '승인 완료'), badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300', cellText: t('Approved', '승인'), cellColor: 'text-emerald-700' };
       case 'developed':
-        return { label: 'Developed', badgeClass: 'bg-indigo-50 text-indigo-800 border-indigo-300', cellText: 'Developed', cellColor: 'text-indigo-700' };
+        return { label: t('Developed', '개발 완료'), badgeClass: 'bg-indigo-50 text-indigo-800 border-indigo-300', cellText: t('Developed', '개발완료'), cellColor: 'text-indigo-700' };
       case 'qa_passed':
-        return { label: 'QA Passed', badgeClass: 'bg-teal-50 text-teal-800 border-teal-300', cellText: 'QA Passed', cellColor: 'text-teal-700' };
+        return { label: t('QA Passed', 'QA 통과'), badgeClass: 'bg-teal-50 text-teal-800 border-teal-300', cellText: t('QA Passed', 'QA통과'), cellColor: 'text-teal-700' };
       default:
-        return { label: 'Draft', badgeClass: 'bg-slate-100 text-slate-700 border-slate-300', cellText: 'Draft', cellColor: 'text-slate-500' };
+        return { label: t('Draft', '작성 중'), badgeClass: 'bg-slate-100 text-slate-700 border-slate-300', cellText: t('Draft', '작성중'), cellColor: 'text-slate-500' };
     }
-  }, [spec.status]);
+  }, [spec.status, t]);
 
   // Page titles for quick jump navigation
   const pageDefinitions = useMemo(() => {
     if (isMasterDetail) {
       return [
-        { page: 1, title: 'Cover & Overview', sub: 'Basic Info · Approval · Revision' },
-        { page: 2, title: 'Selection Screen & Header ALV', sub: 'Selection Screen · Header FCAT' },
-        { page: 3, title: 'Item ALV Grid Spec', sub: 'Item Grid FCAT · Foreign Key (VBELN)' },
-        { page: 4, title: 'Logic, Flow & Governance', sub: 'Extraction Logic · Authority · SE91' },
-        { page: 5, title: 'Test Cases & Mock Preview', sub: 'Test Scenarios · ALV Mock Data' },
+        { page: 1, title: t('Cover & Overview', '표지 및 개요'), sub: t('Basic Info · Approval · Revision', '기본정보 · 결재선 · 개정이력') },
+        { page: 2, title: t('Selection Screen & Header ALV', '선택화면 및 헤더 ALV'), sub: t('Selection Screen · Header FCAT', '조회조건 · Header FCAT') },
+        { page: 3, title: t('Item ALV Grid Spec', '아이템 ALV 사양'), sub: t('Item Grid FCAT · Foreign Key (VBELN)', 'Item Grid FCAT · 외래키') },
+        { page: 4, title: t('Logic, Flow & Governance', '로직 · 흐름도 · 거버넌스'), sub: t('Extraction Logic · Authority · SE91', '추출 로직 · 권한 · 메시지') },
+        { page: 5, title: t('Test Cases & Mock Preview', '테스트 및 목업 미리보기'), sub: t('Test Scenarios · ALV Mock Data', '테스트 시나리오 · ALV 목업') },
       ];
     }
     if (isTreeWithDetail) {
       return [
-        { page: 1, title: 'Cover & Overview', sub: 'Basic Info · Approval · Revision' },
-        { page: 2, title: 'Selection & Tree Hierarchy', sub: 'Selection Screen · Tree FCAT · Config' },
-        { page: 3, title: 'Detail ALV Grid Spec', sub: 'Detail Schedule Grid FCAT · Toolbar' },
-        { page: 4, title: 'Logic, Flow & Governance', sub: 'Extraction Logic · Authority · SE91' },
-        { page: 5, title: 'Test Cases & Mock Preview', sub: 'Test Scenarios · ALV Mock Data' },
+        { page: 1, title: t('Cover & Overview', '표지 및 개요'), sub: t('Basic Info · Approval · Revision', '기본정보 · 결재선 · 개정이력') },
+        { page: 2, title: t('Selection & Tree Hierarchy', '선택화면 및 트리 계층'), sub: t('Selection Screen · Tree FCAT · Config', '조회조건 · 트리 FCAT · 설정') },
+        { page: 3, title: t('Detail ALV Grid Spec', '상세 ALV 그리드 사양'), sub: t('Detail Schedule Grid FCAT · Toolbar', '상세 그리드 FCAT · 툴바') },
+        { page: 4, title: t('Logic, Flow & Governance', '로직 · 흐름도 · 거버넌스'), sub: t('Extraction Logic · Authority · SE91', '추출 로직 · 권한 · 메시지') },
+        { page: 5, title: t('Test Cases & Mock Preview', '테스트 및 목업 미리보기'), sub: t('Test Scenarios · ALV Mock Data', '테스트 시나리오 · ALV 목업') },
       ];
     }
     return [
-      { page: 1, title: 'Cover & Overview', sub: 'Basic Info · Approval · Revision' },
-      { page: 2, title: 'Screen & Field Catalog', sub: 'Selection Screen · ALV FCAT · Toolbar' },
-      { page: 3, title: 'Logic, Flow & Governance', sub: 'Extraction Logic · Authority · SE91' },
-      { page: 4, title: 'Test Cases & Mock Preview', sub: 'Test Scenarios · ALV Mock Data' },
+      { page: 1, title: t('Cover & Overview', '표지 및 개요'), sub: t('Basic Info · Approval · Revision', '기본정보 · 결재선 · 개정이력') },
+      { page: 2, title: t('Screen & Field Catalog', '화면 및 필드 카탈로그'), sub: t('Selection Screen · ALV FCAT · Toolbar', '조회조건 · ALV FCAT · 툴바') },
+      { page: 3, title: t('Logic, Flow & Governance', '로직 · 흐름도 · 거버넌스'), sub: t('Extraction Logic · Authority · SE91', '추출 로직 · 권한 · 메시지') },
+      { page: 4, title: t('Test Cases & Mock Preview', '테스트 및 목업 미리보기'), sub: t('Test Scenarios · ALV Mock Data', '테스트 시나리오 · ALV 목업') },
     ];
-  }, [isMasterDetail, isTreeWithDetail]);
+  }, [isMasterDetail, isTreeWithDetail, t]);
 
   // Keyboard navigation for page flipping (ArrowLeft / ArrowRight / PageUp / PageDown)
   useEffect(() => {
@@ -195,7 +197,11 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
 
   const renderPrintMarkdown = (content: string) => {
     if (!content || !content.trim()) {
-      return <p className="text-slate-400 italic text-xs">No detailed specification provided.</p>;
+      return (
+        <p className="text-slate-400 italic text-xs">
+          {t('No detailed specification provided.', '작성된 상세 사양이 없습니다.')}
+        </p>
+      );
     }
 
     const lines = content.split('\n');
@@ -284,11 +290,11 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
     setIsExportingDocx(true);
     try {
       const filename = await exportSpecificationDocx(spec);
-      setCopiedNotice(`Exported Word (.docx): ${filename}`);
+      setCopiedNotice(t(`Exported Word (.docx): ${filename}`, `Word (.docx) 내보내기 완료: ${filename}`));
       setTimeout(() => setCopiedNotice(null), 4000);
     } catch (err) {
       console.error('DOCX export error:', err);
-      setCopiedNotice('Failed to generate Word (.docx) file.');
+      setCopiedNotice(t('Failed to generate Word (.docx) file.', 'Word (.docx) 파일 생성에 실패했습니다.'));
       setTimeout(() => setCopiedNotice(null), 4000);
     } finally {
       setIsExportingDocx(false);
@@ -299,11 +305,11 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
   const handleDownloadXlsx = () => {
     try {
       const filename = exportSpecificationXlsx(spec);
-      setCopiedNotice(`Exported Excel (.xlsx): ${filename}`);
+      setCopiedNotice(t(`Exported Excel (.xlsx): ${filename}`, `Excel (.xlsx) 내보내기 완료: ${filename}`));
       setTimeout(() => setCopiedNotice(null), 4000);
     } catch (err) {
       console.error('XLSX export error:', err);
-      setCopiedNotice('Failed to generate Excel (.xlsx) file.');
+      setCopiedNotice(t('Failed to generate Excel (.xlsx) file.', 'Excel (.xlsx) 파일 생성에 실패했습니다.'));
       setTimeout(() => setCopiedNotice(null), 4000);
     }
   };
@@ -324,7 +330,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
         const parsed = JSON.parse(event.target?.result as string);
         if (parsed.program_id && parsed.field_catalog) {
           onImportSpec(parsed);
-          setCopiedNotice('Imported specification JSON successfully.');
+          setCopiedNotice(t('Imported specification JSON successfully.', '사양서 JSON 가져오기가 완료되었습니다.'));
           setTimeout(() => setCopiedNotice(null), 4000);
         }
       } catch (err) {
@@ -395,11 +401,11 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
             <button
               onClick={onReturnToWorkspace}
               className="px-2.5 py-1 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Back to Workspace"
-              aria-label="Back to Workspace"
+              title={t('Back to Workspace', '작업실로 돌아가기')}
+              aria-label={t('Back to Workspace', '작업실로 돌아가기')}
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Dual View</span>
+              <span>{t('Dual View', '작업실')}</span>
             </button>
           )}
 
@@ -409,7 +415,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
             </span>
             <div>
               <h2 className="text-xs font-bold text-white flex items-center gap-2">
-                <span>SAP Functional Specification</span>
+                <span>{t('SAP Functional Specification', 'SAP 기능 개발 사양서')}</span>
                 <span className="text-[11px] font-mono text-slate-400">[{spec.program_id}]</span>
               </h2>
             </div>
@@ -420,7 +426,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {/* Section Visibility Toggles */}
           <div className="hidden 2xl:flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700/60 text-[11px] text-slate-300">
-            <span className="text-slate-400 font-medium">Include:</span>
+            <span className="text-slate-400 font-medium">{t('Include:', '포함 항목:')}</span>
             <label className="flex items-center gap-1 cursor-pointer hover:text-white">
               <input
                 type="checkbox"
@@ -428,7 +434,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                 onChange={(e) => setIncludeApproval(e.target.checked)}
                 className="w-3 h-3 accent-blue-600 rounded"
               />
-              <span>Approval</span>
+              <span>{t('Approval', '결재선')}</span>
             </label>
             <label className="flex items-center gap-1 cursor-pointer hover:text-white">
               <input
@@ -437,7 +443,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                 onChange={(e) => setIncludeRevision(e.target.checked)}
                 className="w-3 h-3 accent-blue-600 rounded"
               />
-              <span>Revision</span>
+              <span>{t('Revision', '개정이력')}</span>
             </label>
             <label className="flex items-center gap-1 cursor-pointer hover:text-white">
               <input
@@ -446,7 +452,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                 onChange={(e) => setIncludeDataFlow(e.target.checked)}
                 className="w-3 h-3 accent-blue-600 rounded"
               />
-              <span>Flowchart</span>
+              <span>{t('Flowchart', '흐름도')}</span>
             </label>
             <label className="flex items-center gap-1 cursor-pointer hover:text-white">
               <input
@@ -455,7 +461,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                 onChange={(e) => setIncludeMockSnapshot(e.target.checked)}
                 className="w-3 h-3 accent-blue-600 rounded"
               />
-              <span>Mock Data</span>
+              <span>{t('Mock Data', '목업 데이터')}</span>
             </label>
           </div>
 
@@ -463,22 +469,22 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
           <button
             onClick={() => setIsPdfModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-900/40 cursor-pointer border border-blue-400/30"
-            title="Export PDF (jsPDF)"
-            aria-label="Export PDF (jsPDF)"
+            title={t('Export PDF (jsPDF)', 'PDF 내보내기 (jsPDF)')}
+            aria-label={t('Export PDF (jsPDF)', 'PDF 내보내기 (jsPDF)')}
           >
             <FileDown className="w-3.5 h-3.5 text-blue-200" />
-            <span>Export PDF</span>
+            <span>{t('Export PDF', 'PDF 내보내기')}</span>
           </button>
 
           {/* Secondary Action: Browser Print */}
           <button
             onClick={handlePrint}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
-            title="Print (Ctrl+P)"
-            aria-label="Print"
+            title={t('Print (Ctrl+P)', '인쇄 (Ctrl+P)')}
+            aria-label={t('Print', '인쇄')}
           >
             <Printer className="w-3.5 h-3.5 text-slate-400" />
-            <span>Print</span>
+            <span>{t('Print', '인쇄')}</span>
           </button>
 
           {/* Word (.docx) Export */}
@@ -486,8 +492,8 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
             onClick={handleDownloadDocx}
             disabled={isExportingDocx}
             className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-950/50 hover:bg-sky-900/60 text-sky-200 rounded text-xs font-medium border border-sky-700/50 transition-colors cursor-pointer disabled:opacity-50"
-            title="Export Word (.docx)"
-            aria-label="Export Word (.docx)"
+            title={t('Export Word (.docx)', 'Word 내보내기 (.docx)')}
+            aria-label={t('Export Word (.docx)', 'Word 내보내기 (.docx)')}
           >
             {isExportingDocx ? (
               <Loader2 className="w-3.5 h-3.5 text-sky-300 animate-spin" />
@@ -501,8 +507,8 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
           <button
             onClick={handleDownloadXlsx}
             className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-950/50 hover:bg-teal-900/60 text-teal-200 rounded text-xs font-medium border border-teal-700/50 transition-colors cursor-pointer"
-            title="Export Excel (.xlsx)"
-            aria-label="Export Excel (.xlsx)"
+            title={t('Export Excel (.xlsx)', 'Excel 내보내기 (.xlsx)')}
+            aria-label={t('Export Excel (.xlsx)', 'Excel 내보내기 (.xlsx)')}
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-teal-300" />
             <span className="hidden sm:inline">.xlsx</span>
@@ -512,8 +518,8 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
           <button
             onClick={handleDownloadMarkdown}
             className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-medium border border-slate-700 transition-colors cursor-pointer"
-            title="Export Markdown (.md)"
-            aria-label="Export Markdown (.md)"
+            title={t('Export Markdown (.md)', 'Markdown 내보내기 (.md)')}
+            aria-label={t('Export Markdown (.md)', 'Markdown 내보내기 (.md)')}
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
             <span className="hidden sm:inline">MD</span>
@@ -523,8 +529,8 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
           <button
             onClick={handleDownloadCsv}
             className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded text-xs font-medium border border-emerald-700/50 transition-colors cursor-pointer"
-            title="Export Field Catalog (.csv)"
-            aria-label="Export Field Catalog (.csv)"
+            title={t('Export Field Catalog (.csv)', '필드 카탈로그 CSV 내보내기')}
+            aria-label={t('Export Field Catalog (.csv)', '필드 카탈로그 CSV 내보내기')}
           >
             <Download className="w-3.5 h-3.5 text-emerald-400" />
             <span className="hidden sm:inline">CSV</span>
@@ -533,8 +539,8 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
           {/* JSON Export */}
           <button
             onClick={handleExportJson}
-            title="Export JSON"
-            aria-label="Export JSON"
+            title={t('Export JSON', 'JSON 내보내기')}
+            aria-label={t('Export JSON', 'JSON 내보내기')}
             className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded cursor-pointer"
           >
             <Share2 className="w-3.5 h-3.5" />
@@ -543,8 +549,8 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
           {/* JSON Import */}
           {onImportSpec && (
             <label
-              title="Import JSON"
-              aria-label="Import JSON"
+              title={t('Import JSON', 'JSON 가져오기')}
+              aria-label={t('Import JSON', 'JSON 가져오기')}
               className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5" />
@@ -573,10 +579,10 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Single-page flip view"
+              title={t('Single-page flip view', '한 페이지씩 넘겨보기')}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Page Flip</span>
+              <span>{t('Page Flip', '페이지 넘김')}</span>
             </button>
             <button
               onClick={() => setViewMode('all')}
@@ -585,15 +591,15 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Continuous A4 page scroll"
+              title={t('Continuous A4 page scroll', '전체 A4 페이지 연속 보기')}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>All Pages</span>
+              <span>{t('All Pages', '전체 보기')}</span>
             </button>
           </div>
 
           <span className="hidden lg:inline text-[11px] text-slate-400 font-mono">
-            Keys: <kbd className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">←</kbd>{' '}
+            {t('Keys:', '단축키:')} <kbd className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">←</kbd>{' '}
             <kbd className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">→</kbd>
           </span>
         </div>
@@ -609,11 +615,11 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                 ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-800'
                 : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 hover:border-slate-500'
             }`}
-            title="Previous Page (←)"
-            aria-label="Previous Page"
+            title={t('Previous Page (←)', '이전 페이지 (←)')}
+            aria-label={t('Previous Page', '이전 페이지')}
           >
             <ChevronLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Prev</span>
+            <span className="hidden sm:inline">{t('Prev', '이전')}</span>
           </button>
 
           {/* Quick Page Jump Buttons */}
@@ -635,7 +641,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                       ? 'bg-blue-600 text-white shadow-xs ring-1 ring-blue-400'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                   }`}
-                  title={`Page ${pDef.page}: ${pDef.title} (${pDef.sub})`}
+                  title={`${t('Page', '페이지')} ${pDef.page}: ${pDef.title} (${pDef.sub})`}
                 >
                   <span>{pDef.page}</span>
                   <span className="hidden xl:inline font-sans font-normal text-[10px] opacity-80">
@@ -655,10 +661,10 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                 ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-800'
                 : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 hover:border-slate-500'
             }`}
-            title="Next Page (→)"
-            aria-label="Next Page"
+            title={t('Next Page (→)', '다음 페이지 (→)')}
+            aria-label={t('Next Page', '다음 페이지')}
           >
-            <span className="hidden sm:inline">Next</span>
+            <span className="hidden sm:inline">{t('Next', '다음')}</span>
             <ChevronRight className="w-4 h-4" />
           </button>
 
@@ -674,8 +680,8 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
             <button
               onClick={() => setZoomScale((z) => Math.max(0.7, Number((z - 0.1).toFixed(1))))}
               className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white cursor-pointer"
-              title="Zoom Out"
-              aria-label="Zoom Out"
+              title={t('Zoom Out', '축소')}
+              aria-label={t('Zoom Out', '축소')}
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
@@ -685,16 +691,16 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
             <button
               onClick={() => setZoomScale((z) => Math.min(1.4, Number((z + 0.1).toFixed(1))))}
               className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white cursor-pointer"
-              title="Zoom In"
-              aria-label="Zoom In"
+              title={t('Zoom In', '확대')}
+              aria-label={t('Zoom In', '확대')}
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setZoomScale(1.0)}
               className="px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 rounded font-mono cursor-pointer tabular-nums"
-              title="Reset 100%"
-              aria-label="Reset 100%"
+              title={t('Reset 100%', '100% 초기화')}
+              aria-label={t('Reset 100%', '100% 초기화')}
             >
               100%
             </button>
@@ -761,11 +767,13 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         {spec.module} MODULE
                       </span>
                       <span className="text-xs font-semibold text-slate-500">
-                        {spec.program_type === 'REPORT' ? 'ALV Grid Report' : 'Online Transaction'}
+                        {spec.program_type === 'REPORT'
+                          ? t('ALV Grid Report', 'ALV 그리드 리포트')
+                          : t('Online Transaction', '온라인 트랜잭션')}
                       </span>
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-950 tracking-tight">
-                      Functional Development Specification
+                      {t('Functional Development Specification', 'SAP 기능 개발 사양서')}
                     </h1>
                     <p className="text-sm font-semibold text-blue-900 mt-1 font-mono">
                       [{spec.program_id}] {spec.title}
@@ -778,22 +786,22 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                       <table className="border-collapse border border-slate-600 text-center text-[10px] w-72 shadow-2xs font-sans">
                         <thead>
                           <tr className="bg-[#e9f0f8] border-b border-slate-600 text-slate-800 font-bold">
-                            <th className="p-1 border-r border-slate-400 w-18">Author (FS)</th>
-                            <th className="p-1 border-r border-slate-400 w-18">Review (Lead)</th>
-                            <th className="p-1 border-r border-slate-400 w-18">Quality (QA)</th>
-                            <th className="p-1 w-18">Approve (PM)</th>
+                            <th className="p-1 border-r border-slate-400 w-18">{t('Author (FS)', '작성 (FS)')}</th>
+                            <th className="p-1 border-r border-slate-400 w-18">{t('Review (Lead)', '검토 (Lead)')}</th>
+                            <th className="p-1 border-r border-slate-400 w-18">{t('Quality (QA)', '품질 (QA)')}</th>
+                            <th className="p-1 w-18">{t('Approve (PM)', '승인 (PM)')}</th>
                           </tr>
                         </thead>
                         <tbody>
                           <tr className="h-12 border-b border-slate-300 bg-white">
                             <td className="p-1 border-r border-slate-400 align-bottom text-[10px] font-bold text-slate-800">
-                              {spec.author.split(' ')[0] || 'Author'}
+                              {spec.author.split(' ')[0] || t('Author', '작성자')}
                             </td>
                             <td className="p-1 border-r border-slate-400 align-bottom text-[10px] text-slate-600 font-medium">
-                              {spec.status && spec.status !== 'draft' ? 'Reviewed' : 'Pending'}
+                              {spec.status && spec.status !== 'draft' ? t('Reviewed', '검토완료') : t('Pending', '대기')}
                             </td>
                             <td className="p-1 border-r border-slate-400 align-bottom text-[10px] font-medium text-slate-600">
-                              {spec.status === 'qa_passed' ? 'QA Passed' : 'Pending'}
+                              {spec.status === 'qa_passed' ? t('QA Passed', 'QA통과') : t('Pending', '대기')}
                             </td>
                             <td className={`p-1 align-bottom text-[10px] font-bold ${lifecycleMeta.cellColor}`}>
                               {spec.approved_by ? spec.approved_by.split(' ')[0] : lifecycleMeta.cellText}
@@ -828,10 +836,10 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   <div className="flex items-center justify-between text-xs font-bold text-slate-800">
                     <span className="flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 bg-blue-700 rounded-full" />
-                      Revision History
+                      {t('Revision History', '개정 이력')}
                     </span>
                     <span className="text-[10px] text-slate-500 font-normal">
-                      Latest:{' '}
+                      {t('Latest:', '최신 버전:')}{' '}
                       {spec.change_history && spec.change_history.length > 0
                         ? spec.change_history[0].version
                         : 'v1.0'}
@@ -840,10 +848,10 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   <table className="w-full text-xs text-left border-collapse border border-slate-300">
                     <thead className="bg-[#f1f5f9] border-b border-slate-300 text-slate-700 font-semibold text-[11px]">
                       <tr>
-                        <th className="p-1.5 border-r border-slate-300 w-16 text-center">Version</th>
-                        <th className="p-1.5 border-r border-slate-300 w-28 text-center">Date</th>
-                        <th className="p-1.5 border-r border-slate-300 w-28">Author</th>
-                        <th className="p-1.5">Summary of Changes</th>
+                        <th className="p-1.5 border-r border-slate-300 w-16 text-center">{t('Version', '버전')}</th>
+                        <th className="p-1.5 border-r border-slate-300 w-28 text-center">{t('Date', '변경일')}</th>
+                        <th className="p-1.5 border-r border-slate-300 w-28">{t('Author', '작성자')}</th>
+                        <th className="p-1.5">{t('Summary of Changes', '변경 내역 요약')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 text-[11px]">
@@ -874,7 +882,10 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                             {spec.author}
                           </td>
                           <td className="p-1.5 text-slate-700">
-                            Initial functional specification, ALV Grid layout, field catalog, and data flow design.
+                            {t(
+                              'Initial functional specification, ALV Grid layout, field catalog, and data flow design.',
+                              '최초 기능 사양서, ALV 그리드 레이아웃, 필드 카탈로그 및 데이터 흐름 설계'
+                            )}
                           </td>
                         </tr>
                       )}
@@ -889,7 +900,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   <span className="px-1.5 py-0.5 rounded bg-blue-800 text-white font-mono text-[10px]">
                     01
                   </span>
-                  <span>1. General Program Information</span>
+                  <span>{t('1. General Program Information', '1. 프로그램 기본 정보')}</span>
                 </h2>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-[#f8fafc] p-3 rounded border border-slate-300 text-xs">
@@ -909,27 +920,27 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                       <span className="font-mono font-bold text-blue-900 text-xs">{spec.tcode}</span>
                       {tcodeValidation.isValid ? (
                         <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 font-sans font-semibold">
-                          SAP Standard
+                          {t('SAP Standard', 'SAP 표준')}
                         </span>
                       ) : (
                         <span
                           className="text-[9px] text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-300 font-sans font-semibold"
                           title={tcodeValidation.message}
                         >
-                          Non-Standard
+                          {t('Non-Standard', '비표준')}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="border-r border-slate-200 pr-2">
                     <span className="text-slate-500 block text-[10px] font-semibold">
-                      SAP Module
+                      {t('SAP Module', 'SAP 모듈')}
                     </span>
                     <span className="font-bold text-slate-800 text-xs">{spec.module}</span>
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[10px] font-semibold">
-                      Program Type
+                      {t('Program Type', '프로그램 유형')}
                     </span>
                     <span className="font-bold text-slate-800 text-xs">
                       {spec.program_type === 'REPORT'
@@ -940,17 +951,17 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
 
                   <div className="border-r border-slate-200 pr-2 pt-2 border-t border-slate-200">
                     <span className="text-slate-500 block text-[10px] font-semibold">
-                      Author / Consultant
+                      {t('Author / Consultant', '작성자 / 담당 컨설턴트')}
                     </span>
                     <span className="font-semibold text-slate-800 text-xs">{spec.author}</span>
                   </div>
                   <div className="border-r border-slate-200 pr-2 pt-2 border-t border-slate-200">
-                    <span className="text-slate-500 block text-[10px] font-semibold">Created Date</span>
+                    <span className="text-slate-500 block text-[10px] font-semibold">{t('Created Date', '작성일자')}</span>
                     <span className="font-mono text-slate-800 text-xs">{spec.created_date}</span>
                   </div>
                   <div className="border-r border-slate-200 pr-2 pt-2 border-t border-slate-200">
                     <span className="text-slate-500 block text-[10px] font-semibold">
-                      Target SAP Release
+                      {t('Target SAP Release', '대상 SAP 릴리즈')}
                     </span>
                     <span className="font-semibold text-slate-800 text-xs">
                       {spec.target_sap_release}
@@ -958,7 +969,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   </div>
                   <div className="pt-2 border-t border-slate-200">
                     <span className="text-slate-500 block text-[10px] font-semibold">
-                      Status / Syntax / Message Class
+                      {t('Status / Syntax / Message Class', '상태 / 문법 / 메시지 클래스')}
                     </span>
                     <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${lifecycleMeta.badgeClass}`}>
@@ -978,7 +989,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   <span className="px-1.5 py-0.5 rounded bg-blue-800 text-white font-mono text-[10px]">
                     02
                   </span>
-                  <span>2. Business Requirements & Purpose</span>
+                  <span>{t('2. Business Requirements & Purpose', '2. 업무 요구사항 및 개발 목적')}</span>
                 </h2>
                 <div className="p-4 bg-slate-50 rounded border border-slate-300 text-xs leading-relaxed whitespace-pre-line text-slate-800 shadow-2xs">
                   {spec.business_purpose}
@@ -1008,21 +1019,21 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   <span className="px-1.5 py-0.5 rounded bg-blue-800 text-white font-mono text-[10px]">
                     03
                   </span>
-                  <span>3. Selection Screen Specification</span>
+                  <span>{t('3. Selection Screen Specification', '3. 선택 화면 (Selection Screen) 명세')}</span>
                 </h2>
 
                 <div className="border border-slate-300 rounded overflow-hidden">
                   <table className="w-full text-xs text-left border-collapse">
                     <thead className="bg-[#e4edf7] border-b border-slate-300 text-slate-800 font-semibold text-[11px]">
                       <tr>
-                        <th className="p-2 border-r border-slate-300 w-32">Block</th>
-                        <th className="p-2 border-r border-slate-300 w-28">Kind</th>
-                        <th className="p-2 border-r border-slate-300 w-24">Variable</th>
-                        <th className="p-2 border-r border-slate-300">Selection Text</th>
-                        <th className="p-2 border-r border-slate-300 w-24 text-center">Type/Len</th>
-                        <th className="p-2 border-r border-slate-300 w-32">Ref / Group / F4</th>
-                        <th className="p-2 border-r border-slate-300 w-14 text-center">Req</th>
-                        <th className="p-2 w-20">Default</th>
+                        <th className="p-2 border-r border-slate-300 w-32">{t('Block', '블록')}</th>
+                        <th className="p-2 border-r border-slate-300 w-28">{t('Kind', '유형')}</th>
+                        <th className="p-2 border-r border-slate-300 w-24">{t('Variable', '변수명')}</th>
+                        <th className="p-2 border-r border-slate-300">{t('Selection Text', '조회 라벨')}</th>
+                        <th className="p-2 border-r border-slate-300 w-24 text-center">{t('Type/Len', '타입/길이')}</th>
+                        <th className="p-2 border-r border-slate-300 w-32">{t('Ref / Group / F4', '참조 / 그룹 / F4')}</th>
+                        <th className="p-2 border-r border-slate-300 w-14 text-center">{t('Req', '필수')}</th>
+                        <th className="p-2 w-20">{t('Default', '기본값')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
@@ -1102,7 +1113,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                     04
                   </span>
                   <span>
-                    4. ALV Grid Layout & Field Catalog Specification
+                    {t('4. ALV Grid Layout & Field Catalog Specification', '4. ALV 그리드 레이아웃 및 필드 카탈로그 명세')}
                   </span>
                 </h2>
 
@@ -1114,16 +1125,16 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                       <span>
                         4.1{' '}
                         {isMasterDetail
-                          ? 'Header ALV Grid Specification'
+                          ? t('Header ALV Grid Specification', '헤더 ALV 그리드 명세')
                           : isTreeWithDetail
-                          ? 'Tree Hierarchy Field Catalog (CL_GUI_ALV_TREE)'
+                          ? t('Tree Hierarchy Field Catalog (CL_GUI_ALV_TREE)', '트리 계층 필드 카탈로그 (CL_GUI_ALV_TREE)')
                           : spec.sample_type === '04'
-                          ? `ALV Pivot / IDA Field Catalog (${spec.cds_view_table || 'CDS/Table'})`
-                          : 'ALV Grid Field Catalog (LVC_T_FCAT)'}
+                          ? `${t('ALV Pivot / IDA Field Catalog', 'ALV 피벗 / IDA 필드 카탈로그')} (${spec.cds_view_table || 'CDS/Table'})`
+                          : t('ALV Grid Field Catalog (LVC_T_FCAT)', 'ALV 그리드 필드 카탈로그 (LVC_T_FCAT)')}
                       </span>
                     </h3>
                     <span className="text-[10px] font-mono text-slate-500 tabular-nums">
-                      {spec.field_catalog.length} fields | Title:{' '}
+                      {spec.field_catalog.length} {t('fields', '개 필드')} | {t('Title:', '제목:')}{' '}
                       {spec.layout?.grid_title}
                     </span>
                   </div>
@@ -1151,7 +1162,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         ZEBRA
                       </span>
                       <span className="font-bold text-slate-800">
-                        {spec.layout?.zebra ? 'Enabled (X)' : 'Disabled'}
+                        {spec.layout?.zebra ? t('Enabled (X)', '사용 (X)') : t('Disabled', '미사용')}
                       </span>
                     </div>
                     <div>
@@ -1159,7 +1170,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         CWIDTH_OPT
                       </span>
                       <span className="font-bold text-slate-800">
-                        {spec.layout?.cwidth_opt ? 'Enabled (X)' : 'Disabled'}
+                        {spec.layout?.cwidth_opt ? t('Enabled (X)', '사용 (X)') : t('Disabled', '미사용')}
                       </span>
                     </div>
                   </div>
@@ -1167,19 +1178,19 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   {/* Conditional Tree or Pivot Config Summary */}
                   {spec.sample_type === '03' && spec.tree_config && (
                     <div className="bg-blue-50/70 border border-blue-200 rounded p-2.5 text-[11px] flex flex-wrap gap-4 print-avoid-break">
-                      <span><strong className="text-blue-950">Tree Root:</strong> <code className="font-mono">{spec.tree_config.root_label || 'ROOT'}</code></span>
-                      <span><strong className="text-blue-950">Group Field:</strong> <code className="font-mono">{spec.tree_config.group_field || '-'}</code></span>
-                      <span><strong className="text-blue-950">Label Field:</strong> <code className="font-mono">{spec.tree_config.group_label_field || '-'}</code></span>
+                      <span><strong className="text-blue-950">{t('Tree Root:', '트리 루트:')}</strong> <code className="font-mono">{spec.tree_config.root_label || 'ROOT'}</code></span>
+                      <span><strong className="text-blue-950">{t('Group Field:', '그룹 필드:')}</strong> <code className="font-mono">{spec.tree_config.group_field || '-'}</code></span>
+                      <span><strong className="text-blue-950">{t('Label Field:', '라벨 필드:')}</strong> <code className="font-mono">{spec.tree_config.group_label_field || '-'}</code></span>
                     </div>
                   )}
                   {spec.sample_type === '04' && (spec.pivot_config || spec.cds_view_table) && (
                     <div className="bg-sky-50/70 border border-sky-200 rounded p-2.5 text-[11px] flex flex-wrap gap-4 print-avoid-break">
-                      <span><strong className="text-sky-950">CDS / Source:</strong> <code className="font-mono">{spec.cds_view_table || spec.pivot_config?.source_table_or_cds || 'ACDOCA'}</code></span>
+                      <span><strong className="text-sky-950">{t('CDS / Source:', 'CDS / 소스 테이블:')}</strong> <code className="font-mono">{spec.cds_view_table || spec.pivot_config?.source_table_or_cds || 'ACDOCA'}</code></span>
                       {spec.pivot_config?.default_dimensions?.length ? (
-                        <span><strong className="text-sky-950">Default Dimensions:</strong> <code className="font-mono">{spec.pivot_config.default_dimensions.join(', ')}</code></span>
+                        <span><strong className="text-sky-950">{t('Default Dimensions:', '기본 행/열 차원:')}</strong> <code className="font-mono">{spec.pivot_config.default_dimensions.join(', ')}</code></span>
                       ) : null}
                       {spec.pivot_config?.default_measures?.length ? (
-                        <span><strong className="text-sky-950">Measures:</strong> <code className="font-mono">{spec.pivot_config.default_measures.join(', ')}</code></span>
+                        <span><strong className="text-sky-950">{t('Measures:', '집계 측정값:')}</strong> <code className="font-mono">{spec.pivot_config.default_measures.join(', ')}</code></span>
                       ) : null}
                     </div>
                   )}
@@ -1190,18 +1201,18 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                       <thead className="bg-[#e4edf7] border-b border-slate-300 text-slate-800 font-semibold text-[11px]">
                         <tr>
                           <th className="p-1.5 border-r border-slate-300 text-center w-8">No</th>
-                          <th className="p-1.5 border-r border-slate-300 min-w-24">Field Name</th>
-                          <th className="p-1.5 border-r border-slate-300 min-w-28">Column Label</th>
-                          <th className="p-1.5 border-r border-slate-300 w-16">Type</th>
-                          <th className="p-1.5 border-r border-slate-300 text-center w-10">Len</th>
-                          <th className="p-1.5 border-r border-slate-300 text-center w-10">Just</th>
+                          <th className="p-1.5 border-r border-slate-300 min-w-24">{t('Field Name', '필드명')}</th>
+                          <th className="p-1.5 border-r border-slate-300 min-w-28">{t('Column Label', '컬럼 헤더')}</th>
+                          <th className="p-1.5 border-r border-slate-300 w-16">{t('Type', '타입')}</th>
+                          <th className="p-1.5 border-r border-slate-300 text-center w-10">{t('Len', '길이')}</th>
+                          <th className="p-1.5 border-r border-slate-300 text-center w-10">{t('Just', '정렬')}</th>
                           <th className="p-1.5 border-r border-slate-300 text-center w-10">Key</th>
                           <th className="p-1.5 border-r border-slate-300 text-center w-10">Link</th>
                           <th className="p-1.5 border-r border-slate-300 text-center w-10">Edit</th>
                           <th className="p-1.5 border-r border-slate-300 text-center w-10">Sum</th>
-                          <th className="p-1.5 border-r border-slate-300 text-center w-14">Color</th>
+                          <th className="p-1.5 border-r border-slate-300 text-center w-14">{t('Color', '색상')}</th>
                           <th className="p-1.5 border-r border-slate-300 min-w-24">
-                            Ref Table/Field
+                            {t('Ref Table/Field', '참조 테이블/필드')}
                           </th>
                           <th className="p-1.5 min-w-20">Drilldown</th>
                         </tr>
@@ -1264,7 +1275,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   <div className="space-y-1.5 pt-2">
                     <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 print-avoid-break">
                       <span className="w-2 h-2 bg-slate-600 rounded-xs" />
-                      <span>4.3 ALV Toolbar Functions (LVC_T_STB)</span>
+                      <span>{t('4.3 ALV Toolbar Functions (LVC_T_STB)', '4.3 ALV 툴바 기능 정의 (LVC_T_STB)')}</span>
                     </h3>
                     <div className="border border-slate-300 rounded overflow-hidden">
                       <table className="w-full text-xs text-left border-collapse">
@@ -1275,12 +1286,12 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                               Function Code
                             </th>
                             <th className="p-1.5 border-r border-slate-300 w-36">
-                              Button Text
+                              {t('Button Text', '버튼 텍스트')}
                             </th>
                             <th className="p-1.5 border-r border-slate-300">
                               Quickinfo
                             </th>
-                            <th className="p-1.5 w-24 text-center">Button Type</th>
+                            <th className="p-1.5 w-24 text-center">{t('Button Type', '구분')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 text-[11px]">
@@ -1342,31 +1353,31 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                     </span>
                     <span>
                       {isTreeWithDetail
-                        ? `4.2 Tree-Linked Detail ALV Grid (${spec.item_grid.grid_name || 'Detail ALV Grid'})`
-                        : '4.2 Item ALV Grid Detail Specification'}
+                        ? `${t('4.2 Tree-Linked Detail ALV Grid', '4.2 트리 연동 상세 ALV 그리드')} (${spec.item_grid.grid_name || 'Detail ALV Grid'})`
+                        : t('4.2 Item ALV Grid Detail Specification', '4.2 아이템 ALV 그리드 상세 명세')}
                     </span>
                   </h2>
 
                   <div className="bg-indigo-50/70 border border-indigo-200 rounded p-3 text-xs space-y-1 print-avoid-break">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-indigo-900">
-                        {isTreeWithDetail ? 'Tree Node Link Key:' : 'Foreign Key:'}
+                        {isTreeWithDetail ? t('Tree Node Link Key:', '트리 노드 연결 키:') : t('Foreign Key:', '연동 외래키:')}
                       </span>
                       <span className="font-mono px-2 py-0.5 bg-indigo-100 text-indigo-900 rounded font-bold">
                         {spec.item_grid.foreign_key || spec.tree_config?.group_field || 'VBELN'}
                       </span>
                       <span className="text-slate-600 text-[11px]">
                         {isTreeWithDetail
-                          ? '(Selecting a tree node filters the right detail ALV grid)'
-                          : '(Clicking a header ALV row filters item rows by this key)'}
+                          ? t('(Selecting a tree node filters the right detail ALV grid)', '(트리 노드 선택 시 우측 상세 ALV 그리드 동적 필터링)')
+                          : t('(Clicking a header ALV row filters item rows by this key)', '(헤더 ALV 행 선택 시 해당 키 기준으로 하단 품목 필터링)')}
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-600 tabular-nums">
-                      Layout:{' '}
+                      {t('Layout:', '레이아웃:')}{' '}
                       <span className="font-bold text-slate-800">
                         {spec.item_grid.layout?.grid_title || 'Detail ALV Grid'}
                       </span>{' '}
-                      | {spec.item_grid.field_catalog.length} fields
+                      | {spec.item_grid.field_catalog.length} {t('fields', '개 필드')}
                     </div>
                   </div>
 
@@ -1375,14 +1386,14 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                       <thead className="bg-[#eef2ff] border-b border-indigo-300 text-indigo-950 font-semibold text-[11px]">
                         <tr>
                           <th className="p-1.5 border-r border-indigo-200 text-center w-8">No</th>
-                          <th className="p-1.5 border-r border-indigo-200 min-w-24">Field Name</th>
-                          <th className="p-1.5 border-r border-indigo-200 min-w-28">Column Label</th>
-                          <th className="p-1.5 border-r border-indigo-200 w-16">Type</th>
-                          <th className="p-1.5 border-r border-indigo-200 text-center w-10">Len</th>
-                          <th className="p-1.5 border-r border-indigo-200 text-center w-10">Just</th>
+                          <th className="p-1.5 border-r border-indigo-200 min-w-24">{t('Field Name', '필드명')}</th>
+                          <th className="p-1.5 border-r border-indigo-200 min-w-28">{t('Column Label', '컬럼 헤더')}</th>
+                          <th className="p-1.5 border-r border-indigo-200 w-16">{t('Type', '타입')}</th>
+                          <th className="p-1.5 border-r border-indigo-200 text-center w-10">{t('Len', '길이')}</th>
+                          <th className="p-1.5 border-r border-indigo-200 text-center w-10">{t('Just', '정렬')}</th>
                           <th className="p-1.5 border-r border-indigo-200 text-center w-10">Key</th>
                           <th className="p-1.5 border-r border-indigo-200 text-center w-10">Sum</th>
-                          <th className="p-1.5 min-w-28">Ref Table/Field</th>
+                          <th className="p-1.5 min-w-28">{t('Ref Table/Field', '참조 테이블/필드')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-indigo-100 font-mono text-[11px]">
@@ -1449,7 +1460,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         05
                       </span>
                       <span>
-                        5. Data Extraction & Processing Logic
+                        {t('5. Data Extraction & Processing Logic', '5. 데이터 추출 및 업무 처리 로직 명세')}
                       </span>
                     </h2>
 
@@ -1464,7 +1475,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         <div className="flex items-center justify-between">
                           <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                             <span className="w-2 h-2 bg-blue-600 rounded-xs" />
-                            <span>5.1 Data Flow Diagram</span>
+                            <span>{t('5.1 Data Flow Diagram', '5.1 데이터 흐름도 (Data Flow Diagram)')}</span>
                           </h3>
                           <span className="text-[10px] font-mono text-slate-500">
                             Vector Flowchart
@@ -1488,10 +1499,10 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         <div className="flex items-center justify-between pb-1 border-b border-slate-200 print-avoid-break">
                           <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                             <span className="w-2 h-2 bg-blue-600 rounded-xs" />
-                            <span>5.2 Detailed Technical Specifications</span>
+                            <span>{t('5.2 Detailed Technical Specifications', '5.2 노드별 상세 처리 사양')}</span>
                           </h3>
                           <span className="text-[10px] font-mono text-slate-500">
-                            Step-by-Step Processing Logic
+                            {t('Step-by-Step Processing Logic', '단계별 세부 처리 로직')}
                           </span>
                         </div>
 
@@ -1502,14 +1513,14 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                             const label = detail?.label || node.label || node.id;
                             const shapeText =
                               node.shape === 'diamond'
-                                ? 'Decision'
+                                ? t('Decision', '조건 분기')
                                 : node.shape === 'cylinder'
-                                ? 'Database'
+                                ? t('Database', '데이터베이스')
                                 : node.shape === 'stadium'
-                                ? 'Start / End'
+                                ? t('Start / End', '시작 / 종료')
                                 : node.shape === 'round'
-                                ? 'Screen'
-                                : 'Process';
+                                ? t('Screen', '화면 입출력')
+                                : t('Process', '처리 로직');
 
                             return (
                               <div
@@ -1543,7 +1554,12 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         <div className="flex items-center justify-between pb-1 border-b border-slate-200 print-avoid-break">
                           <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                             <span className="w-2 h-2 bg-indigo-600 rounded-xs" />
-                            <span>5.3 SAP Security, Messages & Performance Governance</span>
+                            <span>
+                              {t(
+                                '5.3 SAP Security, Messages & Performance Governance',
+                                '5.3 SAP 보안 권한 · 메시지 · 성능 거버넌스'
+                              )}
+                            </span>
                           </h3>
                           <span className="text-[10px] font-mono text-slate-500">
                             Syntax: {spec.abap_syntax_mode === 'modern_740' ? '7.40+' : 'Classic'} | Msg: {spec.message_class || 'Z01'}
@@ -1555,10 +1571,10 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                             <table className="w-full text-[11px] text-left border-collapse">
                               <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-semibold">
                                 <tr>
-                                  <th className="p-1.5 border-r border-slate-300 w-28">Auth Object</th>
-                                  <th className="p-1.5 border-r border-slate-300 w-36">Fields / Values</th>
-                                  <th className="p-1.5 border-r border-slate-300 w-32">Trigger Point</th>
-                                  <th className="p-1.5">Description</th>
+                                  <th className="p-1.5 border-r border-slate-300 w-28">{t('Auth Object', '권한 오브젝트')}</th>
+                                  <th className="p-1.5 border-r border-slate-300 w-36">{t('Fields / Values', '필드 / 액티비티')}</th>
+                                  <th className="p-1.5 border-r border-slate-300 w-32">{t('Trigger Point', '점검 시점')}</th>
+                                  <th className="p-1.5">{t('Description', '설명')}</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200">
@@ -1581,9 +1597,9 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                               <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 font-semibold">
                                 <tr>
                                   <th className="p-1.5 border-r border-slate-300 w-24">SE91 ID</th>
-                                  <th className="p-1.5 border-r border-slate-300 w-14 text-center">Type</th>
-                                  <th className="p-1.5 border-r border-slate-300">Message Text</th>
-                                  <th className="p-1.5 w-36">Trigger Condition</th>
+                                  <th className="p-1.5 border-r border-slate-300 w-14 text-center">{t('Type', '유형')}</th>
+                                  <th className="p-1.5 border-r border-slate-300">{t('Message Text', '메시지 내용')}</th>
+                                  <th className="p-1.5 w-36">{t('Trigger Condition', '발생 조건')}</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-200">
@@ -1605,18 +1621,18 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         {spec.performance_config && (
                           <div className="bg-slate-50 border border-slate-300 rounded p-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] print-avoid-break">
                             <div>
-                              <span className="text-slate-500 block text-[10px]">Expected Volume</span>
+                              <span className="text-slate-500 block text-[10px]">{t('Expected Volume', '예상 데이터 처리량')}</span>
                               <span className="font-semibold text-slate-800">{spec.performance_config.expected_volume || '-'}</span>
                             </div>
                             <div>
-                              <span className="text-slate-500 block text-[10px]">Recommended Indexes</span>
+                              <span className="text-slate-500 block text-[10px]">{t('Recommended Indexes', '권장 DB 인덱스')}</span>
                               <span className="font-mono text-slate-800">{spec.performance_config.recommended_indexes || '-'}</span>
                             </div>
                             <div>
                               <span className="text-slate-500 block text-[10px]">Batch / Spool (SY-BATCH)</span>
                               <span className="font-semibold text-slate-800">
-                                {spec.performance_config.batch_supported ? 'Supported' : 'Not Supported'}
-                                {spec.performance_config.spool_output ? ' · Spool' : ''}
+                                {spec.performance_config.batch_supported ? t('Supported', '지원') : t('Not Supported', '미지원')}
+                                {spec.performance_config.spool_output ? ` · ${t('Spool', '스풀 출력')}` : ''}
                               </span>
                             </div>
                             <div>
@@ -1659,7 +1675,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         06
                       </span>
                       <span>
-                        6. Unit & Integration Test Cases
+                        {t('6. Unit & Integration Test Cases', '6. 단위 및 통합 테스트 케이스')}
                       </span>
                     </h2>
                     <div className="border border-slate-300 rounded overflow-hidden">
@@ -1667,9 +1683,9 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                         <thead className="bg-[#e4edf7] border-b border-slate-300 text-slate-800 font-semibold text-[11px]">
                           <tr>
                             <th className="p-2 border-r border-slate-300 text-center w-10">No</th>
-                            <th className="p-2 border-r border-slate-300 w-44">Scenario</th>
-                            <th className="p-2 border-r border-slate-300">Condition</th>
-                            <th className="p-2">Expected Result</th>
+                            <th className="p-2 border-r border-slate-300 w-44">{t('Scenario', '시나리오')}</th>
+                            <th className="p-2 border-r border-slate-300">{t('Condition', '수행 조건')}</th>
+                            <th className="p-2">{t('Expected Result', '기대 결과')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 text-[11px]">
@@ -1702,7 +1718,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                           07
                         </span>
                         <span>
-                          7. ALV Grid Mock Data Snapshot
+                          {t('7. ALV Grid Mock Data Snapshot', '7. ALV 그리드 목업 데이터 스냅샷')}
                         </span>
                       </h2>
 
@@ -1712,9 +1728,9 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                           <span>
                             7.1{' '}
                             {isMasterDetail
-                              ? 'Header ALV Grid Mock Data'
-                              : 'ALV Grid Output'}{' '}
-                            ({spec.mock_rows?.length || 0} rows)
+                              ? t('Header ALV Grid Mock Data', '헤더 ALV 그리드 목업 데이터')
+                              : t('ALV Grid Output', 'ALV 그리드 출력 결과')}{' '}
+                            ({spec.mock_rows?.length || 0} {t('rows', '건')})
                           </span>
                           <span className="text-[10px] font-mono text-slate-500">
                             ZICON Status &amp; DO_SUM Verification
@@ -1836,7 +1852,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                                             {Number(sumVal || 0).toLocaleString()}
                                           </span>
                                         ) : isFirstCol ? (
-                                          <span>Total</span>
+                                          <span>{t('Total', '합계')}</span>
                                         ) : (
                                           ''
                                         )}
@@ -1857,10 +1873,10 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                           <div className="space-y-1.5 pt-2">
                             <div className="flex items-center justify-between text-xs font-bold text-indigo-950 print-avoid-break tabular-nums">
                               <span>
-                                7.2 {spec.item_grid.grid_name || 'Item / Detail ALV Grid'} Mock Data ({spec.item_grid.mock_rows.length} rows)
+                                7.2 {spec.item_grid.grid_name || t('Item / Detail ALV Grid', '품목 / 상세 ALV 그리드')} {t('Mock Data', '목업 데이터')} ({spec.item_grid.mock_rows.length} {t('rows', '건')})
                               </span>
                               <span className="text-[10px] font-mono text-indigo-700">
-                                {isTreeWithDetail ? 'Tree-Linked Detail Schedule' : `Foreign Key: ${spec.item_grid.foreign_key || 'VBELN'}`}
+                                {isTreeWithDetail ? t('Tree-Linked Detail Schedule', '트리 연동 상세 내역') : `${t('Foreign Key:', '외래키:')} ${spec.item_grid.foreign_key || 'VBELN'}`}
                               </span>
                             </div>
 
@@ -1975,7 +1991,7 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                                                 {Number(sumVal || 0).toLocaleString()}
                                               </span>
                                             ) : isFirstCol ? (
-                                              <span>Total</span>
+                                              <span>{t('Total', '합계')}</span>
                                             ) : (
                                               ''
                                             )}
@@ -1995,10 +2011,16 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
                   {/* DOCUMENT COMPLIANCE & SIGN-OFF STATEMENT */}
                   <div className="border border-slate-300 bg-slate-50 p-3 rounded text-[11px] text-slate-600 space-y-1 print-avoid-break">
                     <p className="font-bold text-slate-800">
-                      This functional specification complies with SAP S/4HANA development standards and unit test guidelines.
+                      {t(
+                        'This functional specification complies with SAP S/4HANA development standards and unit test guidelines.',
+                        '본 기능 개발 사양서는 SAP S/4HANA 개발 표준 및 단위 테스트 가이드라인을 준수하여 작성되었습니다.'
+                      )}
                     </p>
                     <p>
-                      All ALV field attributes (LVC_T_FCAT) and domain types align with the SAP Data Dictionary (SE11) and are approved for production transport upon sign-off.
+                      {t(
+                        'All ALV field attributes (LVC_T_FCAT) and domain types align with the SAP Data Dictionary (SE11) and are approved for production transport upon sign-off.',
+                        '모든 ALV 필드 속성(LVC_T_FCAT) 및 도메인 타입은 SAP Data Dictionary(SE11)와 일치하며, 승인 완료 시 운영 이관 기준 문서로 활용됩니다.'
+                      )}
                     </p>
                   </div>
                 </div>

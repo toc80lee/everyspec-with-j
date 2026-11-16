@@ -16,6 +16,7 @@ import { ProgramSpec, AlvField } from '../types/sap';
 import { SapGuiTheme } from '../data/sapGuiThemes';
 import { getSapColorHex } from './SapColorSearchHelpModal';
 import { AlvToolbar } from './AlvToolbar';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SapTreeAlvSimulatorProps {
   spec: ProgramSpec;
@@ -59,6 +60,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
   theme,
   onDrilldown,
 }) => {
+  const { t } = useLanguage();
   const [selectedNode, setSelectedNode] = useState<string>(
     spec.tree_config?.default_selected_node || 'ALL'
   );
@@ -157,7 +159,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
       const rawVal = row[groupField];
       const id = rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== ''
         ? String(rawVal).trim()
-        : '(Empty)';
+        : t('(Empty)', '(빈 값)');
       const existing = nodeMap.get(id);
       if (existing) {
         existing.count += 1;
@@ -187,7 +189,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
 
     if (selectedNode !== 'ALL') {
       list = list.filter((r) => {
-        const val = r[groupField] !== undefined && r[groupField] !== null ? String(r[groupField]).trim() : '(Empty)';
+        const val = r[groupField] !== undefined && r[groupField] !== null ? String(r[groupField]).trim() : t('(Empty)', '(빈 값)');
         return val === selectedNode;
       });
     }
@@ -301,7 +303,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
         <div className="px-3 py-2 bg-[#d7e4f2] border-b border-[#9bbadb] flex items-center justify-between font-bold text-slate-800 text-[11px] shrink-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <Folder className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-            <span className="truncate">ALV Tree Hierarchy</span>
+            <span className="truncate">{t('ALV Tree Hierarchy', 'ALV 트리 계층 구조')}</span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
@@ -310,7 +312,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
                 setIsRootExpanded(true);
                 setIsGroupExpanded(true);
               }}
-              title="Expand All"
+              title={t('Expand All', '모두 펼치기')}
               className="px-1.5 py-0.5 bg-white border border-[#9bbadb] hover:bg-blue-50 text-[10px] rounded cursor-pointer"
             >
               +
@@ -318,7 +320,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
             <button
               type="button"
               onClick={() => setIsGroupExpanded(false)}
-              title="Collapse"
+              title={t('Collapse', '접기')}
               className="px-1.5 py-0.5 bg-white border border-[#9bbadb] hover:bg-blue-50 text-[10px] rounded cursor-pointer"
             >
               -
@@ -418,9 +420,9 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
 
         <div className="p-2 bg-[#f0f4f8] border-t border-[#9bbadb] text-[10px] text-slate-600 shrink-0">
           <div className="flex items-center justify-between gap-2">
-            <span>Selected Node ({groupField}):</span>
+            <span>{t(`Selected Node (${groupField}):`, `선택 노드 (${groupField}):`)}</span>
             <span className="font-bold font-mono text-blue-900 truncate">
-              {selectedNode === 'ALL' ? 'ALL' : selectedNode}
+              {selectedNode === 'ALL' ? t('ALL', '전체') : selectedNode}
             </span>
           </div>
         </div>
@@ -433,13 +435,13 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
             <TableIcon className="w-3.5 h-3.5 text-blue-800 shrink-0" />
             <span className="truncate">{gridTitle}</span>
             <span className="px-1.5 py-0.5 bg-blue-100 text-blue-900 rounded font-mono text-[10px] shrink-0">
-              {selectedNode === 'ALL' ? 'All Nodes' : `${groupField}: ${selectedNode}`}
+              {selectedNode === 'ALL' ? t('All Nodes', '전체 노드') : `${groupField}: ${selectedNode}`}
             </span>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600 font-normal shrink-0 tabular-nums">
-            <span>Rows: {displayedRows.length}</span>
+            <span>{t('Rows:', '행 수:')} {displayedRows.length}</span>
             <span>|</span>
-            <span>Sort Col: {selectedColumnFields.join(', ') || '-'}</span>
+            <span>{t('Sort Col:', '정렬 컬럼:')} {selectedColumnFields.join(', ') || '-'}</span>
           </div>
         </div>
 
@@ -472,7 +474,10 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
             onPrint={() => window.print()}
             onInfo={() => {
               setStatusNotice(
-                `Tree ALV [${spec.program_id}] • Key: ${groupField} = ${selectedNode} • ${displayedRows.length} row(s)`
+                t(
+                  `Tree ALV [${spec.program_id}] • Key: ${groupField} = ${selectedNode} • ${displayedRows.length} row(s)`,
+                  `트리 ALV [${spec.program_id}] • 키: ${groupField} = ${selectedNode} • ${displayedRows.length}건`
+                )
               );
               setTimeout(() => setStatusNotice(null), 4000);
             }}
@@ -490,7 +495,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
               type="text"
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Search tree grid columns..."
+              placeholder={t('Search tree grid columns...', '트리 그리드 컬럼 검색...')}
               className="flex-1 bg-white border border-blue-300 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
               autoFocus
             />
@@ -500,14 +505,14 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
                 onClick={() => setFilterQuery('')}
                 className="text-[11px] text-slate-500 hover:text-slate-800 px-1.5 py-0.5 cursor-pointer"
               >
-                Clear
+                {t('Clear', '초기화')}
               </button>
             )}
             <button
               type="button"
               onClick={() => setIsFilterBarOpen(false)}
               className="text-slate-500 hover:text-slate-800 p-0.5 cursor-pointer"
-              aria-label="Close filter bar"
+              aria-label={t('Close filter bar', '필터 바 닫기')}
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -566,7 +571,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
               {displayedRows.length === 0 ? (
                 <tr>
                   <td colSpan={itemCatalog.length + 1} className="py-12 text-center text-slate-400">
-                    No records match the selected node.
+                    {t('No records match the selected node.', '선택한 노드에 해당하는 데이터가 없습니다.')}
                   </td>
                 </tr>
               ) : (
@@ -683,7 +688,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
                     if (col.fieldname === firstSummaryLabelField) {
                       return (
                         <td key={col.fieldname} className="px-3 py-1.5 text-blue-900 font-bold whitespace-nowrap">
-                          Total ({displayedRows.length})
+                          {t(`Total (${displayedRows.length})`, `합계 (${displayedRows.length}건)`)}
                         </td>
                       );
                     }
@@ -698,10 +703,10 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
         <div className="px-3 py-1 bg-[#d7e4f2] border-t border-[#9bbadb] text-[10px] text-slate-700 flex items-center justify-between shrink-0 font-sans">
           <span>
             {selectedNode === 'ALL'
-              ? `All ${groupField} rows (${displayedRows.length})`
-              : `[${groupField} = ${selectedNode}] ${displayedRows.length} row(s) loaded`}
+              ? t(`All ${groupField} rows (${displayedRows.length})`, `전체 ${groupField} 데이터 (${displayedRows.length}건)`)
+              : t(`[${groupField} = ${selectedNode}] ${displayedRows.length} row(s) loaded`, `[${groupField} = ${selectedNode}] ${displayedRows.length}건 로드됨`)}
           </span>
-          <span className="font-mono text-slate-600">Double click row to view record detail</span>
+          <span className="font-mono text-slate-600">{t('Double click row to view record detail', '행을 더블 클릭하여 레코드 상세 보기')}</span>
         </div>
       </div>
 
@@ -713,14 +718,14 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
               <div className="flex items-center gap-2">
                 {renderNodeIcon(true)}
                 <span className="font-bold text-xs">
-                  Record Detail: {groupField} = {String(detailModalRow[groupField] ?? '-')}
+                  {t('Record Detail:', '레코드 상세:')} {groupField} = {String(detailModalRow[groupField] ?? '-')}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setDetailModalRow(null)}
                 className="text-white/80 hover:text-white text-sm font-bold cursor-pointer"
-                aria-label="Close detail"
+                aria-label={t('Close detail', '상세 닫기')}
               >
                 ✕
               </button>
@@ -746,7 +751,7 @@ export const SapTreeAlvSimulator: React.FC<SapTreeAlvSimulatorProps> = ({
                   onClick={() => setDetailModalRow(null)}
                   className="px-4 py-1.5 bg-[#005a9c] text-white rounded font-bold hover:bg-blue-800 cursor-pointer text-xs"
                 >
-                  Close
+                  {t('Close', '닫기')}
                 </button>
               </div>
             </div>

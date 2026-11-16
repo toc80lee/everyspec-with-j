@@ -56,6 +56,7 @@ import {
   validateSelectionParams,
 } from '../utils/sapSimulatorHelpers';
 import { isReadOnlyCommonSpec } from '../utils/projectStorage';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SapGuiMockupProps {
   spec: ProgramSpec;
@@ -195,6 +196,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
   onSelectTheme: propSelectTheme,
   mockDataTrigger,
 }) => {
+  const { t } = useLanguage();
   const isSpecReadOnly = Boolean(
     isReadOnly || isReadOnlyCommonSpec(spec) || spec.is_system === true
   );
@@ -275,8 +277,8 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       const next = exists ? prev.filter((k) => k !== statusKey) : [...prev, statusKey];
       setStatusMessage({
         text: exists
-          ? `Status [${statusKey}] filter removed.`
-          : `Status [${statusKey}] filter applied.`,
+          ? t(`Status [${statusKey}] filter removed.`, `상태 [${statusKey}] 필터가 해제되었습니다.`)
+          : t(`Status [${statusKey}] filter applied.`, `상태 [${statusKey}] 필터가 적용되었습니다.`),
         type: 'S',
       });
       return next;
@@ -290,7 +292,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
 
   // Status Bar message (displayed in bottom fixed status bar, preventing ALV Grid shifts)
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'S' | 'W' | 'E' }>({
-    text: `Data loaded (${simSpec.mock_rows?.length || 0} rows displayed)`,
+    text: t(
+      `Data loaded (${simSpec.mock_rows?.length || 0} rows displayed)`,
+      `데이터 로드 완료 (${simSpec.mock_rows?.length || 0}건 조회됨)`
+    ),
     type: 'S',
   });
 
@@ -308,7 +313,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       setLocalTheme(newTheme);
     }
     setStatusMessage({
-      text: `SAP GUI Theme changed to [${SAP_GUI_THEMES[newTheme].name}] (${SAP_GUI_THEMES[newTheme].releaseBadge}).`,
+      text: t(
+        `SAP GUI Theme changed to [${SAP_GUI_THEMES[newTheme].name}] (${SAP_GUI_THEMES[newTheme].releaseBadge}).`,
+        `SAP GUI 테마가 [${SAP_GUI_THEMES[newTheme].name}] (${SAP_GUI_THEMES[newTheme].releaseBadge})로 변경되었습니다.`
+      ),
       type: 'S',
     });
   };
@@ -411,7 +419,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
   const handleGenerateAiMockData = async () => {
     if (!simSpec.field_catalog || simSpec.field_catalog.length === 0) {
       setStatusMessage({
-        text: 'Warning: Field catalog is empty. Please configure fields first.',
+        text: t(
+          'Warning: Field catalog is empty. Please configure fields first.',
+          '경고: 필드 카탈로그가 비어 있습니다. 필드를 먼저 설정해 주세요.'
+        ),
         type: 'W',
       });
       return;
@@ -419,7 +430,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
 
     setIsGeneratingMockData(true);
     setStatusMessage({
-      text: 'Requesting Gemini AI to generate realistic SAP records...',
+      text: t(
+        'Requesting Gemini AI to generate realistic SAP records...',
+        'Gemini AI에 SAP 샘플 데이터 생성을 요청 중입니다...'
+      ),
       type: 'S',
     });
 
@@ -444,7 +458,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           mock_rows: data.rows,
         }));
         setStatusMessage({
-          text: `Success: Generated ${data.rows.length} realistic SAP records via Gemini AI.`,
+          text: t(
+            `Success: Generated ${data.rows.length} realistic SAP records via Gemini AI.`,
+            `완료: Gemini AI로 SAP 샘플 데이터 ${data.rows.length}건이 생성되었습니다.`
+          ),
           type: 'S',
         });
         return;
@@ -460,7 +477,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
         mock_rows: fallbackRows,
       }));
       setStatusMessage({
-        text: `Populated ${fallbackRows.length} realistic SAP records based on field catalog types.`,
+        text: t(
+          `Populated ${fallbackRows.length} realistic SAP records based on field catalog types.`,
+          `필드 카탈로그 유형 기준으로 SAP 샘플 데이터 ${fallbackRows.length}건이 채워졌습니다.`
+        ),
         type: 'S',
       });
     } finally {
@@ -491,8 +511,8 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       const next = prev === 'coltext' ? 'fieldname' : 'coltext';
       setStatusMessage({
         text: next === 'fieldname'
-          ? 'ALV headers switched to technical fieldnames.'
-          : 'ALV headers switched to field catalog labels.',
+          ? t('ALV headers switched to technical fieldnames.', 'ALV 헤더를 기술 필드명(Fieldname)으로 전환했습니다.')
+          : t('ALV headers switched to field catalog labels.', 'ALV 헤더를 필드 카탈로그 텍스트(Coltext)로 전환했습니다.'),
         type: 'S',
       });
       return next;
@@ -510,7 +530,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       const fieldDef = simSpec.field_catalog.find((f) => f.fieldname === fieldname);
       if (!fieldDef?.sort_enable) {
         setStatusMessage({
-          text: `Column [${fieldname}] cannot be sorted because ENABLE is unchecked in Sort settings.`,
+          text: t(
+            `Column [${fieldname}] cannot be sorted because ENABLE is unchecked in Sort settings.`,
+            `정렬 설정에서 ENABLE이 해제되어 [${fieldname}] 컬럼을 정렬할 수 없습니다.`
+          ),
           type: 'W',
         });
         return;
@@ -520,14 +543,14 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           setSortAsc(false);
           setSortColumns([{ fieldname, asc: false }]);
           setStatusMessage({
-            text: `[SGL_CLK_HD] Sorted [${fieldname}] descending.`,
+            text: t(`[SGL_CLK_HD] Sorted [${fieldname}] descending.`, `[SGL_CLK_HD] [${fieldname}] 내림차순 정렬됨.`),
             type: 'S',
           });
         } else {
           setSortField(null);
           setSortColumns([]);
           setStatusMessage({
-            text: `[SGL_CLK_HD] Cleared sort on [${fieldname}].`,
+            text: t(`[SGL_CLK_HD] Cleared sort on [${fieldname}].`, `[SGL_CLK_HD] [${fieldname}] 정렬이 해제되었습니다.`),
             type: 'S',
           });
         }
@@ -536,7 +559,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
         setSortAsc(true);
         setSortColumns([{ fieldname, asc: true }]);
         setStatusMessage({
-          text: `[SGL_CLK_HD] Sorted [${fieldname}] ascending.`,
+          text: t(`[SGL_CLK_HD] Sorted [${fieldname}] ascending.`, `[SGL_CLK_HD] [${fieldname}] 오름차순 정렬됨.`),
           type: 'S',
         });
       }
@@ -554,7 +577,9 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           ? prev.filter((k) => k !== fieldname)
           : [...prev, fieldname];
         setStatusMessage({
-          text: `Column [${fieldname}] ${prev.includes(fieldname) ? 'deselected' : 'selected'} (${next.length} selected).`,
+          text: prev.includes(fieldname)
+            ? t(`Column [${fieldname}] deselected (${next.length} selected).`, `컬럼 [${fieldname}] 선택 해제 (${next.length}개 선택됨).`)
+            : t(`Column [${fieldname}] selected (${next.length} selected).`, `컬럼 [${fieldname}] 선택 (${next.length}개 선택됨).`),
           type: 'S',
         });
         return next;
@@ -572,7 +597,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
         const range = catalogFields.slice(start, end + 1);
         setSelectedColumnFields(range);
         setStatusMessage({
-          text: `Selected column range: ${catalogFields[start]} - ${catalogFields[end]} (${range.length}).`,
+          text: t(
+            `Selected column range: ${catalogFields[start]} - ${catalogFields[end]} (${range.length}).`,
+            `컬럼 범위 선택됨: ${catalogFields[start]} - ${catalogFields[end]} (${range.length}개).`
+          ),
           type: 'S',
         });
       }
@@ -584,7 +612,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       dragAnchorFieldRef.current = fieldname;
       isDraggingColumnRef.current = true;
       setStatusMessage({
-        text: `Column [${fieldname}] selected. Drag to multi-select or use toolbar sort/totals.`,
+        text: t(
+          `Column [${fieldname}] selected. Drag to multi-select or use toolbar sort/totals.`,
+          `컬럼 [${fieldname}] 선택됨. 드래그하여 다중 선택하거나 툴바 정렬/합계를 사용하세요.`
+        ),
         type: 'S',
       });
     }
@@ -627,8 +658,8 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     );
     setStatusMessage({
       text: nextVal
-        ? 'Column width optimization (cwidth_opt = X) enabled.'
-        : 'Column width optimization disabled (restored outputlen widths).',
+        ? t('Column width optimization (cwidth_opt = X) enabled.', '컬럼 너비 최적화(cwidth_opt = X)가 활성화되었습니다.')
+        : t('Column width optimization disabled (restored outputlen widths).', '컬럼 너비 최적화가 해제되었습니다(outputlen 너비 복원).'),
       type: 'S',
     });
   };
@@ -649,15 +680,23 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       setShowTotals(true);
       setStatusMessage({
         text: nextDoSum
-          ? `Totals (&TOTAL) enabled for ${selectedColumnFields.length} selected column(s).`
-          : `Totals (&TOTAL) cleared for ${selectedColumnFields.length} selected column(s).`,
+          ? t(
+              `Totals (&TOTAL) enabled for ${selectedColumnFields.length} selected column(s).`,
+              `선택된 ${selectedColumnFields.length}개 컬럼의 합계(&TOTAL)가 활성화되었습니다.`
+            )
+          : t(
+              `Totals (&TOTAL) cleared for ${selectedColumnFields.length} selected column(s).`,
+              `선택된 ${selectedColumnFields.length}개 컬럼의 합계(&TOTAL)가 해제되었습니다.`
+            ),
         type: 'S',
       });
       return;
     }
     setShowTotals((prev) => !prev);
     setStatusMessage({
-      text: !showTotals ? 'ALV totals row shown.' : 'ALV totals row hidden.',
+      text: !showTotals
+        ? t('ALV totals row shown.', 'ALV 합계 행이 표시되었습니다.')
+        : t('ALV totals row hidden.', 'ALV 합계 행이 숨겨졌습니다.'),
       type: 'S',
     });
   };
@@ -761,19 +800,19 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
 
       if (key === 'DOC') {
         iconType = 'DOC';
-        label = 'Doc';
+        label = t('Doc', '문서');
       } else if (key === '1' || key.toLowerCase() === 'green') {
         iconType = 'GREEN';
-        label = 'OK';
+        label = t('OK', '정상');
       } else if (key === '2' || key.toLowerCase() === 'yellow') {
         iconType = 'YELLOW';
-        label = 'Pending';
+        label = t('Pending', '대기');
       } else if (key === '3' || key.toLowerCase() === 'red') {
         iconType = 'RED';
-        label = 'Error';
+        label = t('Error', '오류');
       } else if (key === 'FOLDER') {
         iconType = 'FOLDER';
-        label = 'Folder';
+        label = t('Folder', '폴더');
       }
 
       return {
@@ -783,7 +822,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
         iconType,
       };
     });
-  }, [statusField, rows]);
+  }, [statusField, rows, t]);
 
   // Sorting
   const handleSort = (fieldname: string, asc = true) => {
@@ -799,7 +838,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       setObligatoryErrorIds(validation.missingIds);
       setScreenMode('selection');
       setStatusMessage({
-        text: `Fill out all required entry fields: ${validation.missingLabels.join(', ')}`,
+        text: t(
+          `Fill out all required entry fields: ${validation.missingLabels.join(', ')}`,
+          `필수 입력 필드를 모두 채워주세요: ${validation.missingLabels.join(', ')}`
+        ),
         type: 'E',
       });
       return;
@@ -819,8 +861,14 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     setStatusMessage({
       text:
         result.appliedParams.length > 0
-          ? `Executed (${result.appliedParams.join(', ')}): ${result.filteredRows.length} of ${rows.length} record(s) matched.`
-          : `Executed: ${rows.length} record(s) displayed.`,
+          ? t(
+              `Executed (${result.appliedParams.join(', ')}): ${result.filteredRows.length} of ${rows.length} record(s) matched.`,
+              `실행 완료 (${result.appliedParams.join(', ')}): 전체 ${rows.length}건 중 ${result.filteredRows.length}건 조회됨.`
+            )
+          : t(
+              `Executed: ${rows.length} record(s) displayed.`,
+              `실행 완료: ${rows.length}건 조회됨.`
+            ),
       type: result.filteredRows.length === 0 && rows.length > 0 ? 'W' : 'S',
     });
   };
@@ -837,7 +885,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       setRuntimeErrorLogs(validation.errors);
       setShowErrorLog(true);
       setStatusMessage({
-        text: `Validation failed: ${validation.errors.length} error(s) found. Check Error Log.`,
+        text: t(
+          `Validation failed: ${validation.errors.length} error(s) found. Check Error Log.`,
+          `검증 실패: ${validation.errors.length}건의 오류가 발견되었습니다. 오류 로그를 확인하세요.`
+        ),
         type: 'E',
       });
       return;
@@ -852,8 +903,14 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     setStatusMessage({
       text:
         updatedCount > 0
-          ? `Data saved (${updatedCount} modified cell(s) committed).`
-          : 'Data verified and saved (no validation errors).',
+          ? t(
+              `Data saved (${updatedCount} modified cell(s) committed).`,
+              `데이터 저장 완료 (수정된 ${updatedCount}개 셀 반영).`
+            )
+          : t(
+              'Data verified and saved (no validation errors).',
+              '데이터 검증 및 저장 완료 (오류 없음).'
+            ),
       type: 'S',
     });
   };
@@ -870,7 +927,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
         no_vgridln: prev?.no_vgridln ?? !!simSpec.layout?.no_vgridln,
       }));
       setStatusMessage({
-        text: 'ALV group subtotals cleared (Grand total only).',
+        text: t(
+          'ALV group subtotals cleared (Grand total only).',
+          'ALV 그룹 소계가 해제되었습니다 (총합계만 표시).'
+        ),
         type: 'S',
       });
       return;
@@ -908,7 +968,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     const colLabel =
       simSpec.field_catalog.find((f) => f.fieldname === candidate)?.coltext || candidate;
     setStatusMessage({
-      text: `Subtotals grouped by [${colLabel}] (${candidate}).`,
+      text: t(
+        `Subtotals grouped by [${colLabel}] (${candidate}).`,
+        `[${colLabel}] (${candidate}) 기준으로 소계가 그룹화되었습니다.`
+      ),
       type: 'S',
     });
   };
@@ -1093,23 +1156,23 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       let label = key;
       if (key === 'DOC') {
         iconType = 'DOC';
-        label = 'Doc';
+        label = t('Doc', '문서');
       } else if (key === '1' || key.toLowerCase() === 'green') {
         iconType = 'GREEN';
-        label = 'OK';
+        label = t('OK', '정상');
       } else if (key === '2' || key.toLowerCase() === 'yellow') {
         iconType = 'YELLOW';
-        label = 'Pending';
+        label = t('Pending', '대기');
       } else if (key === '3' || key.toLowerCase() === 'red') {
         iconType = 'RED';
-        label = 'Error';
+        label = t('Error', '오류');
       } else if (key === 'FOLDER') {
         iconType = 'FOLDER';
-        label = 'Folder';
+        label = t('Folder', '폴더');
       }
       return { statusKey: key, count, label, iconType };
     });
-  }, [itemStatusField, itemRows, simSpec.item_grid?.mock_rows]);
+  }, [itemStatusField, itemRows, simSpec.item_grid?.mock_rows, t]);
 
   const displayedItemRows = useMemo(() => {
     let result = [...itemRows];
@@ -1158,7 +1221,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     );
     const csvContent = '\uFEFF' + [headers, ...dataRows].join('\n');
     downloadFile(`${simSpec.program_id}_ITEMS.csv`, csvContent, 'text/csv;charset=utf-8;');
-    setStatusMessage({ text: 'Item grid exported to CSV.', type: 'S' });
+    setStatusMessage({ text: t('Item grid exported to CSV.', '품목 그리드가 CSV로 내보내졌습니다.'), type: 'S' });
   };
 
   const itemTotals = useMemo(() => {
@@ -1194,7 +1257,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     setRows(updated);
     commitSimUpdate((prev) => ({ ...prev, mock_rows: updated }));
     setStatusMessage({
-      text: `Row ${rowIndex + 1} Sta. updated to [${nextVal || 'None'}].`,
+      text: t(
+        `Row ${rowIndex + 1} Sta. updated to [${nextVal || 'None'}].`,
+        `${rowIndex + 1}행 상태가 [${nextVal || '없음'}](으)로 변경되었습니다.`
+      ),
       type: 'S',
     });
   };
@@ -1214,7 +1280,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       .filter((idx) => idx !== -1);
 
     if (matchingIndices.length === 0) {
-      setStatusMessage({ text: `No occurrences of "${q}" found.`, type: 'W' });
+      setStatusMessage({
+        text: t(`No occurrences of "${q}" found.`, `"${q}"에 일치하는 항목을 찾을 수 없습니다.`),
+        type: 'W',
+      });
       return;
     }
 
@@ -1223,7 +1292,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     setFindMatchIdx(targetRowIdx);
     setSelectedRowIndex(targetRowIdx);
     setStatusMessage({
-      text: `Match found at row ${targetRowIdx + 1} (${matchingIndices.length} match(es) for "${q}").`,
+      text: t(
+        `Match found at row ${targetRowIdx + 1} (${matchingIndices.length} match(es) for "${q}").`,
+        `${targetRowIdx + 1}행에서 일치 항목을 찾았습니다 ("${q}" 총 ${matchingIndices.length}건).`
+      ),
       type: 'S',
     });
   };
@@ -1312,7 +1384,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
 
     if (targetRealIndices.length === 0) {
       setStatusMessage({
-        text: `[${label}] Check or select a row first.`,
+        text: t(`[${label}] Check or select a row first.`, `[${label}] 먼저 행을 체크하거나 선택해 주세요.`),
         type: 'W',
       });
       return;
@@ -1336,7 +1408,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       setShowErrorLog(false);
       commitSimUpdate((prev) => ({ ...prev, mock_rows: nextRows }));
       setStatusMessage({
-        text: `[${label}] Reset ${targetRealIndices.length} row(s) to Warning.`,
+        text: t(
+          `[${label}] Reset ${targetRealIndices.length} row(s) to Warning.`,
+          `[${label}] ${targetRealIndices.length}건이 대기 상태로 초기화되었습니다.`
+        ),
         type: 'S',
       });
       return;
@@ -1382,7 +1457,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       editableTextFields.forEach((f) => {
         const raw = rows[realIdx]?.[f.fieldname];
         if (f.key && (raw === undefined || raw === null || String(raw).trim() === '')) {
-          const msg = `Row ${realIdx + 1}: Required key field ${f.coltext || f.fieldname} is blank.`;
+          const msg = t(
+            `Row ${realIdx + 1}: Required key field ${f.coltext || f.fieldname} is blank.`,
+            `${realIdx + 1}행: 필수 키 필드 ${f.coltext || f.fieldname} 값이 비어 있습니다.`
+          );
           missingRequiredCellErrors[`${realIdx}:${f.fieldname}`] = msg;
           failedRowIdxSet.add(realIdx);
           if (!rowFirstErrorMap.has(realIdx)) {
@@ -1406,7 +1484,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           return {
             ...row,
             ...(statusField ? { [statusField]: '3' } : {}),
-            ...(messageField ? { [messageField]: rowFirstErrorMap.get(idx) || 'Validation error' } : {}),
+            ...(messageField ? { [messageField]: rowFirstErrorMap.get(idx) || t('Validation error', '검증 오류') } : {}),
           };
         }
         return {
@@ -1420,7 +1498,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
       setRuntimeErrorLogs(combinedLogs);
       setShowErrorLog(true);
       setStatusMessage({
-        text: `[${label}] ${combinedLogs.length} input/BAPI validation error(s). Check Error Log.`,
+        text: t(
+          `[${label}] ${combinedLogs.length} input/BAPI validation error(s). Check Error Log.`,
+          `[${label}] 입력/BAPI 검증 오류 ${combinedLogs.length}건이 발생했습니다. 오류 로그를 확인하세요.`
+        ),
         type: 'E',
       });
       return;
@@ -1442,7 +1523,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     setShowErrorLog(false);
     commitSimUpdate((prev) => ({ ...prev, mock_rows: nextRows }));
     setStatusMessage({
-      text: `[${label}] (${btn.function}) ${targetRealIndices.length} row(s) processed (Status: OK).`,
+      text: t(
+        `[${label}] (${btn.function}) ${targetRealIndices.length} row(s) processed (Status: OK).`,
+        `[${label}] (${btn.function}) ${targetRealIndices.length}건 처리 완료 (상태: 정상).`
+      ),
       type: 'S',
     });
   };
@@ -1460,7 +1544,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     });
     const csvContent = '\uFEFF' + [headers, ...dataRows].join('\n');
     downloadFile(`${simSpec.program_id}_DATA.csv`, csvContent, 'text/csv;charset=utf-8;');
-    setStatusMessage({ text: 'ALV grid exported to CSV.', type: 'S' });
+    setStatusMessage({ text: t('ALV grid exported to CSV.', 'ALV 그리드가 CSV로 내보내졌습니다.'), type: 'S' });
   };
 
   // Render Sta. Icon in Toolbar or Cell
@@ -1523,10 +1607,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                 handleExecuteSelection();
               } else {
                 setScreenMode('selection');
-                setStatusMessage({ text: 'Switched to Selection Screen (F3).', type: 'S' });
+                setStatusMessage({ text: t('Switched to Selection Screen (F3).', '조회 조건 화면(F3)으로 전환되었습니다.'), type: 'S' });
               }
             }}
-            title={screenMode === 'alv' ? 'Go to Selection Screen (F3)' : 'Execute (F8)'}
+            title={screenMode === 'alv' ? t('Go to Selection Screen (F3)', '조회 조건 화면으로 이동 (F3)') : t('Execute (F8)', '실행 (F8)')}
             className="p-1 rounded bg-[#e8f1fa] hover:bg-white border border-[#9bbadb] text-slate-700 shadow-2xs flex items-center justify-center cursor-pointer shrink-0"
           >
             <div className="relative w-4 h-4 flex items-center justify-center">
@@ -1542,8 +1626,8 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
               onClick={handleSaveAlvEdits}
               title={
                 dirtyCells.size > 0
-                  ? `Validate & save ${dirtyCells.size} modified cell(s) (Ctrl+S)`
-                  : 'Validate & save grid edits'
+                  ? t(`Validate & save ${dirtyCells.size} modified cell(s) (Ctrl+S)`, `수정된 ${dirtyCells.size}개 셀 검증 및 저장 (Ctrl+S)`)
+                  : t('Validate & save grid edits', '그리드 편집 내용 검증 및 저장')
               }
               className={`px-2 py-0.5 rounded border text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-all shadow-2xs whitespace-nowrap shrink-0 ${
                 dirtyCells.size > 0
@@ -1552,14 +1636,14 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
               }`}
             >
               <Save className={`w-3.5 h-3.5 ${dirtyCells.size > 0 ? 'text-amber-700' : 'text-blue-700'}`} />
-              <span>Save{dirtyCells.size > 0 ? ` (${dirtyCells.size})` : ''}</span>
+              <span>{t('Save', '저장')}{dirtyCells.size > 0 ? ` (${dirtyCells.size})` : ''}</span>
             </button>
           )}
 
           {/* Checked Row Count Indicator when Checkbox Column Exists */}
           {screenMode === 'alv' && simSpec.field_catalog.some((f) => f.checkbox) && (
             <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-300 text-[10px] font-mono tabular-nums text-slate-700 whitespace-nowrap shrink-0">
-              {rows.filter((r) => r.CHECKBOX === true || r.CHECKBOX === 'X').length} selected
+              {rows.filter((r) => r.CHECKBOX === true || r.CHECKBOX === 'X').length} {t('selected', '건 선택')}
             </span>
           )}
 
@@ -1567,10 +1651,13 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           {screenMode === 'alv' && isSelectionFilterActive && (
             <div
               className="flex items-center gap-1 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded text-[10px] text-emerald-900 font-mono tabular-nums whitespace-nowrap shrink-0"
-              title={`Active filters: ${appliedSelectionNames.length > 0 ? appliedSelectionNames.join(', ') : 'All'} (${displayedRows.length}/${rows.length})`}
+              title={t(
+                `Active filters: ${appliedSelectionNames.length > 0 ? appliedSelectionNames.join(', ') : 'All'} (${displayedRows.length}/${rows.length})`,
+                `적용된 필터: ${appliedSelectionNames.length > 0 ? appliedSelectionNames.join(', ') : '전체'} (${displayedRows.length}/${rows.length})`
+              )}
             >
               <span>
-                Filter {displayedRows.length}/{rows.length}
+                {t('Filter', '필터')} {displayedRows.length}/{rows.length}
               </span>
               <button
                 type="button"
@@ -1578,9 +1665,9 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                   setIsSelectionFilterActive(false);
                   setAppliedSelectionNames([]);
                   setSelectionTotalsOnlyHint(false);
-                  setStatusMessage({ text: 'Selection screen filter cleared. Showing all rows.', type: 'S' });
+                  setStatusMessage({ text: t('Selection screen filter cleared. Showing all rows.', '조회 조건 필터가 해제되어 전체 행을 표시합니다.'), type: 'S' });
                 }}
-                title="Clear Selection Filter"
+                title={t('Clear Selection Filter', '조회 조건 필터 해제')}
                 className="text-emerald-700 hover:text-red-700 font-bold cursor-pointer leading-none"
               >
                 ×
@@ -1592,7 +1679,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           {screenMode === 'alv' && activeLayoutVariantName && activeLayoutVariantName !== '/STANDARD' && (
             <span
               className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] font-mono text-blue-800 whitespace-nowrap shrink-0"
-              title={`Active ALV Layout Variant: ${activeLayoutVariantName}`}
+              title={t(`Active ALV Layout Variant: ${activeLayoutVariantName}`, `적용된 ALV 레이아웃 변형: ${activeLayoutVariantName}`)}
             >
               {activeLayoutVariantName}
             </span>
@@ -1604,7 +1691,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           <button
             type="button"
             onClick={() => setScreenMode('selection')}
-            title="Selection Screen"
+            title={t('Selection Screen', '조회 조건 화면')}
             className={`px-2 py-0.5 text-[11px] rounded transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap ${
               screenMode === 'selection'
                 ? `${themeStyles.switcherActiveBg} font-semibold shadow-xs`
@@ -1612,12 +1699,12 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
             }`}
           >
             <SlidersHorizontal className="w-3 h-3" />
-            <span>Selection</span>
+            <span>{t('Selection', '조회 조건')}</span>
           </button>
           <button
             type="button"
             onClick={() => setScreenMode('alv')}
-            title="Main ALV Screen"
+            title={t('Main ALV Screen', '메인 ALV 화면')}
             className={`px-2 py-0.5 text-[11px] rounded transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap ${
               screenMode === 'alv'
                 ? `${themeStyles.switcherActiveBg} font-semibold shadow-xs`
@@ -1625,7 +1712,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
             }`}
           >
             <Layers className="w-3 h-3 text-blue-700" />
-            <span>Main ALV</span>
+            <span>{t('Main ALV', '메인 ALV')}</span>
           </button>
         </div>
       </div>
@@ -1646,7 +1733,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
             
             if (rawTargets.length === 0) {
               setStatusMessage({
-                text: 'Select a column header first to sort.',
+                text: t('Select a column header first to sort.', '정렬할 컬럼 헤더를 먼저 선택하세요.'),
                 type: 'W',
               });
               return;
@@ -1654,7 +1741,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
 
             handleMultiSort(rawTargets, asc);
             setStatusMessage({
-              text: `Sorted by ${rawTargets.join(', ')} (${asc ? 'Ascending' : 'Descending'}).`,
+              text: t(
+                `Sorted by ${rawTargets.join(', ')} (${asc ? 'Ascending' : 'Descending'}).`,
+                `${rawTargets.join(', ')} 기준으로 정렬되었습니다 (${asc ? '오름차순' : '내림차순'}).`
+              ),
               type: 'S',
             });
           }}
@@ -1665,7 +1755,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           onClearFilter={() => {
             setFilterQuery('');
             setColumnFilter({ fieldname: '__ALL__', operator: 'contains', value: '' });
-            setStatusMessage({ text: 'ALV Grid filter cleared.', type: 'S' });
+            setStatusMessage({ text: t('ALV Grid filter cleared.', 'ALV 그리드 필터가 해제되었습니다.'), type: 'S' });
           }}
           onToggleTotals={handleToggleTotals}
           onToggleSubtotals={handleToggleSubtotals}
@@ -1704,7 +1794,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
             <div className="max-w-2xl flex items-center justify-between gap-2 flex-wrap bg-white border border-slate-300 rounded px-3 py-1.5 shadow-2xs text-xs">
               <div className="flex items-center gap-2">
                 <Bookmark className="w-3.5 h-3.5 text-blue-700" />
-                <span className="font-semibold text-slate-700">Variant:</span>
+                <span className="font-semibold text-slate-700">{t('Variant:', '변형(Variant):')}</span>
                 <select
                   value={activeVariantName}
                   onChange={(e) => {
@@ -1729,14 +1819,14 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                       }));
                       setObligatoryErrorIds([]);
                       setStatusMessage({
-                        text: `Selection Variant [${found.name}] loaded.`,
+                        text: t(`Selection Variant [${found.name}] loaded.`, `조회 변형 [${found.name}]을 불러왔습니다.`),
                         type: 'S',
                       });
                     }
                   }}
                   className="bg-white border border-slate-300 rounded px-2 py-0.5 text-xs font-mono min-w-[140px]"
                 >
-                  <option value="">-- Select Variant --</option>
+                  <option value="">{t('-- Select Variant --', '-- 변형 선택 --')}</option>
                   {selectionVariants.map((v) => (
                     <option key={v.id} value={v.name}>
                       {v.name} ({v.updatedAt})
@@ -1753,11 +1843,11 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                       setSelectionVariants(next);
                       setActiveVariantName('');
                       setStatusMessage({
-                        text: `Variant [${found.name}] deleted.`,
+                        text: t(`Variant [${found.name}] deleted.`, `변형 [${found.name}]이 삭제되었습니다.`),
                         type: 'S',
                       });
                     }}
-                    title="Delete Selected Variant"
+                    title={t('Delete Selected Variant', '선택한 변형 삭제')}
                     className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -1800,13 +1890,13 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                         setIsSavingVariant(false);
                         setVariantNameDraft('');
                         setStatusMessage({
-                          text: `Selection Variant [${name}] saved.`,
+                          text: t(`Selection Variant [${name}] saved.`, `조회 변형 [${name}]이 저장되었습니다.`),
                           type: 'S',
                         });
                       }}
                       className="px-2 py-0.5 bg-blue-600 text-white rounded text-[11px] font-semibold cursor-pointer"
                     >
-                      Save
+                      {t('Save', '저장')}
                     </button>
                     <button
                       type="button"
@@ -1816,7 +1906,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                       }}
                       className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] cursor-pointer"
                     >
-                      Cancel
+                      {t('Cancel', '취소')}
                     </button>
                   </div>
                 ) : (
@@ -1824,11 +1914,11 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsSavingVariant(true)}
-                      title="Save Current Values as Variant"
+                      title={t('Save Current Values as Variant', '현재 값을 변형으로 저장')}
                       className="px-2 py-0.5 bg-slate-50 hover:bg-blue-50 border border-slate-300 rounded text-[11px] font-medium text-slate-700 flex items-center gap-1 cursor-pointer"
                     >
                       <Save className="w-3 h-3 text-blue-700" />
-                      <span>Save Variant</span>
+                      <span>{t('Save Variant', '변형 저장')}</span>
                     </button>
                     <button
                       type="button"
@@ -1851,9 +1941,9 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                         }));
                         setActiveVariantName('');
                         setObligatoryErrorIds([]);
-                        setStatusMessage({ text: 'Selection screen reset to default values.', type: 'S' });
+                        setStatusMessage({ text: t('Selection screen reset to default values.', '조회 조건이 기본값으로 초기화되었습니다.'), type: 'S' });
                       }}
-                      title="Reset Selection Values to Defaults"
+                      title={t('Reset Selection Values to Defaults', '조회 조건 기본값으로 초기화')}
                       className="p-1 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded text-slate-600 cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -2023,7 +2113,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                         <button
                           type="button"
                           onClick={() => setF4Target({ param, side: 'low' })}
-                          title="F4 Input Help"
+                          title={t('F4 Input Help', 'F4 입력 도움말')}
                           className="absolute right-0.5 p-0.5 text-slate-400 hover:text-blue-700 cursor-pointer"
                         >
                           <Search className="w-3 h-3" />
@@ -2051,13 +2141,13 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                                   setF4Target({ param, side: 'high' });
                                 }
                               }}
-                              placeholder="To"
+                              placeholder={t('To', '종료값')}
                               className="w-32 bg-white border border-slate-400 pl-2 pr-6 py-0.5 text-xs font-mono focus:outline-none focus:border-blue-600 shadow-inner"
                             />
                             <button
                               type="button"
                               onClick={() => setF4Target({ param, side: 'high' })}
-                              title="F4 Input Help"
+                              title={t('F4 Input Help', 'F4 입력 도움말')}
                               className="absolute right-0.5 p-0.5 text-slate-400 hover:text-blue-700 cursor-pointer"
                             >
                               <Search className="w-3 h-3" />
@@ -2068,8 +2158,8 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                             onClick={() => setActiveParamForMulti(param)}
                             title={
                               multiCount > 0
-                                ? `Multiple Selection (${multiCount} condition(s) active)`
-                                : 'Multiple Selection (Single / Ranges / Exclude)'
+                                ? t(`Multiple Selection (${multiCount} condition(s) active)`, `다중 선택 (${multiCount}개 조건 적용됨)`)
+                                : t('Multiple Selection (Single / Ranges / Exclude)', '다중 선택 (단일값 / 범위 / 제외)')
                             }
                             className={`px-2 py-0.5 border font-bold text-xs cursor-pointer transition-colors ${
                               multiCount > 0
@@ -2089,7 +2179,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
               if (segments.length === 0) {
                 return (
                   <div className={`border rounded p-6 shadow-xs max-w-2xl bg-white text-center text-xs text-slate-500 ${themeStyles.selectionBoxBorder}`}>
-                    No selection parameters defined. Add items in the Selection Screen tab.
+                    {t('No selection parameters defined. Add items in the Selection Screen tab.', '정의된 조회 조건이 없습니다. Selection Screen 탭에서 항목을 추가하세요.')}
                   </div>
                 );
               }
@@ -2120,7 +2210,11 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                   {/* Execute (F8) Action Bar inside Selection Screen */}
                   <div className="max-w-2xl flex items-center justify-between pt-1">
                     <span className="text-[11px] text-slate-500">
-                      Tip: Press <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">F4</kbd> inside inputs for value help, or <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">F8</kbd> to execute.
+                      {t('Tip: Press', '팁: 입력란에서')}{' '}
+                      <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">F4</kbd>{' '}
+                      {t('inside inputs for value help, or', '키로 값 도움말을 열거나')}{' '}
+                      <kbd className="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px]">F8</kbd>{' '}
+                      {t('to execute.', '키로 실행할 수 있습니다.')}
                     </span>
                     <button
                       type="button"
@@ -2128,7 +2222,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                       className="px-3.5 py-1.5 bg-[#e8f1fa] hover:bg-white border border-[#9bbadb] text-slate-800 font-bold text-xs rounded shadow-2xs flex items-center gap-1.5 cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
-                      <span>Execute (F8)</span>
+                      <span>{t('Execute (F8)', '실행 (F8)')}</span>
                     </button>
                   </div>
                 </>
@@ -2177,14 +2271,14 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                   <div className="bg-[#e4edf7] px-3 py-1.5 border-b border-[#9bbadb] text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs shrink-0">
                     <div className="flex items-center gap-1.5">
                       <Table className="w-3.5 h-3.5 text-blue-800" />
-                      <span>{simSpec.layout?.grid_title || 'Header ALV Grid'}</span>
+                      <span>{simSpec.layout?.grid_title || t('Header ALV Grid', '헤더 ALV 그리드')}</span>
                     </div>
                     <div className="flex items-center gap-2 text-[10px] font-mono text-slate-600 font-normal">
                       <span>SEL_MODE: {simSpec.layout?.sel_mode || 'A'}</span>
                       <span>|</span>
-                      <span>Total: {displayedRows.length}</span>
+                      <span>{t('Total', '전체')}: {displayedRows.length}</span>
                       <span>|</span>
-                      <span className="font-bold text-blue-800">Selected: {selectedHeaderKey || '-'}</span>
+                      <span className="font-bold text-blue-800">{t('Selected', '선택')}: {selectedHeaderKey || '-'}</span>
                     </div>
                   </div>
 
@@ -2214,7 +2308,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                                     ? 'bg-[#bce0fd] text-slate-900'
                                     : `${themeStyles.gridHeaderBg} ${themeStyles.gridHeaderText}`
                                 }`}
-                                title="Click or drag to select columns (sort & totals)"
+                                title={t('Click or drag to select columns (sort & totals)', '클릭 또는 드래그하여 컬럼 선택 (정렬 및 합계)')}
                               >
                                 <div className="flex items-center justify-between gap-1">
                                   <span>{columnTextMode === 'fieldname' ? field.fieldname : (field.coltext || field.fieldname)}</span>
@@ -2237,7 +2331,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                         {displayedRows.length === 0 ? (
                           <tr>
                             <td colSpan={simSpec.field_catalog.length + 1} className="py-8 text-center text-slate-500">
-                              <p className="mb-2">No header data available.</p>
+                              <p className="mb-2">{t('No header data available.', '헤더 데이터가 없습니다.')}</p>
                               <button
                                 type="button"
                                 onClick={handleGenerateAiMockData}
@@ -2245,7 +2339,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                                 className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                               >
                                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                                <span>Generate Mock Data</span>
+                                <span>{t('Generate Mock Data', '샘플 데이터 생성')}</span>
                               </button>
                             </td>
                           </tr>
@@ -2259,7 +2353,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                                 onClick={() => {
                                   setSelectedRowIndex(rIdx);
                                   setStatusMessage({
-                                    text: `Header [${row[foreignKey] || row.DOC_NO || rIdx + 1}] selected (Item grid synced).`,
+                                    text: t(
+                                      `Header [${row[foreignKey] || row.DOC_NO || rIdx + 1}] selected (Item grid synced).`,
+                                      `헤더 [${row[foreignKey] || row.DOC_NO || rIdx + 1}] 선택됨 (품목 그리드 동기화).`
+                                    ),
                                     type: 'S',
                                   });
                                 }}
@@ -2415,11 +2512,11 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                   <div className="bg-[#e9f0f8] px-3 py-1.5 border-b border-[#9bbadb] text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs shrink-0">
                     <div className="flex items-center gap-1.5">
                       <Table className="w-3.5 h-3.5 text-indigo-700" />
-                      <span>{simSpec.item_grid.layout?.grid_title || 'Item ALV Grid'}</span>
+                      <span>{simSpec.item_grid.layout?.grid_title || t('Item ALV Grid', '품목 ALV 그리드')}</span>
                     </div>
                     <div className="flex items-center gap-2 text-[10px] font-mono text-slate-600 font-normal">
                       <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 font-semibold border border-blue-200">
-                        Order: {selectedHeaderKey || 'All'} ({itemRows.length})
+                        {t('Order', '오더')}: {selectedHeaderKey || t('All', '전체')} ({itemRows.length})
                       </span>
                       <span>|</span>
                       <span>SEL_MODE: {simSpec.item_grid.layout?.sel_mode || 'A'}</span>
@@ -2469,7 +2566,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                     }}
                     onCustomAction={(btn) =>
                       setStatusMessage({
-                        text: `[Item ALV] Button [${btn.text}] (${btn.function}) executed.`,
+                        text: t(
+                          `[Item ALV] Button [${btn.text}] (${btn.function}) executed.`,
+                          `[품목 ALV] 버튼 [${btn.text}] (${btn.function}) 실행됨.`
+                        ),
                         type: 'S',
                       })
                     }
@@ -2505,7 +2605,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                         {displayedItemRows.length === 0 ? (
                           <tr>
                             <td colSpan={simSpec.item_grid.field_catalog.length + 1} className="py-8 text-center text-slate-400">
-                              No item rows found for order ({selectedHeaderKey || '-'}).
+                              {t(
+                                `No item rows found for order (${selectedHeaderKey || '-'}).`,
+                                `오더(${selectedHeaderKey || '-'})에 해당하는 품목 데이터가 없습니다.`
+                              )}
                             </td>
                           </tr>
                         ) : (
@@ -2588,7 +2691,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                                               };
                                             });
                                             setStatusMessage({
-                                              text: `Item row ${rIdx + 1} [${field.coltext}] updated.`,
+                                              text: t(
+                                                `Item row ${rIdx + 1} [${field.coltext}] updated.`,
+                                                `품목 ${rIdx + 1}행 [${field.coltext}] 값이 수정되었습니다.`
+                                              ),
                                               type: 'S',
                                             });
                                           }}
@@ -2671,7 +2777,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                         </>
                       )}
                       <span>|</span>
-                      <span>Rows: {displayedRows.length}</span>
+                      <span>{t('Rows', '행')}: {displayedRows.length}</span>
                     </div>
                   </div>
                 )}
@@ -2710,7 +2816,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                                   ? 'bg-[#bce0fd] text-slate-900'
                                   : `${themeStyles.gridHeaderBg} ${themeStyles.gridHeaderText}`
                               }`}
-                              title="Click or drag to select columns (sort & totals)"
+                              title={t('Click or drag to select columns (sort & totals)', '클릭 또는 드래그하여 컬럼 선택 (정렬 및 합계)')}
                             >
                               <div className="flex items-center justify-between gap-1">
                                 <span>{columnTextMode === 'fieldname' ? field.fieldname : (field.coltext || field.fieldname)}</span>
@@ -2774,7 +2880,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                       displayedRows.length === 0 ? (
                         <tr>
                           <td colSpan={effectiveFieldCatalog.length + (simSpec.layout?.no_rowmark ? 0 : 1)} className="py-12 text-center text-slate-500">
-                            <p className="mb-2">No records found matching filters.</p>
+                            <p className="mb-2">{t('No records found matching filters.', '필터 조건에 일치하는 데이터가 없습니다.')}</p>
                             <button
                               type="button"
                               onClick={handleGenerateAiMockData}
@@ -2782,7 +2888,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                               className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
                             >
                               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                              <span>Generate Mock Data</span>
+                              <span>{t('Generate Mock Data', '샘플 데이터 생성')}</span>
                             </button>
                           </td>
                         </tr>
@@ -2898,7 +3004,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                                         cellErr
                                           ? cellErr
                                           : isStatusCol
-                                          ? 'Click to cycle Sta. status and refresh toolbar filter'
+                                          ? t('Click to cycle Sta. status and refresh toolbar filter', '클릭하여 상태(Sta.)를 순환하고 툴바 필터를 갱신')
                                           : field.emphasize
                                           ? `SAP Color: ${field.emphasize}`
                                           : undefined
@@ -2998,7 +3104,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                                       >
                                         {isSubCol ? (
                                           <span className="text-[11px] font-sans font-bold">
-                                            Subtotal: {currentGroupVal || '(Blank)'}
+                                            {t('Subtotal:', '소계:')} {currentGroupVal || t('(Blank)', '(공백)')}
                                           </span>
                                         ) : hasSum ? (
                                           Number(groupSums[field.fieldname] || 0).toLocaleString()
@@ -3078,13 +3184,13 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                 <div className="w-3.5 h-3.5 border border-white/80 rounded-2xs flex items-center justify-center">
                   <div className="w-1.5 h-1.5 bg-white/60" />
                 </div>
-                <span>Error Log ({activeErrorLogs.length})</span>
+                <span>{t('Error Log', '오류 로그')} ({activeErrorLogs.length})</span>
               </div>
               <button
                 type="button"
                 onClick={() => setShowErrorLog(false)}
                 className="hover:bg-white/20 p-0.5 rounded text-white cursor-pointer"
-                aria-label="Close error log"
+                aria-label={t('Close error log', '오류 로그 닫기')}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -3096,13 +3202,13 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                 <thead className="bg-[#e4edf7] border-b border-[#a4bedb] text-slate-800 font-semibold text-[11px]">
                   <tr>
                     <th className="py-1 px-3 w-16 text-center border-r border-[#a4bedb] bg-[#e4edf7]">
-                      Type
+                      {t('Type', '유형')}
                     </th>
                     <th className="py-1 px-3 w-28 text-left border-r border-[#a4bedb] bg-[#e4edf7]">
-                      Column
+                      {t('Column', '컬럼')}
                     </th>
                     <th className="py-1 px-3 text-left bg-[#e4edf7]">
-                      Message Text
+                      {t('Message Text', '메시지 내용')}
                     </th>
                   </tr>
                 </thead>
@@ -3160,10 +3266,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
             type="button"
             onClick={() => setIsThemeSettingsOpen(true)}
             className="hover:underline cursor-pointer flex items-center gap-1 font-sans"
-            title="Click to open SAP GUI Theme Settings"
+            title={t('Click to open SAP GUI Theme Settings', '클릭하여 SAP GUI 테마 설정 열기')}
           >
             <Palette className="w-3 h-3" />
-            <span>Theme: {themeInfo.name}</span>
+            <span>{t('Theme:', '테마:')} {themeInfo.name}</span>
           </button>
           <span className="opacity-40">|</span>
           <span>cl_gui_alv_grid</span>
@@ -3188,7 +3294,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
             }));
             setObligatoryErrorIds((prev) => prev.filter((id) => id !== targetId));
             setStatusMessage({
-              text: `[${activeParamForMulti.text}] Multiple selection updated (${items.length} condition(s)).`,
+              text: t(
+                `[${activeParamForMulti.text}] Multiple selection updated (${items.length} condition(s)).`,
+                `[${activeParamForMulti.text}] 다중 선택이 업데이트되었습니다 (${items.length}개 조건).`
+              ),
               type: 'S',
             });
           }}
@@ -3215,7 +3324,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
             }));
             setObligatoryErrorIds((prev) => prev.filter((id) => id !== targetParamId));
             setStatusMessage({
-              text: `F4 Value "${val}" assigned to ${f4Target.param.name}.`,
+              text: t(
+                `F4 Value "${val}" assigned to ${f4Target.param.name}.`,
+                `F4 값 "${val}"이(가) ${f4Target.param.name}에 입력되었습니다.`
+              ),
               type: 'S',
             });
           }}
@@ -3240,7 +3352,9 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           if (filterModalState.target === 'item') {
             setItemFilterQuery(next.value);
             setStatusMessage({
-              text: next.value ? `Item Grid filtered by "${next.value}".` : 'Item Grid filter cleared.',
+              text: next.value
+                ? t(`Item Grid filtered by "${next.value}".`, `품목 그리드에 "${next.value}" 필터가 적용되었습니다.`)
+                : t('Item Grid filter cleared.', '품목 그리드 필터가 해제되었습니다.'),
               type: 'S',
             });
           } else {
@@ -3248,8 +3362,11 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
             setFilterQuery(next.fieldname === '__ALL__' ? next.value : `${next.fieldname}: ${next.value}`);
             setStatusMessage({
               text: next.value
-                ? `ALV Filter applied (${next.fieldname === '__ALL__' ? 'All columns' : next.fieldname} ${next.operator} "${next.value}").`
-                : 'ALV Filter cleared.',
+                ? t(
+                    `ALV Filter applied (${next.fieldname === '__ALL__' ? 'All columns' : next.fieldname} ${next.operator} "${next.value}").`,
+                    `ALV 필터가 적용되었습니다 (${next.fieldname === '__ALL__' ? '전체 컬럼' : next.fieldname} ${next.operator} "${next.value}").`
+                  )
+                : t('ALV Filter cleared.', 'ALV 필터가 해제되었습니다.'),
               type: 'S',
             });
           }
@@ -3290,8 +3407,14 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
           }
           setStatusMessage({
             text: variantName
-              ? `Layout variant [${variantName}] applied (${cfg.visibleFields.length} columns visible).`
-              : `Layout updated (${cfg.visibleFields.length} columns visible).`,
+              ? t(
+                  `Layout variant [${variantName}] applied (${cfg.visibleFields.length} columns visible).`,
+                  `레이아웃 변형 [${variantName}]이 적용되었습니다 (${cfg.visibleFields.length}개 컬럼 표시).`
+                )
+              : t(
+                  `Layout updated (${cfg.visibleFields.length} columns visible).`,
+                  `레이아웃이 업데이트되었습니다 (${cfg.visibleFields.length}개 컬럼 표시).`
+                ),
             type: 'S',
           });
         }}

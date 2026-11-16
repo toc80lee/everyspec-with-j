@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Check, Search, X } from 'lucide-react';
 import { ProgramSpec, SelectionParameter } from '../types/sap';
 import { getF4SuggestionsForParam, F4SuggestionItem } from '../utils/sapSimulatorHelpers';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SapF4ValueHelpModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export const SapF4ValueHelpModal: React.FC<SapF4ValueHelpModalProps> = ({
   onClose,
   onSelectValue,
 }) => {
+  const { t } = useLanguage();
   const [query, setQuery] = useState('');
   const [selectedValue, setSelectedValue] = useState<string>('');
 
@@ -56,12 +58,13 @@ export const SapF4ValueHelpModal: React.FC<SapF4ValueHelpModalProps> = ({
           <div className="flex items-center gap-1.5">
             <Search className="w-3.5 h-3.5 text-sky-200" />
             <span>
-              F4 Input Help: {param.text} ({param.name} - {targetSide.toUpperCase()})
+              {t('F4 Input Help:', 'F4 입력 도움말:')} {param.text} ({param.name} - {targetSide.toUpperCase()})
             </span>
           </div>
           <button
             type="button"
             onClick={onClose}
+            title={t('Close', '닫기')}
             className="rounded p-0.5 hover:bg-white/20 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4 text-white" />
@@ -76,7 +79,7 @@ export const SapF4ValueHelpModal: React.FC<SapF4ValueHelpModalProps> = ({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search value or description..."
+              placeholder={t('Search value or description...', '값 또는 설명 검색...')}
               autoFocus
               className="flex-1 text-xs focus:outline-none bg-transparent"
             />
@@ -87,16 +90,16 @@ export const SapF4ValueHelpModal: React.FC<SapF4ValueHelpModalProps> = ({
             <table className="w-full border-collapse text-xs">
               <thead className="sticky top-0 bg-[#d8e4f0] border-b border-[#9bbadb] text-slate-800 font-semibold">
                 <tr>
-                  <th className="px-2 py-1 text-left border-r border-[#9bbadb] w-28">Value</th>
-                  <th className="px-2 py-1 text-left border-r border-[#9bbadb]">Description</th>
-                  <th className="px-2 py-1 text-left w-24">Source</th>
+                  <th className="px-2 py-1 text-left border-r border-[#9bbadb] w-28">{t('Value', '값')}</th>
+                  <th className="px-2 py-1 text-left border-r border-[#9bbadb]">{t('Description', '설명')}</th>
+                  <th className="px-2 py-1 text-left w-24">{t('Source', '출처')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="py-6 text-center text-slate-400">
-                      No matching F4 entries found.
+                      {t('No matching F4 entries found.', '일치하는 F4 항목이 없습니다.')}
                     </td>
                   </tr>
                 ) : (
@@ -129,7 +132,10 @@ export const SapF4ValueHelpModal: React.FC<SapF4ValueHelpModalProps> = ({
           </div>
 
           <div className="text-[11px] text-slate-600">
-            Double-click a row or select and press Copy to insert the value.
+            {t(
+              'Double-click a row or select and press Copy to insert the value.',
+              '행을 더블클릭하거나 선택 후 복사 버튼을 눌러 값을 입력하세요.'
+            )}
           </div>
         </div>
 
@@ -141,14 +147,14 @@ export const SapF4ValueHelpModal: React.FC<SapF4ValueHelpModalProps> = ({
             className="flex items-center gap-1 px-3 py-1 text-[11px] font-semibold text-white bg-[#2B547E] border border-[#1A385C] hover:bg-[#1E3F66] disabled:opacity-40 cursor-pointer"
           >
             <Check className="w-3.5 h-3.5" />
-            Copy (Enter)
+            {t('Copy (Enter)', '복사 (Enter)')}
           </button>
           <button
             type="button"
             onClick={onClose}
             className="px-3 py-1 text-[11px] text-slate-700 bg-[#ECE9D8] border border-slate-400 hover:bg-white cursor-pointer"
           >
-            Cancel
+            {t('Cancel', '취소')}
           </button>
         </div>
       </div>

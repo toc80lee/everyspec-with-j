@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ProgramSpec } from '../types/sap';
 import { requestLegacyAbapImport } from '../utils/aiLogicGenerator';
 import { Code2, FileUp, Loader2, Sparkles, X, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface LegacyAbapImportModalProps {
   isOpen: boolean;
@@ -45,6 +46,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
   currentUserName,
   onImportSpec,
 }) => {
+  const { t } = useLanguage();
   const [abapSource, setAbapSource] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
 
   const handleAnalyze = async () => {
     if (!abapSource.trim()) {
-      setErrorMsg('Please enter ABAP source code or SE11 structure to analyze.');
+      setErrorMsg(t('Please enter ABAP source code or SE11 structure to analyze.', '분석할 ABAP 소스 코드 또는 SE11 구조를 입력하세요.'));
       return;
     }
     setLoading(true);
@@ -86,7 +88,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
         source: res.source,
       });
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to parse legacy ABAP source.');
+      setErrorMsg(err?.message || t('Failed to parse legacy ABAP source.', '레거시 ABAP 소스 파싱에 실패했습니다.'));
     } finally {
       setLoading(false);
     }
@@ -99,17 +101,20 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
           <div className="flex items-center gap-2.5">
             <Code2 className="w-5 h-5 text-emerald-400" />
             <div>
-              <h3 className="text-sm font-bold">Reverse Import Legacy ABAP / SE11</h3>
+              <h3 className="text-sm font-bold">{t('Reverse Import Legacy ABAP / SE11', '레거시 ABAP / SE11 역공학 임포트')}</h3>
               <p className="text-[11px] text-slate-300">
-                Paste REPORT, TOP, SELECT-OPTIONS, or AUTHORITY-CHECK code to extract a Program Spec.
+                {t(
+                  'Paste REPORT, TOP, SELECT-OPTIONS, or AUTHORITY-CHECK code to extract a Program Spec.',
+                  'REPORT, TOP, SELECT-OPTIONS 또는 AUTHORITY-CHECK 코드를 붙여넣어 프로그램 사양서를 추출합니다.'
+                )}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            title="Close"
-            aria-label="Close"
+            title={t('Close', '닫기')}
+            aria-label={t('Close', '닫기')}
             className="p-1.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
@@ -121,7 +126,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
             <div className="flex items-center gap-2">
               <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-300 cursor-pointer">
                 <FileUp className="w-3.5 h-3.5" />
-                Upload .abap / .txt
+                {t('Upload .abap / .txt', '.abap / .txt 업로드')}
                 <input
                   type="file"
                   accept=".abap,.txt,.inc"
@@ -134,7 +139,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
                 onClick={() => setAbapSource(SAMPLE_LEGACY_ABAP)}
                 className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-200"
               >
-                Load Sample ABAP
+                {t('Load Sample ABAP', '샘플 ABAP 불러오기')}
               </button>
             </div>
 
@@ -145,7 +150,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-              {loading ? 'Analyzing ABAP...' : 'Extract Spec'}
+              {loading ? t('Analyzing ABAP...', 'ABAP 분석 중...') : t('Extract Spec', '사양서 추출')}
             </button>
           </div>
 
@@ -153,7 +158,10 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
             value={abapSource}
             onChange={(e) => setAbapSource(e.target.value)}
             rows={10}
-            placeholder="Paste ABAP source (REPORT z..., PARAMETERS: ..., SELECT-OPTIONS: ..., SELECT ... FROM ...)."
+            placeholder={t(
+              'Paste ABAP source (REPORT z..., PARAMETERS: ..., SELECT-OPTIONS: ..., SELECT ... FROM ...).',
+              'ABAP 소스 코드(REPORT z..., PARAMETERS: ..., SELECT-OPTIONS: ..., SELECT ... FROM ...)를 붙여넣으세요.'
+            )}
             className="w-full bg-slate-950 text-emerald-200 font-mono text-xs p-3.5 rounded-xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
 
@@ -170,7 +178,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   <span className="text-xs font-bold text-slate-800">
-                    Extraction Complete ({previewResult.source === 'ai' ? 'AI Parser' : 'Deterministic Parser'})
+                    {t('Extraction Complete', '추출 완료')} ({previewResult.source === 'ai' ? t('AI Parser', 'AI 파서') : t('Deterministic Parser', '규칙 기반 파서')})
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -187,23 +195,23 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
-                  <div className="text-[10px] text-slate-500">Program ID</div>
+                  <div className="text-[10px] text-slate-500">{t('Program ID', 'Program ID')}</div>
                   <div className="font-mono font-bold text-slate-800">{previewResult.spec.program_id}</div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
-                  <div className="text-[10px] text-slate-500">Selection Params</div>
+                  <div className="text-[10px] text-slate-500">{t('Selection Params', '조회 조건')}</div>
                   <div className="font-mono font-bold text-blue-700 tabular-nums">
                     {previewResult.spec.selection_params.length}
                   </div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
-                  <div className="text-[10px] text-slate-500">ALV Field Catalog</div>
+                  <div className="text-[10px] text-slate-500">{t('ALV Field Catalog', 'ALV 필드 카탈로그')}</div>
                   <div className="font-mono font-bold text-emerald-700 tabular-nums">
                     {previewResult.spec.field_catalog.length}
                   </div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5">
-                  <div className="text-[10px] text-slate-500">Authority Checks</div>
+                  <div className="text-[10px] text-slate-500">{t('Authority Checks', '권한 점검')}</div>
                   <div className="font-mono font-bold text-violet-700 tabular-nums">
                     {(previewResult.spec.authority_checks || []).length}
                   </div>
@@ -219,7 +227,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200"
           >
-            Cancel
+            {t('Cancel', '취소')}
           </button>
           <button
             type="button"
@@ -231,7 +239,7 @@ export const LegacyAbapImportModal: React.FC<LegacyAbapImportModalProps> = ({
             }}
             className="px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40"
           >
-            Create Program from Spec
+            {t('Create Program from Spec', '추출 사양서로 생성')}
           </button>
         </div>
       </div>

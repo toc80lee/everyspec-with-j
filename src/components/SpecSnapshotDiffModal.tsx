@@ -6,6 +6,7 @@ import {
   SpecSnapshotRecord,
 } from '../utils/specSnapshotStorage';
 import { GitCompare, History, RotateCcw, X, CheckCircle2 } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SpecSnapshotDiffModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export const SpecSnapshotDiffModal: React.FC<SpecSnapshotDiffModalProps> = ({
   isReadOnly,
   onRestoreSnapshot,
 }) => {
+  const { t } = useLanguage();
   const [snapshots, setSnapshots] = useState<SpecSnapshotRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedSnapId, setSelectedSnapId] = useState<string>('');
@@ -67,17 +69,17 @@ export const SpecSnapshotDiffModal: React.FC<SpecSnapshotDiffModalProps> = ({
           <div className="flex items-center gap-2.5">
             <GitCompare className="w-5 h-5 text-blue-400" />
             <div>
-              <h3 className="text-sm font-bold">Compare & Restore Revision Snapshots</h3>
+              <h3 className="text-sm font-bold">{t('Compare & Restore Revision Snapshots', '리비전 스냅샷 비교 및 복원')}</h3>
               <p className="text-[11px] text-slate-300 font-mono">
-                {currentSpec.program_id} — Compare saved snapshots against working copy
+                {currentSpec.program_id} — {t('Compare saved snapshots against working copy', '저장된 스냅샷과 현재 작업본 비교')}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            title="Close"
-            aria-label="Close"
+            title={t('Close', '닫기')}
+            aria-label={t('Close', '닫기')}
             className="p-1.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
@@ -89,14 +91,17 @@ export const SpecSnapshotDiffModal: React.FC<SpecSnapshotDiffModalProps> = ({
           <div className="border-r border-slate-200 bg-slate-50 p-3 overflow-y-auto space-y-2">
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-1 flex items-center gap-1.5">
               <History className="w-3.5 h-3.5" />
-              Saved Snapshots ({snapshots.length})
+              {t('Saved Snapshots', '저장된 스냅샷')} ({snapshots.length})
             </div>
 
             {loading ? (
-              <div className="text-xs text-slate-500 p-4 text-center">Loading snapshots...</div>
+              <div className="text-xs text-slate-500 p-4 text-center">{t('Loading snapshots...', '스냅샷 불러오는 중...')}</div>
             ) : snapshots.length === 0 ? (
               <div className="text-xs text-slate-500 bg-white border border-slate-200 rounded-lg p-3">
-                No saved snapshots yet. Click <b>Save Snapshot</b> in the top bar to record revision history.
+                {t(
+                  'No saved snapshots yet. Click Save Snapshot in the top bar to record revision history.',
+                  '아직 저장된 스냅샷이 없습니다. 상단 바의 스냅샷 버튼을 눌러 이력을 저장하세요.'
+                )}
               </div>
             ) : (
               snapshots.map((snap) => {
@@ -134,17 +139,17 @@ export const SpecSnapshotDiffModal: React.FC<SpecSnapshotDiffModalProps> = ({
           <div className="md:col-span-2 p-4 overflow-y-auto space-y-3 bg-white">
             {!selectedSnapshot ? (
               <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                Select a snapshot from the left to compare.
+                {t('Select a snapshot from the left to compare.', '비교할 스냅샷을 좌측에서 선택하세요.')}
               </div>
             ) : (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
                   <div>
                     <div className="text-xs font-bold text-slate-800">
-                      Baseline <span className="font-mono text-blue-700">{selectedSnapshot.version}</span> vs Working Copy
+                      {t('Baseline', '기준')} <span className="font-mono text-blue-700">{selectedSnapshot.version}</span> {t('vs Working Copy', 'vs 현재 작업본')}
                     </div>
                     <div className="text-[11px] text-slate-500">
-                      {diffs.length} change(s) detected
+                      {t(`${diffs.length} change(s) detected`, `${diffs.length}건의 변경 사항 감지됨`)}
                     </div>
                   </div>
                   {!isReadOnly && (
@@ -161,7 +166,7 @@ export const SpecSnapshotDiffModal: React.FC<SpecSnapshotDiffModalProps> = ({
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      Restore Version
+                      {t('Restore Version', '이 버전으로 복원')}
                     </button>
                   )}
                 </div>
@@ -169,7 +174,7 @@ export const SpecSnapshotDiffModal: React.FC<SpecSnapshotDiffModalProps> = ({
                 {diffs.length === 0 ? (
                   <div className="flex items-center gap-2 p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    No differences between the selected snapshot and current spec.
+                    {t('No differences between the selected snapshot and current spec.', '선택한 스냅샷과 현재 사양 간 차이가 없습니다.')}
                   </div>
                 ) : (
                   <div className="space-y-2.5">
@@ -182,7 +187,7 @@ export const SpecSnapshotDiffModal: React.FC<SpecSnapshotDiffModalProps> = ({
                         <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-200">
                           <div className="p-2.5 bg-rose-50/40">
                             <div className="text-[10px] font-bold text-rose-700 mb-1">
-                              Snapshot ({selectedSnapshot.version})
+                              {t('Snapshot', '스냅샷')} ({selectedSnapshot.version})
                             </div>
                             <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-slate-700 max-h-36 overflow-y-auto">
                               {d.before}
@@ -190,7 +195,7 @@ export const SpecSnapshotDiffModal: React.FC<SpecSnapshotDiffModalProps> = ({
                           </div>
                           <div className="p-2.5 bg-emerald-50/40">
                             <div className="text-[10px] font-bold text-emerald-700 mb-1">
-                              Working Copy
+                              {t('Working Copy', '현재 작업본')}
                             </div>
                             <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-slate-700 max-h-36 overflow-y-auto">
                               {d.after}
