@@ -72,10 +72,10 @@ export const MermaidDataFlowEditor: React.FC<MermaidDataFlowEditorProps> = ({
       : 'sample_01_standard'
   );
 
-  // Box Collapse/Expand states (RFQ v1.23: applied to all 3 sections)
-  const [isCodeCollapsed, setIsCodeCollapsed] = useState<boolean>(false);
+  // Box Collapse/Expand states (RFQ v1.30: Editor collapsed, Flow Chart expanded, Detail Spec collapsed by default)
+  const [isCodeCollapsed, setIsCodeCollapsed] = useState<boolean>(true);
   const [isFlowChartCollapsed, setIsFlowChartCollapsed] = useState<boolean>(false);
-  const [isDetailCollapsed, setIsDetailCollapsed] = useState<boolean>(false);
+  const [isDetailCollapsed, setIsDetailCollapsed] = useState<boolean>(true);
 
   // Full Screen Modal State (RFQ v1.23)
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);

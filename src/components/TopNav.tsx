@@ -395,7 +395,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           {renderTopTooltip(t('New Spec', '새 사양서'), undefined, true)}
         </button>
 
-        {/* Quick Language Option (EN / 한국어) */}
+        {/* Quick Language Option (A / 가) */}
         <div
           role="group"
           aria-label={t('Language Selection', '언어 선택')}
@@ -404,26 +404,28 @@ export const TopNav: React.FC<TopNavProps> = ({
           <button
             type="button"
             onClick={() => setLang('en')}
+            aria-label="English"
             aria-pressed={lang === 'en'}
-            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors cursor-pointer whitespace-nowrap ${
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer whitespace-nowrap min-w-[26px] text-center ${
               lang === 'en'
                 ? 'bg-blue-600 text-white'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            EN
+            A
           </button>
           <button
             type="button"
             onClick={() => setLang('ko')}
+            aria-label="한국어"
             aria-pressed={lang === 'ko'}
-            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-colors cursor-pointer whitespace-nowrap ${
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer whitespace-nowrap min-w-[26px] text-center ${
               lang === 'ko'
                 ? 'bg-blue-600 text-white'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            한국어
+            가
           </button>
           {renderTopTooltip(t('Language (English / 한국어)', '언어 설정 (English / 한국어)'), undefined, true)}
         </div>
