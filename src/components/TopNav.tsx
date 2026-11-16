@@ -35,6 +35,7 @@ export type MainWorkspaceMode =
   | 'program_list'
   | 'meeting_minutes'
   | 'meeting_wizard'
+  | 'user_guide'
   | 'project_settings'
   | 'shortcuts'
   | 'split'
@@ -111,6 +112,7 @@ export const TopNav: React.FC<TopNavProps> = ({
     currentMode === 'program_list' ||
     currentMode === 'meeting_minutes' ||
     currentMode === 'meeting_wizard' ||
+    currentMode === 'user_guide' ||
     currentMode === 'project_settings' ||
     currentMode === 'shortcuts';
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -160,6 +162,7 @@ export const TopNav: React.FC<TopNavProps> = ({
     program_list: t('Programs', '프로그램 목록'),
     meeting_minutes: t('Meeting Minutes', '프로젝트 회의록'),
     meeting_wizard: t('AI Spec Wizard', 'AI 사양서 생성'),
+    user_guide: t('User Guide', '사용 가이드'),
     project_settings: t('Project Settings', '프로젝트 설정'),
     shortcuts: t('Keyboard Shortcuts', '단축키 안내'),
     split: t('Split Workspace', '분할 작업실'),

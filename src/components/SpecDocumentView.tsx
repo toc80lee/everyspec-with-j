@@ -409,7 +409,13 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
             </button>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-lg bg-slate-800 text-blue-400 border border-slate-700/80 flex items-center justify-center shrink-0"
+              aria-hidden="true"
+            >
+              <Printer className="w-4 h-4" />
+            </div>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
               {spec.module}
             </span>

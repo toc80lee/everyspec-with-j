@@ -1,22 +1,35 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Cpu,
   Download,
   Edit3,
   Eye,
+  FileCode,
   FileCode2,
   Info,
   Lock,
+  Palette,
   RefreshCw,
   RotateCcw,
-  Terminal,
+  Search,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import { AbapSyntaxMode, ProgramSourceCodeTabs, ProgramSpec } from '../types/sap';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import {
+  SAP_GUI_THEMES,
+  SAP_THEME_STORAGE_KEY,
+  SapGuiTheme,
+  isValidSapGuiTheme,
+  loadSavedSapTheme,
+} from '../data/sapGuiThemes';
 import {
   assembleUnifiedAbapProgram,
   extractPfStatusFunctionsTable,
@@ -32,10 +45,38 @@ import {
 } from '../utils/abapCodeEngine';
 import { getProjectAbapStandards, isCommonProtectedSample } from '../utils/projectStorage';
 import { downloadFile } from '../utils/specExport';
-import { HighlightedAbapLine } from './AbapSyntaxHighlighter';
+import {
+  ABAP_SYNTAX_THEMES,
+  ABAP_SYNTAX_THEME_LIST,
+  AbapSyntaxThemeId,
+  HighlightedAbapLine,
+  normalizeAbapSyntaxTheme,
+  resolveAbapThemeForSapGui,
+} from './AbapSyntaxHighlighter';
+
+const ABAP_THEME_STORAGE_KEY = 'everyspec_abap_theme_v1';
+type AbapThemePreference = 'auto' | AbapSyntaxThemeId;
+
+function loadSavedAbapThemePreference(): AbapThemePreference {
+  try {
+    const saved = localStorage.getItem(ABAP_THEME_STORAGE_KEY);
+    if (!saved || saved === 'auto') return 'auto';
+    if (
+      saved === 'light' ||
+      saved === 'dark' ||
+      saved in ABAP_SYNTAX_THEMES
+    ) {
+      return normalizeAbapSyntaxTheme(saved);
+    }
+  } catch {
+    // ignore storage access issues
+  }
+  return 'auto';
+}
 
 interface AbapCodeGeneratorProps {
   spec: ProgramSpec;
+  sapGuiTheme?: SapGuiTheme;
   onUpdateSpec?: (updated: ProgramSpec) => void;
 }
 
@@ -59,16 +100,34 @@ function isEditableIncludeTab(tab: CodeViewTab): tab is EditableIncludeTab {
   return (EDITABLE_TABS as string[]).includes(tab);
 }
 
-export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUpdateSpec }) => {
+export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({
+  spec,
+  sapGuiTheme,
+  onUpdateSpec,
+}) => {
   const { projectRole } = useAuth();
   const { t, lang } = useLanguage();
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<CodeViewTab>('full');
   const [editorMode, setEditorMode] = useState<'view' | 'edit'>('view');
   const [actionToast, setActionToast] = useState<string | null>(null);
+  const [themePreference, setThemePreference] = useState<AbapThemePreference>(
+    loadSavedAbapThemePreference
+  );
+  const [fallbackSapTheme, setFallbackSapTheme] = useState<SapGuiTheme>(() => loadSavedSapTheme());
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [codeSearchQuery, setCodeSearchQuery] = useState('');
+  const [activeMatchIdx, setActiveMatchIdx] = useState(0);
+  const [selectedLineNum, setSelectedLineNum] = useState<number | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightOverlayRef = useRef<HTMLDivElement>(null);
+  const editGutterRef = useRef<HTMLDivElement>(null);
+  const viewContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
+  const lineRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const isProtectedCommon = isCommonProtectedSample(spec);
   const isApprovedLocked =
@@ -134,6 +193,93 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
     () => Array.from({ length: Math.max(lines.length, 1) }, (_, i) => i + 1),
     [lines.length]
   );
+
+  const matchedLineNumbers = useMemo(() => {
+    const q = codeSearchQuery.trim().toLowerCase();
+    if (!q || viewMode === 'symbols') return [];
+    const matches: number[] = [];
+    lines.forEach((ln, idx) => {
+      if (ln.toLowerCase().includes(q)) {
+        matches.push(idx + 1);
+      }
+    });
+    return matches;
+  }, [codeSearchQuery, lines, viewMode]);
+
+  useEffect(() => {
+    setActiveMatchIdx(0);
+  }, [codeSearchQuery, viewMode]);
+
+  useEffect(() => {
+    if (!isSearchOpen || matchedLineNumbers.length === 0) return;
+    const safeIdx = Math.min(activeMatchIdx, matchedLineNumbers.length - 1);
+    const targetLine = matchedLineNumbers[safeIdx];
+    const rowEl = lineRefs.current[targetLine];
+    if (rowEl && typeof rowEl.scrollIntoView === 'function') {
+      rowEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [activeMatchIdx, matchedLineNumbers, isSearchOpen]);
+
+  useEffect(() => {
+    if (sapGuiTheme) return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === SAP_THEME_STORAGE_KEY && isValidSapGuiTheme(e.newValue)) {
+        setFallbackSapTheme(e.newValue);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [sapGuiTheme]);
+
+  useEffect(() => {
+    if (!isThemeMenuOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
+        setIsThemeMenuOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsThemeMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [isThemeMenuOpen]);
+
+  const effectiveSapGuiTheme: SapGuiTheme = sapGuiTheme ?? fallbackSapTheme;
+  const matchedThemeForSapGui: AbapSyntaxThemeId = resolveAbapThemeForSapGui(effectiveSapGuiTheme);
+  const resolvedThemeId: AbapSyntaxThemeId =
+    themePreference === 'auto' ? matchedThemeForSapGui : themePreference;
+  const activeThemeDef = ABAP_SYNTAX_THEMES[resolvedThemeId];
+  const activeSapGuiInfo = SAP_GUI_THEMES[effectiveSapGuiTheme];
+
+  const handleSelectThemePreference = (nextPref: AbapThemePreference) => {
+    setThemePreference(nextPref);
+    setIsThemeMenuOpen(false);
+    try {
+      localStorage.setItem(ABAP_THEME_STORAGE_KEY, nextPref);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleOpenSearch = () => {
+    setIsSearchOpen(true);
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+  };
+
+  const handleStepMatch = (delta: number) => {
+    if (matchedLineNumbers.length === 0) return;
+    setActiveMatchIdx((prev) => (prev + delta + matchedLineNumbers.length) % matchedLineNumbers.length);
+  };
 
   const customEditCount = useMemo(() => {
     if (!spec.source_code) return 0;
@@ -222,6 +368,9 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
       highlightOverlayRef.current.scrollTop = e.currentTarget.scrollTop;
       highlightOverlayRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
+    if (editGutterRef.current) {
+      editGutterRef.current.scrollTop = e.currentTarget.scrollTop;
+    }
   };
 
   const handleCopy = async () => {
@@ -255,13 +404,29 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
     .filter(Boolean)
     .join(' · ');
 
+  const activeMatchedLine =
+    isSearchOpen && matchedLineNumbers.length > 0
+      ? matchedLineNumbers[Math.min(activeMatchIdx, matchedLineNumbers.length - 1)]
+      : null;
+
   return (
-    <div className="flex flex-col h-full bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-xl font-sans">
+    <div
+      onKeyDown={(e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && viewMode !== 'symbols') {
+          e.preventDefault();
+          handleOpenSearch();
+        }
+      }}
+      className="flex flex-col h-full bg-slate-950 rounded-xl overflow-hidden border border-slate-800 shadow-xl font-sans"
+    >
       {/* Compact Top Bar */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex-wrap gap-2.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1.5 bg-blue-500/10 border border-blue-500/20 rounded-md text-blue-400 shrink-0">
-            <Terminal className="w-4 h-4" />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div
+            className="w-8 h-8 rounded-lg bg-slate-800 text-blue-400 border border-slate-700/80 flex items-center justify-center shrink-0"
+            aria-hidden="true"
+          >
+            <FileCode className="w-4 h-4" />
           </div>
           <span className="text-xs font-bold text-white tracking-wide font-mono truncate">
             {t('ABAP Source Code', 'ABAP 소스 코드')} · {spec.program_id}
@@ -373,6 +538,156 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
             </>
           )}
 
+          {viewMode !== 'symbols' && (
+            <>
+              <button
+                type="button"
+                onClick={() => (isSearchOpen ? setIsSearchOpen(false) : handleOpenSearch())}
+                className={`p-1.5 rounded border transition-colors cursor-pointer ${
+                  isSearchOpen
+                    ? 'bg-blue-600 text-white border-blue-500'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                }`}
+                title={t('Find in ABAP Code (Ctrl+F)', 'ABAP 코드 내 찾기 (Ctrl+F)')}
+                aria-label={t('Find in ABAP Code', 'ABAP 코드 내 찾기')}
+              >
+                <Search className="w-3.5 h-3.5" />
+              </button>
+
+              <div className="relative" ref={themeMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsThemeMenuOpen((prev) => !prev)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    isThemeMenuOpen
+                      ? 'bg-blue-600 text-white border-blue-500'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-slate-700'
+                  }`}
+                  title={t(
+                    'Select ABAP syntax highlighting theme or match SAP GUI theme',
+                    'ABAP 구문 강조 테마 선택 또는 SAP GUI 테마 연동'
+                  )}
+                  aria-haspopup="menu"
+                  aria-expanded={isThemeMenuOpen}
+                >
+                  <Palette className="w-3.5 h-3.5 shrink-0" />
+                  <span
+                    className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0"
+                    style={{ backgroundColor: activeThemeDef.swatches[0] }}
+                  />
+                  <span className="hidden sm:inline">
+                    {themePreference === 'auto'
+                      ? `${t('Auto', '자동')} · ${lang === 'ko' ? activeThemeDef.nameKo : activeThemeDef.name}`
+                      : lang === 'ko'
+                      ? activeThemeDef.nameKo
+                      : activeThemeDef.name}
+                  </span>
+                  <ChevronDown className="w-3 h-3 opacity-80" />
+                </button>
+
+                {isThemeMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 mt-1.5 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-1.5 z-40 text-left"
+                  >
+                    <div className="px-3 py-1.5 border-b border-slate-800 flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {t('Syntax Theme', '구문 강조 테마')}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        SAP {activeSapGuiInfo.name}
+                      </span>
+                    </div>
+
+                    {/* Auto Match SAP GUI Option */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => handleSelectThemePreference('auto')}
+                      className={`w-full px-3 py-2 flex items-start gap-2.5 text-left transition-colors cursor-pointer ${
+                        themePreference === 'auto'
+                          ? 'bg-blue-600/20 text-white'
+                          : 'text-slate-200 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div className="w-6 h-6 rounded-md bg-blue-500/20 border border-blue-400/30 flex items-center justify-center shrink-0 mt-0.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold truncate">
+                            {t('Match SAP GUI Theme', 'SAP GUI 테마 자동 연동')}
+                          </span>
+                          {themePreference === 'auto' && (
+                            <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                          {activeSapGuiInfo.name} →{' '}
+                          {lang === 'ko'
+                            ? ABAP_SYNTAX_THEMES[matchedThemeForSapGui].nameKo
+                            : ABAP_SYNTAX_THEMES[matchedThemeForSapGui].name}
+                        </p>
+                      </div>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-800" />
+
+                    {/* Explicit Multi-Themes */}
+                    <div className="max-h-72 overflow-y-auto">
+                      {ABAP_SYNTAX_THEME_LIST.map((themeItem) => {
+                        const isSelected = themePreference === themeItem.id;
+                        const isSapMatched = matchedThemeForSapGui === themeItem.id;
+                        return (
+                          <button
+                            key={themeItem.id}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => handleSelectThemePreference(themeItem.id)}
+                            className={`w-full px-3 py-2 flex items-start gap-2.5 text-left transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-600/20 text-white'
+                                : 'text-slate-200 hover:bg-slate-800'
+                            }`}
+                          >
+                            {/* 4-color mini swatch preview */}
+                            <div
+                              className="w-6 h-6 rounded-md border border-slate-600/70 grid grid-cols-2 grid-rows-2 overflow-hidden shrink-0 mt-0.5"
+                              aria-hidden="true"
+                            >
+                              {themeItem.swatches.map((hex, i) => (
+                                <span key={i} style={{ backgroundColor: hex }} />
+                              ))}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1.5">
+                                <span className="text-xs font-semibold truncate">
+                                  {lang === 'ko' ? themeItem.nameKo : themeItem.name}
+                                </span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {isSapMatched && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 border border-slate-700 font-medium">
+                                      SAP
+                                    </span>
+                                  )}
+                                  {isSelected && <Check className="w-3.5 h-3.5 text-blue-400" />}
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-0.5 leading-snug truncate">
+                                {lang === 'ko' ? themeItem.descriptionKo : themeItem.description}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
           <button
             type="button"
             onClick={handleCopy}
@@ -440,6 +755,73 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
           {projectStandards.dev_package || '$TMP'} · {lines.length} {t('lines', '줄')}
         </div>
       </div>
+
+      {/* Inline Code Search Strip */}
+      {isSearchOpen && viewMode !== 'symbols' && (
+        <div className="px-4 py-1.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={codeSearchQuery}
+              onChange={(e) => setCodeSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleStepMatch(e.shiftKey ? -1 : 1);
+                } else if (e.key === 'Escape') {
+                  setIsSearchOpen(false);
+                  setCodeSearchQuery('');
+                }
+              }}
+              placeholder={t(
+                'Search keywords, fields, FORM, METHOD...',
+                '키워드, 필드, FORM, METHOD 검색...'
+              )}
+              className="flex-1 bg-slate-800 border border-slate-700 rounded px-2.5 py-1 text-xs text-slate-100 placeholder-slate-400 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <span className="text-[11px] font-mono text-slate-400 tabular-nums whitespace-nowrap min-w-14 text-right">
+              {codeSearchQuery.trim()
+                ? matchedLineNumbers.length > 0
+                  ? `${Math.min(activeMatchIdx + 1, matchedLineNumbers.length)} / ${matchedLineNumbers.length}`
+                  : t('0 matches', '0건')
+                : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={matchedLineNumbers.length === 0}
+              onClick={() => handleStepMatch(-1)}
+              className="p-1 rounded text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-35 cursor-pointer"
+              title={t('Previous match (Shift+Enter)', '이전 결과 (Shift+Enter)')}
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              disabled={matchedLineNumbers.length === 0}
+              onClick={() => handleStepMatch(1)}
+              className="p-1 rounded text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-35 cursor-pointer"
+              title={t('Next match (Enter)', '다음 결과 (Enter)')}
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSearchOpen(false);
+                setCodeSearchQuery('');
+              }}
+              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              title={t('Close search (Esc)', '검색 닫기 (Esc)')}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       {viewMode === 'symbols' ? (
@@ -527,8 +909,13 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
           </div>
         </div>
       ) : isEditingCanvas ? (
-        <div className="flex-1 flex overflow-hidden bg-white text-slate-900 font-mono text-xs">
-          <div className="w-12 py-3 bg-[#f8fafc] border-r border-slate-200 text-right pr-3 select-none text-slate-400 text-[11px] font-mono shrink-0 overflow-hidden tabular-nums">
+        <div
+          className={`flex-1 flex overflow-hidden font-mono text-xs ${activeThemeDef.surface.canvasClass}`}
+        >
+          <div
+            ref={editGutterRef}
+            className={`w-14 py-3 border-r text-right pr-3 select-none text-[11px] font-mono shrink-0 overflow-hidden tabular-nums ${activeThemeDef.surface.editGutterClass}`}
+          >
             {lineNumbers.map((num) => (
               <div key={num} className="leading-5 h-5">
                 {num}
@@ -536,7 +923,7 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
             ))}
           </div>
 
-          <div className="flex-1 relative overflow-auto bg-white">
+          <div className="flex-1 relative overflow-hidden">
             <div className="relative w-full h-full min-h-[520px]">
               <div
                 ref={highlightOverlayRef}
@@ -549,7 +936,11 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
               >
                 {lines.map((line, idx) => (
                   <div key={idx} className="h-5 leading-5">
-                    <HighlightedAbapLine line={line} />
+                    <HighlightedAbapLine
+                      line={line}
+                      theme={resolvedThemeId}
+                      searchQuery={isSearchOpen ? codeSearchQuery : undefined}
+                    />
                   </div>
                 ))}
               </div>
@@ -564,7 +955,7 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
                   `INCLUDE ${(spec.program_id || 'ZRALV0010').toLowerCase()}${viewMode === 'program' ? '' : viewMode} 소스를 입력하세요...`
                 )}
                 spellCheck={false}
-                className="absolute inset-0 w-full h-full p-3 bg-transparent text-transparent caret-slate-900 font-mono text-xs leading-5 resize-none focus:outline-none border-none selection:bg-blue-200/80 selection:text-blue-900 whitespace-pre overflow-auto"
+                className={`absolute inset-0 w-full h-full p-3 bg-transparent text-transparent font-mono text-xs leading-5 resize-none focus:outline-none border-none whitespace-pre overflow-auto ${activeThemeDef.surface.caretSelectionClass}`}
                 style={{
                   fontFamily: "'JetBrains Mono', 'Consolas', 'Courier New', monospace",
                   tabSize: 2,
@@ -575,17 +966,60 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto p-4 bg-white text-slate-900 font-mono text-xs">
-          {lines.map((line, idx) => (
-            <div key={idx} className="flex hover:bg-blue-50/60 leading-5 font-mono text-xs">
-              <span className="w-12 text-right pr-4 text-slate-400 select-none text-[11px] tabular-nums shrink-0">
-                {idx + 1}
-              </span>
-              <span className="flex-1 whitespace-pre">
-                <HighlightedAbapLine line={line} />
-              </span>
-            </div>
-          ))}
+        <div
+          ref={viewContainerRef}
+          className={`flex-1 overflow-auto py-3 font-mono text-xs ${activeThemeDef.surface.canvasClass}`}
+          style={{
+            fontFamily: "'JetBrains Mono', 'Consolas', 'Courier New', monospace",
+            tabSize: 2,
+          }}
+        >
+          <div className="min-w-max">
+            {lines.map((line, idx) => {
+              const lineNum = idx + 1;
+              const isUserLogicMarker = /^\*+[-=&*\s]*(BEGIN|END)\s+USER\s+LOGIC/i.test(line.trim());
+              const isActiveMatch = activeMatchedLine === lineNum;
+              const isSelected = selectedLineNum === lineNum;
+
+              const rowBgClass = isActiveMatch
+                ? activeThemeDef.surface.rowMatchClass
+                : isUserLogicMarker
+                ? activeThemeDef.surface.userLogicRowClass
+                : isSelected
+                ? activeThemeDef.surface.rowSelectedClass
+                : activeThemeDef.surface.rowHoverClass;
+
+              const gutterBgClass = isActiveMatch
+                ? activeThemeDef.surface.gutterMatchClass
+                : isSelected
+                ? activeThemeDef.surface.gutterSelectedClass
+                : activeThemeDef.surface.gutterClass;
+
+              return (
+                <div
+                  key={idx}
+                  ref={(el) => {
+                    lineRefs.current[lineNum] = el;
+                  }}
+                  onClick={() => setSelectedLineNum(isSelected ? null : lineNum)}
+                  className={`flex items-stretch leading-5 font-mono text-xs transition-colors cursor-text ${rowBgClass}`}
+                >
+                  <span
+                    className={`sticky left-0 z-10 w-14 text-right pr-3 pl-2 border-r select-none text-[11px] tabular-nums shrink-0 ${gutterBgClass}`}
+                  >
+                    {lineNum}
+                  </span>
+                  <span className="flex-1 whitespace-pre px-4">
+                    <HighlightedAbapLine
+                      line={line}
+                      theme={resolvedThemeId}
+                      searchQuery={isSearchOpen ? codeSearchQuery : undefined}
+                    />
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -603,6 +1037,17 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({ spec, onUp
           </span>
           <span className="text-slate-600">|</span>
           <span>{effectiveSyntaxMode === 'modern_740' ? 'ABAP 7.40+' : 'ECC Classic'}</span>
+          {viewMode !== 'symbols' && (
+            <>
+              <span className="text-slate-600">|</span>
+              <span className="text-slate-300">
+                {lang === 'ko' ? activeThemeDef.nameKo : activeThemeDef.name}
+                {themePreference === 'auto'
+                  ? ` (${t('Matched', '연동')}: ${activeSapGuiInfo.name})`
+                  : ''}
+              </span>
+            </>
+          )}
         </div>
         <div className="text-slate-500 text-[10px] shrink-0">
           {isEditingCanvas

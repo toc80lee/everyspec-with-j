@@ -35,6 +35,7 @@ import {
 } from '../utils/authStorage';
 import { syncProjectToFirestore } from '../services/firestoreSync';
 import { useLanguage } from '../contexts/LanguageContext';
+import { PageHeader } from './PageHeader';
 
 interface ProjectManagerModalProps {
   isOpen: boolean;
@@ -495,37 +496,31 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 text-slate-900">
-      <div className="max-w-7xl mx-auto px-6 py-7 space-y-6">
-        {/* Top Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-900 text-blue-400 flex items-center justify-center shrink-0">
-              <FolderKanban className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">
-                {t('Project Settings & Members', '프로젝트 설정 및 멤버 관리')}
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {t(
-                  'Configure projects, manage project-specific members, and assign active SAP modules.',
-                  '프로젝트를 생성하고 프로젝트별 참여 멤버와 활성 SAP 모듈을 구성합니다.'
-                )}
-              </p>
-            </div>
-          </div>
-
+    <div className="h-full flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
+      <PageHeader
+        icon={FolderKanban}
+        eyebrow={t('Administration · Workspace Governance', '관리자 설정 · 프로젝트 거버넌스')}
+        title={t('Project Settings & Members', '프로젝트 설정 및 멤버 관리')}
+        subtitle={t(
+          'Configure projects, manage project-specific members, and assign active SAP modules.',
+          '프로젝트를 생성하고 프로젝트별 참여 멤버와 활성 SAP 모듈을 구성합니다.'
+        )}
+        actions={
           <button
             type="button"
             onClick={onClose}
             title={t('Back', '뒤로가기')}
             aria-label={t('Back', '뒤로가기')}
-            className="w-9 h-9 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg flex items-center justify-center transition-colors cursor-pointer self-start sm:self-auto shrink-0"
+            className="h-9 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{t('Back', '뒤로가기')}</span>
           </button>
-        </div>
+        }
+      />
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto px-6 py-5">
 
         {/* Main Workspace Card */}
         <div className="bg-white rounded-xl border border-slate-200 flex flex-col md:flex-row overflow-hidden min-h-[580px]">
@@ -1104,6 +1099,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
               </div>
             </div>
           </form>
+        </div>
         </div>
       </div>
     </div>

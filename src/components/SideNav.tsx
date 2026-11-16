@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  BookOpen,
   LayoutDashboard,
   List,
   MessageSquareText,
@@ -98,6 +99,14 @@ export const SideNav: React.FC<SideNavProps> = ({
       isActive: currentMode === 'meeting_minutes' || currentMode === 'meeting_wizard',
       onClick: () => onSelectMode('meeting_minutes'),
     },
+    {
+      id: 'user_guide',
+      label: t('User Guide', '사용 가이드'),
+      shortDesc: t('Use-case walkthroughs & sample guide', '유형별 프로그램 사용 가이드'),
+      icon: BookOpen,
+      isActive: currentMode === 'user_guide',
+      onClick: () => onSelectMode('user_guide'),
+    },
     ...(canAccessProjectSettings
       ? [
           {
@@ -164,11 +173,11 @@ export const SideNav: React.FC<SideNavProps> = ({
             isExpanded ? 'w-full px-1.5 py-1.5 hover:bg-slate-800/80' : 'p-1 hover:bg-slate-800/80'
           }`}
         >
-          <div className="w-8 h-8 rounded-lg bg-white p-0.5 flex items-center justify-center border border-slate-700 overflow-hidden shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center border border-slate-700 overflow-hidden shrink-0">
             <img
-              src="/assets/aistudio/Logo_436f33a7.png"
+              src="/assets/aistudio/image_144c0bc1.png"
               alt="EverySpec Logo"
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain scale-125"
             />
           </div>
           {isExpanded && (

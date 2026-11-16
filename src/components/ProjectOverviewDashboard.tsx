@@ -9,6 +9,8 @@ import {
   FileSpreadsheet,
   FolderKanban,
   Info,
+  LayoutDashboard,
+  List,
   Lock,
   MessageSquare,
   Mic,
@@ -19,6 +21,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
+import { PageHeader } from './PageHeader';
 import {
   ProgramSpec,
   ProjectMeetingMinute,
@@ -563,61 +566,71 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
       : 0;
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 text-slate-900">
-      <div className="max-w-7xl mx-auto px-6 py-5 space-y-5">
-        {/* Compact Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
-          <div className="min-w-0">
-            <div className="text-xs text-slate-500 flex items-center gap-1.5">
-              {viewMode === 'program_list' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => onChangeViewMode('overview')}
-                    className="text-blue-600 hover:underline font-medium cursor-pointer"
-                  >
-                    {t('Overview', '대시보드')}
-                  </button>
-                  <span aria-hidden="true">/</span>
-                </>
-              )}
-              <span>{currentUser.name}</span>
-              <span aria-hidden="true">·</span>
-              <span>{currentUser.department}</span>
-            </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">
-                {viewMode === 'overview'
-                  ? t('Project Spec Overview', '프로젝트 사양서 현황')
-                  : activeProject.name}
-              </h1>
-              {viewMode === 'program_list' && isCommonProject && (
-                <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-800 text-[11px] font-semibold"
-                  title={t(
-                    'COMM sample originals (ZRALV0010–ZRALV0040) are protected. Use Copy on each row to clone into your project or TEMP.',
-                    'COMM 표준 샘플(ZRALV0010–ZRALV0040) 원본은 보호됩니다. 복사 버튼으로 내 프로젝트나 TEMP에 복제하여 사용하세요.'
-                  )}
+    <div className="h-full flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
+      <PageHeader
+        icon={viewMode === 'overview' ? LayoutDashboard : List}
+        eyebrow={
+          <>
+            {viewMode === 'program_list' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onChangeViewMode('overview')}
+                  className="text-blue-600 hover:underline font-semibold cursor-pointer"
                 >
-                  <Lock className="w-3 h-3" />
-                  <span>{t('Protected', '보호됨')}</span>
-                </span>
+                  {t('Overview', '대시보드')}
+                </button>
+                <span aria-hidden="true">/</span>
+              </>
+            )}
+            <span>{currentUser.name}</span>
+            <span aria-hidden="true">·</span>
+            <span>{currentUser.department}</span>
+          </>
+        }
+        title={
+          viewMode === 'overview'
+            ? t('Project Spec Overview', '프로젝트 사양서 현황')
+            : activeProject.name
+        }
+        titleBadge={
+          viewMode === 'program_list' && isCommonProject ? (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-800 text-[11px] font-semibold"
+              title={t(
+                'COMM sample originals (ZRALV0010–ZRALV0040) are protected. Use Copy on each row to clone into your project or TEMP.',
+                'COMM 표준 샘플(ZRALV0010–ZRALV0040) 원본은 보호됩니다. 복사 버튼으로 내 프로젝트나 TEMP에 복제하여 사용하세요.'
               )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => onOpenMeetingWizard()}
-              className="w-9 h-9 bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-2xs flex items-center justify-center transition-colors shrink-0 cursor-pointer"
-              title={t('AI Spec from Meeting', '회의록 기반 AI 사양서 생성')}
-              aria-label={t('AI Spec from Meeting', '회의록 기반 AI 사양서 생성')}
             >
-              <Mic className="w-4 h-4 text-blue-300" />
-            </button>
-          </div>
-        </div>
+              <Lock className="w-3 h-3" />
+              <span>{t('Protected', '보호됨')}</span>
+            </span>
+          ) : undefined
+        }
+        subtitle={
+          viewMode === 'overview'
+            ? t(
+                'Monitor completion progress, open reviews, and SAP module catalogs across accessible projects.',
+                '프로젝트별 개발 진행률, 미해결 리뷰 및 SAP 모듈별 사양서 현황을 한눈에 확인합니다.'
+              )
+            : visibilitySummary
+        }
+        actions={
+          <button
+            type="button"
+            onClick={() => onOpenMeetingWizard()}
+            className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-xs flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors shrink-0 cursor-pointer"
+            title={t('AI Spec from Meeting', '회의록 기반 AI 사양서 생성')}
+            aria-label={t('AI Spec from Meeting', '회의록 기반 AI 사양서 생성')}
+          >
+            <Mic className="w-3.5 h-3.5 text-blue-300" />
+            <span className="hidden sm:inline">{t('AI Meeting Spec', 'AI 회의록 생성')}</span>
+          </button>
+        }
+      />
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto px-6 py-5 space-y-5">
 
         {/* Compact 1-Line Project Selector Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -996,7 +1009,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
             <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                 <div className="relative flex-1 min-w-[200px] max-w-xs">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
                     value={searchQuery}
@@ -1005,7 +1018,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                       'Program ID, Title, T-Code, Author...',
                       '프로그램 ID, 제목, T-Code, 작성자 검색...'
                     )}
-                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:bg-white focus:border-blue-500"
+                    className="h-8 w-full pl-8 pr-3 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
@@ -1013,7 +1026,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   value={selectedModuleFilter}
                   onChange={(e) => setSelectedModuleFilter(e.target.value as 'ALL' | SapModule)}
                   aria-label={t('Module Filter', '모듈 필터')}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
+                  className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
                 >
                   <option value="ALL">
                     {t('All Modules', '전체 모듈')} ({projectSpecs.length})
@@ -1031,7 +1044,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                     setLifecycleFilter(e.target.value as 'ALL' | SpecLifecycleStatus)
                   }
                   aria-label={t('Status Filter', '상태 필터')}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
+                  className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
                 >
                   <option value="ALL">{t('All Statuses', '전체 상태')}</option>
                   {LIFECYCLE_META.map((m) => (
@@ -1045,7 +1058,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   value={sampleTypeFilter}
                   onChange={(e) => setSampleTypeFilter(e.target.value)}
                   aria-label={t('Sample Type Filter', '샘플 유형 필터')}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
+                  className="h-8 px-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 cursor-pointer"
                 >
                   <option value="ALL">{t('All Types', '전체 유형')}</option>
                   <option value="01">{t('01 Single ALV', '01 단일 ALV')}</option>
@@ -1058,7 +1071,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   type="button"
                   onClick={() => setFavoritesOnlyFilter((prev) => !prev)}
                   title={t('Show starred specs only', '즐겨찾기 사양서만 보기')}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`h-8 px-2.5 rounded-lg text-xs font-semibold border flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     favoritesOnlyFilter
                       ? 'bg-amber-50 border-amber-300 text-amber-900'
                       : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
@@ -1418,6 +1431,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

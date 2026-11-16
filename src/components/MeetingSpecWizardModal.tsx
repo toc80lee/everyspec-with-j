@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Layers,
   Loader2,
+  MessageSquareText,
   Mic,
   MicOff,
   Plus,
@@ -43,6 +44,7 @@ import {
 } from '../utils/aiLogicGenerator';
 import { SAMPLE_SPECS } from '../data/sampleSpecs';
 import { useLanguage } from '../contexts/LanguageContext';
+import { PageHeader } from './PageHeader';
 
 const SAP_MODULES: SapModule[] = ['SD', 'MM', 'FI', 'CO', 'PP', 'HR', 'QM', 'PM', 'BC', 'CM'];
 
@@ -731,88 +733,89 @@ ${minutesMarkdown}`;
 
   return (
     <div className="h-full flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
-      {/* Page Header & 4-Step Progress Indicator */}
-      <header className="px-6 py-4 bg-white border-b border-slate-200 shrink-0">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-mono font-semibold text-blue-700 flex items-center gap-2">
-                <span>{t('AI MEETING-TO-SPEC WIZARD', 'AI 회의록-사양서 마법사')}</span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  {t('Target Project:', '대상 프로젝트:')} {targetProjectCode}
-                </span>
-              </div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 mt-0.5">
-                {t('AI Meeting-to-Spec Designer', 'AI 회의록 기반 프로그램 설계')}
-              </h1>
-            </div>
+      <PageHeader
+        icon={MessageSquareText}
+        eyebrow={
+          <>
+            <span className="font-mono font-semibold text-blue-700">
+              {t('AI MEETING-TO-SPEC WIZARD', 'AI 회의록-사양서 마법사')}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {t('Target Project:', '대상 프로젝트:')} {targetProjectCode}
+            </span>
+          </>
+        }
+        title={t('AI Meeting-to-Spec Designer', 'AI 회의록 기반 프로그램 설계')}
+        subtitle={t(
+          'Capture meeting discussions, summarize requirements, pick an SAP sample pattern, and generate a ready-to-edit specification.',
+          '회의 내용을 기록·요약하고 적합한 SAP 샘플 유형을 선택해 사양서를 자동 설계합니다.'
+        )}
+        actions={
+          <button
+            type="button"
+            onClick={() => {
+              persistProgress();
+              onClose();
+            }}
+            className="h-9 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            title={t('Save draft and return to overview', '임시 저장 후 이전 화면으로 돌아가기')}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{t('Save Draft & Back', '임시저장 후 나가기')}</span>
+          </button>
+        }
+      >
+        {/* Stepper Bar */}
+        <nav className="grid grid-cols-2 lg:grid-cols-4 gap-2" aria-label="Wizard steps">
+          {[
+            { num: 1 as WizardStep, label: t('1. Record & Notes', '1. 녹음 및 메모') },
+            { num: 2 as WizardStep, label: t('2. Review Minutes', '2. 회의록 검토·보완') },
+            { num: 3 as WizardStep, label: t('3. Select Sample Type', '3. 샘플 유형·ID 확정') },
+            { num: 4 as WizardStep, label: t('4. Build & Register', '4. 사양서 생성·등록') },
+          ].map((item) => {
+            const isActive = step === item.num;
+            const isDone =
+              (item.num === 1 && Boolean(minutesMarkdown.trim())) ||
+              (item.num === 2 && Boolean(recommendation)) ||
+              (item.num === 3 && Boolean(generatedSpec)) ||
+              step > item.num;
+            const canJump =
+              item.num === 1 ||
+              (item.num === 2 && Boolean(minutesMarkdown.trim())) ||
+              (item.num === 3 && Boolean(recommendation)) ||
+              (item.num === 4 && Boolean(generatedSpec));
 
-            <button
-              type="button"
-              onClick={() => {
-                persistProgress();
-                onClose();
-              }}
-              className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
-              title={t('Save draft and return to overview', '임시 저장 후 이전 화면으로 돌아가기')}
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>{t('Save Draft & Back', '임시저장 후 나가기')}</span>
-            </button>
-          </div>
-
-          {/* Stepper Bar */}
-          <nav className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2" aria-label="Wizard steps">
-            {[
-              { num: 1 as WizardStep, label: t('1. Record & Notes', '1. 녹음 및 메모') },
-              { num: 2 as WizardStep, label: t('2. Review Minutes', '2. 회의록 검토·보완') },
-              { num: 3 as WizardStep, label: t('3. Select Sample Type', '3. 샘플 유형·ID 확정') },
-              { num: 4 as WizardStep, label: t('4. Build & Register', '4. 사양서 생성·등록') },
-            ].map((item) => {
-              const isActive = step === item.num;
-              const isDone =
-                (item.num === 1 && Boolean(minutesMarkdown.trim())) ||
-                (item.num === 2 && Boolean(recommendation)) ||
-                (item.num === 3 && Boolean(generatedSpec)) ||
-                step > item.num;
-              const canJump =
-                item.num === 1 ||
-                (item.num === 2 && Boolean(minutesMarkdown.trim())) ||
-                (item.num === 3 && Boolean(recommendation)) ||
-                (item.num === 4 && Boolean(generatedSpec));
-
-              return (
-                <button
-                  key={item.num}
-                  type="button"
-                  disabled={!canJump || isProcessingAi}
-                  onClick={() => {
-                    if (canJump) {
-                      setGate(null);
-                      setStep(item.num);
-                    }
-                  }}
-                  className={`px-3.5 py-2.5 rounded-lg text-left text-xs font-semibold transition-all border flex items-center justify-between gap-2 ${
-                    isActive
-                      ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
-                      : isDone
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 cursor-pointer'
-                      : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  <span className="truncate">{item.label}</span>
-                  {isDone && !isActive && <Check className="w-3.5 h-3.5 shrink-0 text-emerald-600" />}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </header>
+            return (
+              <button
+                key={item.num}
+                type="button"
+                disabled={!canJump || isProcessingAi}
+                onClick={() => {
+                  if (canJump) {
+                    setGate(null);
+                    setStep(item.num);
+                  }
+                }}
+                className={`px-3.5 py-2.5 rounded-lg text-left text-xs font-semibold transition-all border flex items-center justify-between gap-2 ${
+                  isActive
+                    ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                    : isDone
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 cursor-pointer'
+                    : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <span className="truncate">{item.label}</span>
+                {isDone && !isActive && <Check className="w-3.5 h-3.5 shrink-0 text-emerald-600" />}
+              </button>
+            );
+          })}
+        </nav>
+      </PageHeader>
 
       {/* Scrollable Step Body */}
       <div className="flex-1 overflow-y-auto bg-slate-50">
-        <div className="max-w-6xl mx-auto px-6 py-6 space-y-5">
+        <div className="max-w-7xl mx-auto px-6 py-5 space-y-5">
           {errorMsg && (
             <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />

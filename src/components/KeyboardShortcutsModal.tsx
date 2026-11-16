@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { ArrowLeft, Keyboard } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { PageHeader } from './PageHeader';
 
 interface KeyboardShortcutsModalProps {
   isOpen: boolean;
@@ -116,41 +117,33 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50 text-slate-900 font-sans">
-      <div className="max-w-6xl mx-auto px-6 py-7 space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-900 text-blue-400 flex items-center justify-center shrink-0">
-              <Keyboard className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">
-                {t('Keyboard Shortcuts', '키보드 단축키 안내')}
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {t(
-                  'Shortcuts supported in Spec Editor, Markdown Editor, and SAP GUI Simulator. Press Esc to return.',
-                  'Spec Editor, 마크다운 편집기, SAP GUI 시뮬레이터에서 지원하는 단축키입니다. Esc 키로 돌아갈 수 있습니다.'
-                )}
-              </p>
-            </div>
-          </div>
-
+    <div className="h-full flex flex-col bg-slate-50 text-slate-900 font-sans overflow-hidden">
+      <PageHeader
+        icon={Keyboard}
+        eyebrow={t('Productivity · Reference', '생산성 도구 · 단축키')}
+        title={t('Keyboard Shortcuts', '키보드 단축키 안내')}
+        subtitle={t(
+          'Shortcuts supported in Spec Editor, Markdown Editor, and SAP GUI Simulator. Press Esc to return.',
+          'Spec Editor, 마크다운 편집기, SAP GUI 시뮬레이터에서 지원하는 단축키입니다. Esc 키로 돌아갈 수 있습니다.'
+        )}
+        actions={
           <button
             type="button"
             onClick={onClose}
             title={t('Back', '돌아가기')}
             aria-label={t('Back', '돌아가기')}
-            className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
+            className="h-9 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>{t('Back', '돌아가기')}</span>
           </button>
-        </div>
+        }
+      />
 
-        {/* Shortcut Groups Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto px-6 py-5">
+          {/* Shortcut Groups Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           {shortcutGroups.map((group) => (
             <div
               key={group.title}
@@ -183,6 +176,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
               </div>
             </div>
           ))}
+          </div>
         </div>
       </div>
     </div>

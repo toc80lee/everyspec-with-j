@@ -1583,8 +1583,9 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
         className={`flex items-center justify-between px-3 py-1.5 border-b shadow-xs transition-colors duration-200 ${themeStyles.titleBarBorder}`}
         style={themeStyles.titleBarStyle}
       >
-        <div className="flex items-center gap-2">
-          <span className={`font-bold italic text-sm tracking-tight drop-shadow-xs ${themeStyles.titleBarText}`}>
+        <div className="flex items-center gap-2 min-w-0">
+          <Layers className={`w-4 h-4 shrink-0 opacity-90 ${themeStyles.titleBarText}`} aria-hidden="true" />
+          <span className={`font-bold italic text-sm tracking-tight drop-shadow-xs truncate ${themeStyles.titleBarText}`}>
             {simSpec.title}
           </span>
         </div>

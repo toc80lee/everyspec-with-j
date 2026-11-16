@@ -17,6 +17,8 @@ import { MeetingSpecWizardModal } from './components/MeetingSpecWizardModal';
 import { MeetingMinutesPage } from './components/MeetingMinutesPage';
 import { GlobalCommandPalette } from './components/GlobalCommandPalette';
 import { SapDdicManagerModal } from './components/SapDdicManagerModal';
+import { UserGuidePage } from './components/UserGuidePage';
+import { GuideActionId } from './data/userGuideData';
 import {
   SapGuiTheme,
   SAP_GUI_THEMES,
@@ -388,7 +390,10 @@ export default function App() {
   const handleNavigateModeSafely = (mode: MainWorkspaceMode) => {
     const isLeavingEditor =
       isInSpecEditingMode &&
-      (mode === 'overview' || mode === 'program_list' || mode === 'meeting_minutes');
+      (mode === 'overview' ||
+        mode === 'program_list' ||
+        mode === 'meeting_minutes' ||
+        mode === 'user_guide');
     if (isLeavingEditor && hasUnsavedChanges && !isCommonProtectedSample(currentSpec)) {
       setPendingNavigation({ type: 'mode', mode });
       return;
@@ -913,6 +918,69 @@ export default function App() {
     }, 280);
   };
 
+  const handleGuideAction = (actionId: GuideActionId) => {
+    if (actionId === 'open_meeting_wizard') {
+      setEditingMeetingMinute(null);
+      setWizardStartInSpecGen(false);
+      openFullPageMode('meeting_wizard');
+      return;
+    }
+    if (actionId === 'open_meetings') {
+      setWorkspaceMode('meeting_minutes');
+      return;
+    }
+    if (actionId === 'open_program_list') {
+      refreshAllSpecs();
+      setWorkspaceMode('program_list');
+      return;
+    }
+    if (actionId === 'open_templates') {
+      setIsTemplateModalOpen(true);
+      return;
+    }
+    if (
+      actionId === 'open_sample_01' ||
+      actionId === 'open_sample_02' ||
+      actionId === 'open_sample_03' ||
+      actionId === 'open_sample_04'
+    ) {
+      const targetType = actionId.slice(-2);
+      const found =
+        SAMPLE_SPECS.find(
+          (s) =>
+            (s.project_code === COMMON_PROJECT_CODE || !s.project_code) &&
+            s.sample_type === targetType
+        ) || SAMPLE_SPECS[0];
+      handleOpenProgramFromProject(found);
+      showWorkspaceToast(
+        t(
+          `Opened standard sample ${found.program_id} (Type ${targetType})`,
+          `표준 샘플 ${found.program_id} (유형 ${targetType})을 열었습니다`
+        )
+      );
+      return;
+    }
+    if (actionId === 'open_editor') {
+      setWorkspaceMode('editor_only');
+      return;
+    }
+    if (actionId === 'open_split') {
+      setWorkspaceMode('split');
+      return;
+    }
+    if (actionId === 'open_mockup') {
+      setWorkspaceMode('mockup_only');
+      return;
+    }
+    if (actionId === 'open_abap_code') {
+      setWorkspaceMode('abap_code');
+      return;
+    }
+    if (actionId === 'open_document') {
+      setWorkspaceMode('document');
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-900 print:h-auto print:min-h-screen print:overflow-visible print:bg-white">
       {/* 1. Unified Minimal Icon-Based Side Navigation Rail */}
@@ -992,6 +1060,7 @@ export default function App() {
             workspaceMode === 'program_list' ||
             workspaceMode === 'meeting_minutes' ||
             workspaceMode === 'meeting_wizard' ||
+            workspaceMode === 'user_guide' ||
             workspaceMode === 'project_settings' ||
             workspaceMode === 'shortcuts'
               ? 'p-0 bg-slate-50'
@@ -1119,6 +1188,13 @@ export default function App() {
           />
         )}
 
+        {workspaceMode === 'user_guide' && (
+          <UserGuidePage
+            currentProgramId={currentSpec.program_id}
+            onExecuteAction={handleGuideAction}
+          />
+        )}
+
         {workspaceMode === 'shortcuts' && (
           <KeyboardShortcutsModal
             isOpen={true}
@@ -1243,7 +1319,7 @@ export default function App() {
         )}
 
         {workspaceMode === 'editor_only' && (
-          <div className="h-full max-w-6xl mx-auto overflow-hidden">
+          <div className="h-full max-w-7xl mx-auto overflow-hidden">
             <SpecEditor
               spec={currentSpec}
               onChange={(updated) => applySpecChange(updated)}
@@ -1261,9 +1337,10 @@ export default function App() {
         )}
 
         {workspaceMode === 'abap_code' && (
-          <div className="h-full max-w-6xl mx-auto overflow-hidden">
+          <div className="h-full max-w-7xl mx-auto overflow-hidden">
             <AbapCodeGenerator
               spec={currentSpec}
+              sapGuiTheme={currentTheme}
               onUpdateSpec={(updated) => applySpecChange(updated)}
             />
           </div>
