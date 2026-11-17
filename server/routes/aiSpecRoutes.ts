@@ -8,6 +8,10 @@ import {
   isCredentialOrMissingKeyError,
 } from '../geminiClient';
 import {
+  requireHeavyAiAuth,
+  requireStandardAiAuth,
+} from '../middleware/authMiddleware';
+import {
   buildFullSpecFallback,
   extractSpecElementsFallback,
   generateFallbackSapRows,
@@ -20,13 +24,16 @@ import {
 export const aiSpecRoutes = Router();
 
 // 1. Transcribe recorded audio with SAP glossary hints
-aiSpecRoutes.post('/api/transcribe-audio', async (req, res) => {
+aiSpecRoutes.post('/api/transcribe-audio', requireHeavyAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const { audioData, mimeType, glossaryHint } = req.body || {};
 
-    if (!audioData) {
+    if (!audioData || typeof audioData !== 'string' || !audioData.trim()) {
       return res.status(400).json({ error: '오디오 데이터가 전달되지 않았습니다.' });
+    }
+    if (audioData.length > 26_000_000) {
+      return res.status(413).json({ error: '오디오 파일 크기가 허용 한도(25MB)를 초과했습니다.' });
     }
 
     const base64Data = audioData.includes(',') ? audioData.split(',')[1] : audioData;
@@ -72,7 +79,7 @@ aiSpecRoutes.post('/api/transcribe-audio', async (req, res) => {
 });
 
 // 2. Suggest ABAP Data Extraction & Processing Logic (with custom DDIC context)
-aiSpecRoutes.post('/api/generate-logic', async (req, res) => {
+aiSpecRoutes.post('/api/generate-logic', requireStandardAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const { business_purpose, module, program_id, title, customTables = [] } = req.body || {};
@@ -80,8 +87,12 @@ aiSpecRoutes.post('/api/generate-logic', async (req, res) => {
     if (!business_purpose || typeof business_purpose !== 'string') {
       return res.status(400).json({ error: '업무 개요를 입력해주세요.' });
     }
+    if (business_purpose.length > 10_000) {
+      return res.status(400).json({ error: '업무 개요 입력 길이가 허용 한도(10,000자)를 초과했습니다.' });
+    }
 
-    const customContext = formatCustomTablesContext(customTables);
+    const boundedTables = Array.isArray(customTables) ? customTables.slice(0, 15) : [];
+    const customContext = formatCustomTablesContext(boundedTables);
     const systemPrompt = `당신은 20년 경력의 SAP ERP ABAP 시니어 테크니컬 아키텍트입니다.
 사용자가 입력한 [업무 개요 및 개발 목적], [SAP 모듈], [프로그램 정보]와 등록된 커스텀 DDIC 테이블 정보를 분석하여, SAP 표준 개발 문서 양식에 맞는 구조화된 [데이터 추출 및 가공 로직]을 한국어로 작성해주세요.
 
@@ -111,17 +122,26 @@ ${business_purpose}`;
     return res.json({ logic: response.text || '' });
   } catch (error: any) {
     console.error('Logic generation error:', error);
+    if (isCredentialOrMissingKeyError(error)) {
+      return res.status(503).json({
+        code: 'MISSING_GEMINI_API_KEY',
+        error: 'Gemini API 키(GEMINI_API_KEY)가 설정되어 있지 않습니다. 서버 환경 설정을 확인해 주세요.',
+      });
+    }
     return res.status(500).json({ error: error?.message || '로직 제안 중 오류가 발생했습니다.' });
   }
 });
 
 // 3. Fetch SAP Table Schema & Metadata
-aiSpecRoutes.post('/api/fetch-sap-table-schema', async (req, res) => {
+aiSpecRoutes.post('/api/fetch-sap-table-schema', requireStandardAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const { tableName } = req.body || {};
-    if (!tableName || typeof tableName !== 'string') {
+    if (!tableName || typeof tableName !== 'string' || !tableName.trim()) {
       return res.status(400).json({ error: '테이블명을 입력해주세요.' });
+    }
+    if (tableName.trim().length > 40) {
+      return res.status(400).json({ error: '테이블명은 40자를 초과할 수 없습니다.' });
     }
 
     const cleanTableName = tableName.trim().toUpperCase();
@@ -156,13 +176,16 @@ Return a valid JSON object: { "table": string, "name": string, "module": string,
 });
 
 // 4. Generate realistic SAP ALV mock data records
-aiSpecRoutes.post('/api/generate-mock-data', async (req, res) => {
+aiSpecRoutes.post('/api/generate-mock-data', requireStandardAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const { field_catalog, module, title, business_purpose, count = 5 } = req.body || {};
 
     if (!Array.isArray(field_catalog) || field_catalog.length === 0) {
       return res.status(400).json({ error: '필드 카탈로그 정보가 없습니다.' });
+    }
+    if (field_catalog.length > 200) {
+      return res.status(400).json({ error: '필드 카탈로그 항목 수가 허용 한도(200개)를 초과했습니다.' });
     }
 
     const rowTarget = Math.min(Math.max(Number(count) || 5, 3), 10);
@@ -209,7 +232,7 @@ aiSpecRoutes.post('/api/generate-mock-data', async (req, res) => {
 });
 
 // 5. Context-aware Markdown suggestion
-aiSpecRoutes.post('/api/suggest-markdown', async (req, res) => {
+aiSpecRoutes.post('/api/suggest-markdown', requireStandardAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const {
@@ -230,7 +253,8 @@ aiSpecRoutes.post('/api/suggest-markdown', async (req, res) => {
       return res.status(400).json({ error: '마크다운 섹션 위치 정보가 필요합니다.' });
     }
 
-    const customContext = formatCustomTablesContext(customTables);
+    const boundedTables = Array.isArray(customTables) ? customTables.slice(0, 15) : [];
+    const customContext = formatCustomTablesContext(boundedTables);
     const systemPrompt = `당신은 20년 경력의 SAP ERP ABAP 시니어 테크니컬 아키텍트입니다.
 현재 화면 구성과 등록된 커스텀 DDIC 테이블을 반영해 바로 적용 가능한 최적의 한국어 마크다운 본문만 반환하세요.`;
 
@@ -275,12 +299,18 @@ ${currentValue ? String(currentValue).slice(0, 1200) : '(비어 있음)'}`;
     return res.json({ markdown: (response.text || '').trim() });
   } catch (error: any) {
     console.error('Markdown suggestion error:', error);
+    if (isCredentialOrMissingKeyError(error)) {
+      return res.status(503).json({
+        code: 'MISSING_GEMINI_API_KEY',
+        error: 'Gemini API 키(GEMINI_API_KEY)가 설정되어 있지 않습니다. 서버 환경 설정을 확인해 주세요.',
+      });
+    }
     return res.status(500).json({ error: error?.message || 'AI 마크다운 제안 중 오류가 발생했습니다.' });
   }
 });
 
 // 6. AI Spec Copilot: Generate full ProgramSpec draft (injecting custom DDIC tables)
-aiSpecRoutes.post('/api/generate-full-spec', async (req, res) => {
+aiSpecRoutes.post('/api/generate-full-spec', requireHeavyAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const {
@@ -296,10 +326,14 @@ aiSpecRoutes.post('/api/generate-full-spec', async (req, res) => {
     if (!requirementPrompt || typeof requirementPrompt !== 'string' || !requirementPrompt.trim()) {
       return res.status(400).json({ error: '프로그램 요구사항을 입력해 주세요.' });
     }
+    if (requirementPrompt.length > 10_000) {
+      return res.status(400).json({ error: '요구사항 입력 길이가 허용 한도(10,000자)를 초과했습니다.' });
+    }
 
     const cleanSampleType = ['01', '02', '03', '04'].includes(String(sampleType)) ? String(sampleType) : '01';
     const explicitModule = module && module !== 'AUTO' ? String(module).toUpperCase() : '';
-    const customContext = formatCustomTablesContext(customTables);
+    const boundedTables = Array.isArray(customTables) ? customTables.slice(0, 15) : [];
+    const customContext = formatCustomTablesContext(boundedTables);
 
     const systemPrompt = `You are a Principal SAP ERP ABAP Architect.
 Convert a business requirement into a realistic SAP ALV Functional Specification JSON object.
@@ -368,7 +402,7 @@ Constraints:
 });
 
 // 7. Reverse-extract missing Selection Params & Field Catalog columns (with customTables)
-aiSpecRoutes.post('/api/extract-spec-elements', async (req, res) => {
+aiSpecRoutes.post('/api/extract-spec-elements', requireStandardAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const {
@@ -385,6 +419,9 @@ aiSpecRoutes.post('/api/extract-spec-elements', async (req, res) => {
     if (!combinedText) {
       return res.status(400).json({ error: '분석할 업무 개요 또는 데이터 추출 로직이 비어 있습니다.' });
     }
+    if (combinedText.length > 25_000) {
+      return res.status(400).json({ error: '분석 텍스트가 허용 한도(25,000자)를 초과했습니다.' });
+    }
 
     const existingParamNames = new Set(
       (Array.isArray(existingSelectionParams) ? existingSelectionParams : [])
@@ -397,7 +434,8 @@ aiSpecRoutes.post('/api/extract-spec-elements', async (req, res) => {
         .filter(Boolean)
     );
 
-    const customContext = formatCustomTablesContext(customTables);
+    const boundedTables = Array.isArray(customTables) ? customTables.slice(0, 15) : [];
+    const customContext = formatCustomTablesContext(boundedTables);
     const systemPrompt = `You are a senior SAP ABAP Architect reverse-extracting missing Selection Screen params (max 8 chars name!) and ALV Field Catalog columns from specification text and custom DDIC tables. Return JSON { detectedTables, suggestedSelectionParams, suggestedFieldCatalog }.`;
 
     const userPrompt = `Module: ${module}, Sample Type: ${sampleType}
@@ -524,7 +562,7 @@ ${customContext}
 });
 
 // 8. Incremental AI Spec Patching (Modify only requested parts without overwriting the whole spec)
-aiSpecRoutes.post('/api/patch-spec', async (req, res) => {
+aiSpecRoutes.post('/api/patch-spec', requireStandardAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const { instruction, currentSpec, customTables = [] } = req.body || {};
@@ -532,11 +570,15 @@ aiSpecRoutes.post('/api/patch-spec', async (req, res) => {
     if (!instruction || typeof instruction !== 'string' || !instruction.trim()) {
       return res.status(400).json({ error: '수정 요청 내용을 입력해 주세요.' });
     }
+    if (instruction.length > 4_000) {
+      return res.status(400).json({ error: '수정 요청 내용이 허용 한도(4,000자)를 초과했습니다.' });
+    }
     if (!currentSpec || typeof currentSpec !== 'object') {
       return res.status(400).json({ error: '현재 사양서 정보가 전달되지 않았습니다.' });
     }
 
-    const customContext = formatCustomTablesContext(customTables);
+    const boundedTables = Array.isArray(customTables) ? customTables.slice(0, 15) : [];
+    const customContext = formatCustomTablesContext(boundedTables);
     const systemPrompt = `You are a Principal SAP ABAP Architect applying an INCREMENTAL PATCH to an existing SAP ProgramSpec.
 Analyze the user's instruction and return ONLY valid JSON representing a partial update patch (only include fields that need to be added/updated):
 {
@@ -594,13 +636,16 @@ Do NOT replace existing items unless directly requested.`;
 });
 
 // 9. Reverse Import Legacy ABAP / SE11 code into ProgramSpec
-aiSpecRoutes.post('/api/reverse-import-abap', async (req, res) => {
+aiSpecRoutes.post('/api/reverse-import-abap', requireHeavyAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const { abapSource, targetSapRelease = 'SAP S/4HANA 2023 / ECC 6.0' } = req.body || {};
 
     if (!abapSource || typeof abapSource !== 'string' || !abapSource.trim()) {
       return res.status(400).json({ error: '분석할 ABAP 소스 코드 또는 SE11 구조를 입력해 주세요.' });
+    }
+    if (abapSource.length > 35_000) {
+      return res.status(400).json({ error: 'ABAP 소스 코드 길이가 허용 한도(35,000자)를 초과했습니다.' });
     }
 
     const deterministic = parseLegacyAbapDeterministic(abapSource);

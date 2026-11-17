@@ -101,4 +101,26 @@ describe('Firestore Security Rules Static & Dirty Dozen Contract', () => {
     expect(rulesContent).toContain('memberRoles');
     expect(rulesContent).toContain('data.memberRoles is map && data.memberRoles.size() <= 50');
   });
+
+  it('14. Enforces owner-only access on user workspace preferences and bounded arrays', () => {
+    expect(rulesContent).toContain('function isValidUserPreferences(data, userId)');
+    expect(rulesContent).toContain('match /preferences/{prefId}');
+    expect(rulesContent).toContain('isStringList(data.favoriteProgramIds, 100)');
+  });
+
+  it('15. Protects spec collaborator presence heartbeats and spec optimistic revision fields', () => {
+    expect(rulesContent).toContain('function isValidSpecPresence(data, projectId, specId, userId)');
+    expect(rulesContent).toContain('match /presence/{userId}');
+    expect(rulesContent).toContain("'revision'");
+    expect(rulesContent).toContain("'lastEditedByUid'");
+  });
+
+  it('16. Locks user projectRole against self-escalation and enforces RBAC status transitions on specs', () => {
+    expect(rulesContent).toContain('incoming().projectRole == existing().projectRole');
+    expect(rulesContent).toContain("incoming().projectRole == 'FUNC'");
+    expect(rulesContent).toContain('function hasEffectiveProjectRole(projectId, allowedRoles)');
+    expect(rulesContent).toContain("hasEffectiveProjectRole(projectId, ['PM'])");
+    expect(rulesContent).toContain("hasEffectiveProjectRole(projectId, ['ABAP', 'PM'])");
+    expect(rulesContent).toContain("hasEffectiveProjectRole(projectId, ['QA', 'PM'])");
+  });
 });

@@ -14,13 +14,12 @@ import {
   X,
 } from 'lucide-react';
 import { PageHeader } from './PageHeader';
-import { SapProject, UserAccountRole, UserProfileRecord, UserProjectRole } from '../types/sap';
+import { SapProject, UserProfileRecord, UserProjectRole } from '../types/sap';
 import {
   isBootstrappedAdminEmail,
   subscribeAllUsersForAdmin,
   updateUserAccountRole,
   updateUserApprovalStatus,
-  updateUserAssignedProjects,
   updateUserProjectRole,
 } from '../services/userManagementService';
 import {
@@ -30,6 +29,7 @@ import {
   normalizeProjectRole,
 } from '../utils/projectRoles';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface AdminDashboardProps {
@@ -44,10 +44,10 @@ type AdminTab = 'pending' | 'approved' | 'rejected';
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   projects,
   onClose,
-  onProjectsOrMembersUpdated,
   onNotify,
 }) => {
   const { isAdmin, userProfile: currentAdminProfile } = useAuth();
+  const { confirmAction, confirmDelete } = useConfirmDialog();
   const { lang, t } = useLanguage();
   const [allUsers, setAllUsers] = useState<UserProfileRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,14 +152,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleProjectRoleChange = async (user: UserProfileRecord, nextProjectRole: UserProjectRole) => {
+  const handleDefaultProjectRoleChange = async (
+    user: UserProfileRecord,
+    nextRole: UserProjectRole
+  ) => {
+    if (user.role === 'admin' || nextRole === 'ADMIN') return;
     setBusyUid(user.uid);
     try {
-      await updateUserProjectRole(user.uid, nextProjectRole);
+      await updateUserProjectRole(user.uid, nextRole);
       onNotify?.(
         t(
-          `Updated '${user.displayName}' project role to ${getProjectRoleLabel(nextProjectRole, 'en', 'short')}.`,
-          `'${user.displayName}'님의 기본 역할을 '${getProjectRoleLabel(nextProjectRole, 'ko', 'short')}'(으)로 변경했습니다.`
+          `Updated '${user.displayName}' default role to ${getProjectRoleLabel(nextRole, 'en', 'short')}.`,
+          `'${user.displayName}'님의 기본 프로젝트 역할을 '${getProjectRoleLabel(nextRole, 'ko', 'short')}'(으)로 변경했습니다.`
         )
       );
     } finally {
@@ -167,50 +171,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleToggleProjectAssignment = async (user: UserProfileRecord, projectCode: string) => {
-    setBusyUid(user.uid);
-    try {
-      const exists = user.assignedProjects.includes(projectCode);
-      const nextAssigned = exists
-        ? user.assignedProjects.filter((c) => c !== projectCode)
-        : [...user.assignedProjects, projectCode];
-
-      await updateUserAssignedProjects(user, nextAssigned, projects);
-      onProjectsOrMembersUpdated();
+  const handleAccountRoleToggle = async (user: UserProfileRecord) => {
+    const isSelf = currentAdminProfile?.uid === user.uid;
+    const isProtectedAdmin = isBootstrappedAdminEmail(user.email);
+    const nextRole = user.role === 'admin' ? 'user' : 'admin';
+    if ((isSelf || isProtectedAdmin) && nextRole === 'user') {
       onNotify?.(
-        exists
-          ? t(
-              `Removed '${user.displayName}' from project [${projectCode}].`,
-              `'${user.displayName}'님을 [${projectCode}] 프로젝트에서 제외했습니다.`
-            )
-          : t(
-              `Assigned '${user.displayName}' to project [${projectCode}].`,
-              `'${user.displayName}'님에게 [${projectCode}] 프로젝트 권한을 할당했습니다.`
-            )
+        t(
+          'Your own admin account or bootstrapped owner accounts cannot be demoted.',
+          '본인 계정 또는 시스템 기본 관리자 계정은 일반 사용자로 강등할 수 없습니다.'
+        )
       );
-    } finally {
-      setBusyUid(null);
-    }
-  };
-
-  const handleToggleRole = async (user: UserProfileRecord) => {
-    if (isBootstrappedAdminEmail(user.email)) {
-      onNotify?.(t('Site owner admin role is protected.', '기본 관리자 계정의 권한은 변경할 수 없습니다.'));
       return;
     }
-    const nextRole: UserAccountRole = user.role === 'admin' ? 'user' : 'admin';
+
+    const confirmed = await confirmAction({
+      title: nextRole === 'admin' ? t('Promote to Admin', '관리자 승격') : t('Demote to User', '일반 사용자 전환'),
+      message:
+        nextRole === 'admin'
+          ? t(
+              `Grant platform Admin privileges to '${user.displayName}'?`,
+              `'${user.displayName}'님에게 플랫폼 관리자(ADMIN) 권한을 부여하시겠습니까?`
+            )
+          : t(
+              `Revoke platform Admin privileges from '${user.displayName}'?`,
+              `'${user.displayName}'님의 관리자(ADMIN) 권한을 해제하시겠습니까?`
+            ),
+      targetName: `${user.displayName} (${user.email || user.uid})`,
+      confirmLabel: nextRole === 'admin' ? t('Promote', '승격') : t('Demote', '전환'),
+      tone: 'primary',
+    });
+    if (!confirmed) return;
+
     setBusyUid(user.uid);
     try {
       await updateUserAccountRole(user.uid, nextRole, user.email);
       onNotify?.(
-        t(
-          `Updated '${user.displayName}' role to ${nextRole.toUpperCase()}.`,
-          `'${user.displayName}'님의 시스템 역할을 ${nextRole.toUpperCase()}(으)로 변경했습니다.`
-        )
+        nextRole === 'admin'
+          ? t(`Promoted '${user.displayName}' to Admin.`, `'${user.displayName}'님을 관리자로 승격했습니다.`)
+          : t(`Demoted '${user.displayName}' to regular user.`, `'${user.displayName}'님을 일반 사용자로 전환했습니다.`)
       );
     } finally {
       setBusyUid(null);
     }
+  };
+
+  const handleRevokeApprovedUser = async (user: UserProfileRecord) => {
+    const isSelf = currentAdminProfile?.uid === user.uid;
+    const isProtectedAdmin = isBootstrappedAdminEmail(user.email);
+    if (isSelf || isProtectedAdmin) {
+      onNotify?.(
+        t(
+          'Your own account or bootstrapped owner accounts cannot be revoked.',
+          '본인 계정 또는 시스템 기본 관리자 계정의 접근은 회수할 수 없습니다.'
+        )
+      );
+      return;
+    }
+
+    const confirmed = await confirmDelete({
+      title: t('Revoke Workspace Access', '작업실 접근 권한 회수'),
+      message: t(
+        `Revoke approved workspace access for '${user.displayName}'?`,
+        `'${user.displayName}'님의 작업실 접근 권한을 회수(차단)하시겠습니까?`
+      ),
+      targetName: `${user.displayName} (${user.email || user.uid})`,
+      description: t(
+        'The user will immediately lose access to AI APIs and Firestore project data until re-approved.',
+        '재승인 전까지 AI API 및 프로젝트 데이터 접근이 즉시 차단됩니다.'
+      ),
+      confirmLabel: t('Revoke Access', '권한 회수'),
+    });
+    if (!confirmed) return;
+
+    await handleStatusChange(user, 'rejected');
   };
 
   const formatTimestamp = (iso?: string) => {
@@ -223,20 +257,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <PageHeader
         icon={ShieldCheck}
         eyebrow={t('Administration · Security & Access Control (/admin)', '관리자 전용 · 인증 및 권한 관리 (/admin)')}
-        title={t('User Approval & Project Access Admin', '사용자 승인 및 프로젝트 권한 관리')}
+        title={t('User Management', '사용자 관리')}
         subtitle={t(
           'Review pending Google sign-up applicants, approve workspace access, and assign project-level permissions.',
           'Google 로그인으로 가입 신청한 사용자를 승인/거절하고, 승인된 사용자에게 프로젝트별 접근 권한을 할당합니다.'
         )}
         actions={
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-9 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{t('Back', '뒤로가기')}</span>
-          </button>
+          <div className="group relative inline-flex shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('Back', '뒤로가기')}
+              className="w-9 h-9 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute top-full right-0 mt-2 z-50 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-white text-xs font-medium whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+            >
+              {t('Back', '뒤로가기')}
+            </span>
+          </div>
         }
       />
 
@@ -254,7 +296,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <div className="flex items-center justify-between text-xs font-semibold text-amber-800">
-                <span>{t('Pending Approval', '승인 대기')}</span>
+                <span>{t('Pending', '대기')}</span>
                 <Clock className="w-4 h-4 text-amber-600" />
               </div>
               <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 mt-1.5">
@@ -275,7 +317,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <div className="flex items-center justify-between text-xs font-semibold text-emerald-800">
-                <span>{t('Approved Members', '승인 완료 사용자')}</span>
+                <span>{t('Approved', '완료')}</span>
                 <UserCheck className="w-4 h-4 text-emerald-600" />
               </div>
               <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 mt-1.5">
@@ -309,7 +351,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <div className="flex items-center justify-between text-xs font-semibold text-rose-800">
-                <span>{t('Rejected / Blocked', '거절 / 차단')}</span>
+                <span>{t('Rejected', '거절')}</span>
                 <UserX className="w-4 h-4 text-rose-600" />
               </div>
               <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 mt-1.5">
@@ -342,7 +384,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   }`}
                 >
                   <Clock className="w-3.5 h-3.5 text-amber-600" />
-                  <span>{t('Pending Queue', '승인 대기 목록')}</span>
+                  <span>{t('Pending', '대기')}</span>
                   <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-900">
                     {pendingUsers.length}
                   </span>
@@ -357,7 +399,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   }`}
                 >
                   <Users className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>{t('Approved & Projects', '승인 사용자 · 프로젝트 할당')}</span>
+                  <span>{t('Approved', '완료')}</span>
                   <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-900">
                     {approvedUsers.length}
                   </span>
@@ -372,7 +414,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   }`}
                 >
                   <UserX className="w-3.5 h-3.5 text-rose-600" />
-                  <span>{t('Rejected', '거절됨')}</span>
+                  <span>{t('Rejected', '거절')}</span>
                   <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-slate-200 text-slate-700">
                     {rejectedUsers.length}
                   </span>
@@ -530,89 +572,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         )}
 
                         {activeTab === 'approved' && (
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                            {/* Project Assignment Multi-Checkboxes */}
+                          <div className="flex flex-col items-start lg:items-end gap-2">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-[11px] font-semibold text-slate-500 mr-1">
                                 {t('Projects:', '할당 프로젝트:')}
                               </span>
-                              {assignableProjects.length === 0 ? (
-                                <span className="text-[11px] text-slate-400">
-                                  {t('No team projects', '프로젝트 없음')}
-                                </span>
-                              ) : (
-                                assignableProjects.map((proj) => {
-                                  const isAssigned = u.role === 'admin' || u.assignedProjects.includes(proj.code);
+                              {(() => {
+                                const assignedList =
+                                  u.role === 'admin'
+                                    ? assignableProjects
+                                    : assignableProjects.filter((proj) =>
+                                        u.assignedProjects.includes(proj.code)
+                                      );
+                                if (assignedList.length === 0) {
                                   return (
-                                    <label
-                                      key={`${u.uid}-${proj.code}`}
-                                      title={`${proj.code} — ${proj.name}`}
-                                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-mono font-semibold select-none transition-colors ${
-                                        u.role === 'admin'
-                                          ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
-                                          : isAssigned
-                                          ? 'bg-blue-50 border-blue-300 text-blue-900 cursor-pointer'
-                                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        disabled={isBusy || u.role === 'admin'}
-                                        checked={isAssigned}
-                                        onChange={() => void handleToggleProjectAssignment(u, proj.code)}
-                                        className="rounded border-slate-300 cursor-pointer"
-                                      />
-                                      <span>{proj.code}</span>
-                                    </label>
+                                    <span className="text-[11px] text-slate-400">
+                                      {t('None', '할당 없음')}
+                                    </span>
                                   );
-                                })
-                              )}
-                            </div>
-
-                            {/* Role & Revoke Controls */}
-                            {!isProtectedAdmin && (
-                              <div className="flex flex-wrap items-center gap-1.5 border-t sm:border-t-0 sm:border-l border-slate-200 pt-2 sm:pt-0 sm:pl-3">
-                                {u.role !== 'admin' && (
-                                  <select
-                                    disabled={isBusy}
-                                    value={
-                                      normalizeProjectRole(u.projectRole, 'FUNC') === 'ADMIN'
-                                        ? 'FUNC'
-                                        : normalizeProjectRole(u.projectRole, 'FUNC')
-                                    }
-                                    onChange={(e) =>
-                                      void handleProjectRoleChange(u, e.target.value as UserProjectRole)
-                                    }
-                                    aria-label={t('Default project role', '기본 역할 설정')}
-                                    className="h-7 px-2 bg-white border border-slate-300 rounded-md text-[11px] font-semibold text-slate-700 focus:border-blue-500 focus:outline-none cursor-pointer"
+                                }
+                                return assignedList.map((proj) => (
+                                  <span
+                                    key={`${u.uid}-${proj.code}`}
+                                    title={`${proj.code} — ${proj.name}`}
+                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-md border text-[11px] font-mono font-semibold ${
+                                      u.role === 'admin'
+                                        ? 'bg-slate-100 border-slate-200 text-slate-700'
+                                        : 'bg-blue-50 border-blue-200 text-blue-900'
+                                    }`}
                                   >
-                                    {PROJECT_ASSIGNABLE_ROLES.map((r) => (
-                                      <option key={r.code} value={r.code}>
-                                        {lang === 'ko' ? r.labelKo : r.labelEn}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                                <button
-                                  type="button"
+                                    {proj.code}
+                                  </span>
+                                ));
+                              })()}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {u.role !== 'admin' && (
+                                <select
                                   disabled={isBusy}
-                                  onClick={() => void handleToggleRole(u)}
-                                  className="h-7 px-2.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-md text-[11px] font-semibold text-slate-700 cursor-pointer"
+                                  value={normalizeProjectRole(u.projectRole, 'FUNC') === 'ADMIN' ? 'FUNC' : normalizeProjectRole(u.projectRole, 'FUNC')}
+                                  onChange={(e) =>
+                                    void handleDefaultProjectRoleChange(
+                                      u,
+                                      e.target.value as UserProjectRole
+                                    )
+                                  }
+                                  aria-label={t('Default project role', '기본 프로젝트 역할')}
+                                  className="h-7 px-2 bg-white border border-slate-300 rounded-md text-[11px] font-semibold text-slate-800 focus:border-blue-500 focus:outline-none cursor-pointer disabled:opacity-50"
                                 >
-                                  {u.role === 'admin'
-                                    ? t('Set User', '일반 전환')
-                                    : t('Set Admin', '관리자 지정')}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => void handleStatusChange(u, 'rejected')}
-                                  className="h-7 px-2.5 bg-white hover:bg-rose-50 border border-rose-200 rounded-md text-[11px] font-semibold text-rose-700 cursor-pointer"
-                                >
-                                  {t('Block', '차단')}
-                                </button>
-                              </div>
-                            )}
+                                  {PROJECT_ASSIGNABLE_ROLES.map((r) => (
+                                    <option key={r.code} value={r.code}>
+                                      {lang === 'ko' ? r.labelKo : r.labelEn}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                              <button
+                                type="button"
+                                disabled={isBusy || ((isSelf || isProtectedAdmin) && u.role === 'admin')}
+                                onClick={() => void handleAccountRoleToggle(u)}
+                                className="h-7 px-2.5 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 border border-slate-300 rounded-md text-[11px] font-semibold cursor-pointer transition-colors"
+                              >
+                                {u.role === 'admin'
+                                  ? t('Demote to User', '일반 사용자 전환')
+                                  : t('Make Admin', '관리자 승격')}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isBusy || isSelf || isProtectedAdmin}
+                                onClick={() => void handleRevokeApprovedUser(u)}
+                                className="h-7 px-2.5 bg-white hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed text-rose-700 border border-rose-200 rounded-md text-[11px] font-semibold cursor-pointer transition-colors"
+                              >
+                                {t('Revoke Access', '권한 회수')}
+                              </button>
+                            </div>
                           </div>
                         )}
 

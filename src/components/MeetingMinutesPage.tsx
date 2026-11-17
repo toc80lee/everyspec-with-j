@@ -389,7 +389,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
             <span>{activeProject?.name || activeProjectCode}</span>
           </>
         }
-        title={t('Project Meeting Minutes', '프로젝트 회의록')}
+        title={t('Meeting Minutes', '회의록')}
         titleBadge={
           activeProjectCode === TEMP_PROJECT_CODE ? (
             <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
@@ -617,58 +617,89 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                       </div>
                     </div>
 
-                    {/* Action Buttons inside Meeting Detail Page */}
+                    {/* Icon-Only Action Buttons with Concise Tooltips */}
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={handleLaunchSpecGeneration}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>{t('Generate Program Spec', '프로그램 스펙 생성')}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => onResumeWizard(selectedMinute)}
-                        className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        <Mic className="w-3.5 h-3.5 text-blue-300" />
-                        <span>{t('Recording Wizard', '녹음 마법사')}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={!isDirty}
-                        onClick={handleSaveDetail}
-                        className="px-3 py-2 bg-white hover:bg-slate-100 disabled:opacity-45 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>{t('Save', '저장')}</span>
-                      </button>
-
-                      {selectedMinute.author === currentUser.name && (
+                      <div className="group relative inline-flex">
                         <button
                           type="button"
-                          onClick={async () => {
-                            const confirmed = await confirmDelete({
-                              title: t('Delete Meeting Minutes', '회의록 삭제'),
-                              message: t('Are you sure you want to delete these meeting minutes?', '삭제하시겠습니까?'),
-                              targetName: selectedMinute.title,
-                              description: t(
-                                'The meeting minutes, transcript segments, and action items will be deleted.',
-                                '회의록과 녹취 세그먼트 및 실행 항목이 함께 삭제됩니다.'
-                              ),
-                            });
-                            if (!confirmed) return;
-                            onDeleteMinute(selectedMinute.id);
-                          }}
-                          className="p-2 text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg cursor-pointer"
-                          title={t('Delete minutes', '회의록 삭제')}
-                          aria-label={t('Delete minutes', '회의록 삭제')}
+                          onClick={handleLaunchSpecGeneration}
+                          aria-label={t('Generate Spec', '스펙 생성')}
+                          className="w-9 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs flex items-center justify-center transition-colors shrink-0 cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Sparkles className="w-4 h-4" />
                         </button>
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-white text-xs font-medium whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+                        >
+                          {t('Generate Spec', '스펙 생성')}
+                        </span>
+                      </div>
+
+                      <div className="group relative inline-flex">
+                        <button
+                          type="button"
+                          onClick={() => onResumeWizard(selectedMinute)}
+                          aria-label={t('Recording Wizard', '녹음 마법사')}
+                          className="w-9 h-9 bg-slate-900 hover:bg-slate-800 text-white rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                        >
+                          <Mic className="w-4 h-4 text-blue-300" />
+                        </button>
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-white text-xs font-medium whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+                        >
+                          {t('Recording Wizard', '녹음 마법사')}
+                        </span>
+                      </div>
+
+                      <div className="group relative inline-flex">
+                        <button
+                          type="button"
+                          disabled={!isDirty}
+                          onClick={handleSaveDetail}
+                          aria-label={t('Save', '저장')}
+                          className="w-9 h-9 bg-white hover:bg-slate-100 disabled:opacity-45 text-slate-700 border border-slate-300 rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                        >
+                          <Save className="w-4 h-4" />
+                        </button>
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute top-full right-0 mt-2 z-50 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-white text-xs font-medium whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+                        >
+                          {t('Save', '저장')}
+                        </span>
+                      </div>
+
+                      {selectedMinute.author === currentUser.name && (
+                        <div className="group relative inline-flex">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const confirmed = await confirmDelete({
+                                title: t('Delete Meeting Minutes', '회의록 삭제'),
+                                message: t('Are you sure you want to delete these meeting minutes?', '삭제하시겠습니까?'),
+                                targetName: selectedMinute.title,
+                                description: t(
+                                  'The meeting minutes, transcript segments, and action items will be deleted.',
+                                  '회의록과 녹취 세그먼트 및 실행 항목이 함께 삭제됩니다.'
+                                ),
+                              });
+                              if (!confirmed) return;
+                              onDeleteMinute(selectedMinute.id);
+                            }}
+                            className="w-9 h-9 text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+                            aria-label={t('Delete', '삭제')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <span
+                            role="tooltip"
+                            className="pointer-events-none absolute top-full right-0 mt-2 z-50 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-white text-xs font-medium whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+                          >
+                            {t('Delete', '삭제')}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -957,31 +988,14 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                   )}
                 </div>
 
-                {/* Sticky Detail Bottom Footer */}
-                <footer className="px-6 py-3 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-between gap-3">
-                  <div className="text-[11px] text-amber-700 font-medium">
-                    {isDirty ? t('Unsaved changes (auto-saved when generating spec).', '저장되지 않은 변경사항이 있습니다 (스펙 생성 시 자동 저장됨).') : ''}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      disabled={!isDirty}
-                      onClick={handleSaveDetail}
-                      className="px-3.5 py-1.5 bg-white hover:bg-slate-100 disabled:opacity-45 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>{t('Save', '저장')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleLaunchSpecGeneration}
-                      className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>{t('Generate Program Spec', '프로그램 스펙 생성')}</span>
-                    </button>
-                  </div>
-                </footer>
+                {isDirty && (
+                  <footer className="px-6 py-2.5 bg-amber-50/70 border-t border-amber-200 shrink-0 text-[11px] text-amber-800 font-medium">
+                    {t(
+                      'Unsaved changes (auto-saved when generating spec).',
+                      '저장되지 않은 변경사항이 있습니다 (스펙 생성 시 자동 저장됨).'
+                    )}
+                  </footer>
+                )}
               </>
             )}
           </section>

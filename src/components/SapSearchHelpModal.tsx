@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Database, Table, Key, Check, X, Filter, Settings2 } from 'lucide-react';
 import { SapDataType, SapDD02LTable, SapDD03LField } from '../types/sap';
-import { getDD02LTables, getDD03LFields } from '../utils/sapDdicStorage';
+import { SAP_DDIC_UPDATED_EVENT, getDD02LTables, getDD03LFields } from '../utils/sapDdicStorage';
 import { SapDdicManagerModal } from './SapDdicManagerModal';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -47,6 +47,14 @@ export const SapSearchHelpModal: React.FC<SapSearchHelpModalProps> = ({
   const dd03lFields: SapDD03LField[] = useMemo(() => {
     return getDD03LFields();
   }, [ddicVersion]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const refreshDdic = () => setDdicVersion((v) => v + 1);
+    refreshDdic();
+    window.addEventListener(SAP_DDIC_UPDATED_EVENT, refreshDdic);
+    return () => window.removeEventListener(SAP_DDIC_UPDATED_EVENT, refreshDdic);
+  }, [isOpen]);
 
   // Sync activeTable if not exists
   useEffect(() => {

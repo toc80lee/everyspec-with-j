@@ -1,8 +1,29 @@
 import { ProjectMeetingMinute } from '../types/sap';
 import { COMMON_PROJECT_CODE, TEMP_PROJECT_CODE, normalizeLegacyProjectCode } from './projectStorage';
-import { syncMeetingMinuteToFirestore } from '../services/firestoreSync';
+import {
+  deleteMeetingFromFirestore,
+  syncMeetingMinuteToFirestore,
+} from '../services/firestoreSync';
 
 const MEETING_STORAGE_KEY = 'sap_spec_meeting_minutes_v1';
+const PENDING_MEETING_WRITE_TTL_MS = 8000;
+const pendingMeetingWrites = new Map<string, number>();
+
+export function markMeetingPendingWrite(id?: string): void {
+  const clean = (id || '').trim();
+  if (!clean) return;
+  pendingMeetingWrites.set(clean, Date.now() + PENDING_MEETING_WRITE_TTL_MS);
+}
+
+function isMeetingWritePending(id?: string): boolean {
+  const clean = (id || '').trim();
+  if (!clean) return false;
+  const exp = pendingMeetingWrites.get(clean);
+  if (!exp) return false;
+  if (exp > Date.now()) return true;
+  pendingMeetingWrites.delete(clean);
+  return false;
+}
 
 export function formatNowDateTime(): string {
   const d = new Date();
@@ -27,6 +48,10 @@ export function getMeetingMinutesList(): ProjectMeetingMinute[] {
     console.error('Failed to load meeting minutes from localStorage', err);
     return [];
   }
+}
+
+export function getMeetingMinuteById(id: string): ProjectMeetingMinute | undefined {
+  return getMeetingMinutesList().find((m) => m.id === id);
 }
 
 /**
@@ -76,6 +101,63 @@ export function upsertMeetingMinutesFromRemote(remoteMinutes: ProjectMeetingMinu
   return merged;
 }
 
+/**
+ * Reconcile cached meetings for a specific project against the authoritative Firestore snapshot,
+ * propagating remote deletions even when remoteMinutes is empty.
+ */
+export function reconcileProjectMeetingsFromRemote(
+  projectCode: string,
+  remoteMinutes: ProjectMeetingMinute[],
+  currentUserName?: string,
+  currentUserId?: string
+): ProjectMeetingMinute[] {
+  const targetProj = normalizeLegacyProjectCode(projectCode || TEMP_PROJECT_CODE);
+  const current = getMeetingMinutesList();
+  const remoteMap = new Map<string, ProjectMeetingMinute>();
+  remoteMinutes.forEach((m) => {
+    if (m && m.id) remoteMap.set(m.id, m);
+  });
+
+  const nextMap = new Map<string, ProjectMeetingMinute>();
+  for (const m of current) {
+    const itemProj = normalizeLegacyProjectCode(m.project_code || TEMP_PROJECT_CODE);
+    if (itemProj !== targetProj) {
+      nextMap.set(m.id, m);
+      continue;
+    }
+    if (targetProj === TEMP_PROJECT_CODE && currentUserId) {
+      const belongsToCurrent =
+        m.author_id ? m.author_id === currentUserId : !currentUserName || m.author === currentUserName;
+      if (!belongsToCurrent) {
+        nextMap.set(m.id, m);
+        continue;
+      }
+    }
+    const remote = remoteMap.get(m.id);
+    if (remote) {
+      nextMap.set(m.id, isMeetingWritePending(m.id) ? m : remote);
+    } else if (isMeetingWritePending(m.id)) {
+      nextMap.set(m.id, m);
+    }
+  }
+
+  for (const remote of remoteMinutes) {
+    if (remote && remote.id && !nextMap.has(remote.id)) {
+      nextMap.set(remote.id, remote);
+    }
+  }
+
+  const merged = Array.from(nextMap.values()).sort((a, b) =>
+    String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
+  );
+  try {
+    localStorage.setItem(MEETING_STORAGE_KEY, JSON.stringify(merged));
+  } catch {
+    // ignore
+  }
+  return merged;
+}
+
 export function saveMeetingMinute(record: ProjectMeetingMinute): ProjectMeetingMinute[] {
   const list = getMeetingMinutesList();
   const now = formatNowDateTime();
@@ -100,6 +182,7 @@ export function saveMeetingMinute(record: ProjectMeetingMinute): ProjectMeetingM
 
   nextList.sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
 
+  markMeetingPendingWrite(updatedRecord.id);
   try {
     localStorage.setItem(MEETING_STORAGE_KEY, JSON.stringify(nextList));
   } catch (err) {
@@ -114,11 +197,20 @@ export function saveMeetingMinute(record: ProjectMeetingMinute): ProjectMeetingM
 }
 
 export function deleteMeetingMinute(id: string): ProjectMeetingMinute[] {
-  const nextList = getMeetingMinutesList().filter((m) => m.id !== id);
+  const current = getMeetingMinutesList();
+  const target = current.find((m) => m.id === id);
+  const nextList = current.filter((m) => m.id !== id);
+  pendingMeetingWrites.delete(id);
   try {
     localStorage.setItem(MEETING_STORAGE_KEY, JSON.stringify(nextList));
   } catch (err) {
     console.error('Failed to delete meeting minute', err);
+  }
+
+  if (target) {
+    deleteMeetingFromFirestore(target.project_code || TEMP_PROJECT_CODE, target.id).catch((err) => {
+      console.warn('Firestore meeting delete skipped:', err);
+    });
   }
   return nextList;
 }

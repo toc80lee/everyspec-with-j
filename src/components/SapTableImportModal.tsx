@@ -17,6 +17,7 @@ import {
 import { SAP_SEARCH_HELP_TABLES, SapTableHelp } from '../data/sapSearchHelpData';
 import { AlvField } from '../types/sap';
 import { useLanguage } from '../contexts/LanguageContext';
+import { authorizedFetch } from '../utils/authorizedFetch';
 
 interface SapTableImportModalProps {
   isOpen: boolean;
@@ -121,14 +122,15 @@ export const SapTableImportModal: React.FC<SapTableImportModalProps> = ({
     setFetchError(null);
 
     try {
-      const res = await fetch('/api/fetch-sap-table-schema', {
+      const res = await authorizedFetch('/api/fetch-sap-table-schema', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tableName: cleanName }),
       });
 
       if (!res.ok) {
-        throw new Error(`Failed to fetch schema (status ${res.status})`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to fetch schema (status ${res.status})`);
       }
 
       const data = await res.json();

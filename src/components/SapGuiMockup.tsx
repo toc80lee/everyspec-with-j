@@ -24,6 +24,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ProgramSpec, AlvField, SelectionParameter, AlvErrorLog } from '../types/sap';
+import { authorizedFetch } from '../utils/authorizedFetch';
 import { SapMultipleSelectionModal } from './SapMultipleSelectionModal';
 import { DrilldownModal } from './DrilldownModal';
 import { AlvDetailModal } from './AlvDetailModal';
@@ -440,7 +441,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
     });
 
     try {
-      const response = await fetch('/api/generate-mock-data', {
+      const response = await authorizedFetch('/api/generate-mock-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -452,7 +453,10 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || `Server error (${response.status})`);
+      }
       if (data && Array.isArray(data.rows) && data.rows.length > 0) {
         setRows(data.rows);
         commitSimUpdate((prev) => ({

@@ -97,7 +97,7 @@ export const SideNav: React.FC<SideNavProps> = ({
   const primaryItems: NavItemConfig[] = [
     {
       id: 'overview',
-      label: t('Dashboard', '대시보드'),
+      label: t('Overview', '현황'),
       shortDesc: t('Project overview & metrics', '프로젝트 현황 및 지표'),
       icon: LayoutDashboard,
       isActive: currentMode === 'overview',
@@ -113,7 +113,7 @@ export const SideNav: React.FC<SideNavProps> = ({
     },
     {
       id: 'meeting_minutes',
-      label: t('Meetings', '회의록'),
+      label: t('Meeting Minutes', '회의록'),
       shortDesc: t('Meeting minutes & AI spec wizard', '회의록 및 AI 사양서 생성'),
       icon: MessageSquareText,
       isActive: currentMode === 'meeting_minutes' || currentMode === 'meeting_wizard',
@@ -131,7 +131,7 @@ export const SideNav: React.FC<SideNavProps> = ({
       ? [
           {
             id: 'project_settings',
-            label: t('Project Settings', '프로젝트 설정'),
+            label: t('Basic Settings', '기본 설정'),
             shortDesc: t('Project & ABAP standards', '프로젝트·멤버·ABAP 표준 설정'),
             icon: FolderKanban,
             isActive: currentMode === 'project_settings',
@@ -143,7 +143,7 @@ export const SideNav: React.FC<SideNavProps> = ({
       ? [
           {
             id: 'admin_dashboard',
-            label: t('Admin Console', '관리자 콘솔'),
+            label: t('User Management', '사용자 관리'),
             shortDesc: t('User approvals & RBAC matrix', '사용자 승인 및 권한 관리'),
             icon: ShieldCheck,
             isActive: currentMode === 'admin_dashboard',
@@ -291,7 +291,7 @@ export const SideNav: React.FC<SideNavProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectProjectScope(COMMON_PROJECT_CODE)}
-                  aria-label={t('Common Standards (COMM)', '공통 영역 (COMM)')}
+                  aria-label={commonProject.name}
                   className={`group relative h-8 flex items-center rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     isExpanded ? 'px-2.5 gap-2.5 justify-between' : 'w-10 mx-auto justify-center'
                   } ${
@@ -310,7 +310,7 @@ export const SideNav: React.FC<SideNavProps> = ({
                   {isExpanded && (
                     <span className="font-mono text-[10px] text-slate-500">COMM</span>
                   )}
-                  {renderTooltip(t('Common (COMM)', '공통 영역 (COMM)'))}
+                  {renderTooltip(commonProject.name)}
                 </button>
               )}
 
@@ -334,7 +334,7 @@ export const SideNav: React.FC<SideNavProps> = ({
                       key={proj.code}
                       type="button"
                       onClick={() => onSelectProjectScope(proj.code)}
-                      aria-label={`${proj.code} · ${proj.name}`}
+                      aria-label={proj.name}
                       className={`group relative h-8 flex items-center rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                         isExpanded ? 'px-2.5 gap-2.5 justify-between' : 'w-10 mx-auto justify-center'
                       } ${
@@ -352,7 +352,7 @@ export const SideNav: React.FC<SideNavProps> = ({
                           {proj.code}
                         </span>
                       )}
-                      {renderTooltip(`[${proj.code}] ${proj.name}`)}
+                      {renderTooltip(proj.name)}
                     </button>
                   );
                 })
@@ -363,7 +363,7 @@ export const SideNav: React.FC<SideNavProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectProjectScope(TEMP_PROJECT_CODE)}
-                  aria-label={t('Personal Temp (TEMP)', '개인 임시 공간 (TEMP)')}
+                  aria-label={tempProject.name}
                   className={`group relative h-8 flex items-center rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     isExpanded ? 'px-2.5 gap-2.5 justify-between' : 'w-10 mx-auto justify-center'
                   } ${
@@ -382,7 +382,7 @@ export const SideNav: React.FC<SideNavProps> = ({
                   {isExpanded && (
                     <span className="font-mono text-[10px] text-slate-500">TEMP</span>
                   )}
-                  {renderTooltip(t('Personal Space (TEMP)', '개인 임시 공간 (TEMP)'))}
+                  {renderTooltip(tempProject.name)}
                 </button>
               )}
             </div>
@@ -415,7 +415,7 @@ export const SideNav: React.FC<SideNavProps> = ({
         <button
           type="button"
           onClick={onOpenShortcuts}
-          aria-label={t('Shortcuts (?)', '단축키 (?)')}
+          aria-label={t('Keyboard Shortcuts', '키보드 단축키 안내')}
           aria-current={currentMode === 'shortcuts' ? 'page' : undefined}
           className={`group relative h-10 flex items-center rounded-lg text-xs font-medium transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0 ${
             isExpanded ? 'px-3 gap-3 justify-between' : 'w-10 mx-auto justify-center'
@@ -427,14 +427,14 @@ export const SideNav: React.FC<SideNavProps> = ({
         >
           <span className="flex items-center gap-3 min-w-0">
             <Keyboard className="w-[18px] h-[18px] shrink-0" />
-            {isExpanded && <span className="truncate">{t('Shortcuts', '단축키')}</span>}
+            {isExpanded && <span className="truncate">{t('Keyboard Shortcuts', '키보드 단축키 안내')}</span>}
           </span>
           {isExpanded && (
             <kbd className="font-mono text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
               ?
             </kbd>
           )}
-          {renderTooltip(t('Shortcuts', '단축키'), '?')}
+          {renderTooltip(t('Keyboard Shortcuts', '키보드 단축키 안내'), '?')}
         </button>
 
         <button

@@ -72,7 +72,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
 }) => {
   const { t } = useLanguage();
   const { confirmDelete } = useConfirmDialog();
-  const { isFirebaseAuthenticated } = useAuth();
+  const { isFirebaseAuthenticated, isAdmin } = useAuth();
   const projectCode = (spec.project_code || 'TEMP').toUpperCase();
 
   const sectionLabels: Record<SpecReviewSection, string> = {
@@ -302,11 +302,11 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
       ) : (
         <div className="divide-y divide-slate-200 border border-slate-200 rounded-lg bg-white">
           {filteredComments.map((cmt) => {
-            const canDelete =
-              !isReadOnly &&
-              (cmt.author_name === currentUserName ||
-                projectRole === 'PM' ||
-                projectRole === 'ADMIN');
+            const isAuthor =
+              cmt.author_id && currentUserId
+                ? cmt.author_id === currentUserId
+                : cmt.author_name === currentUserName;
+            const canDelete = !isReadOnly && (isAdmin || isAuthor);
 
             return (
               <div

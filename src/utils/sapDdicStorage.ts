@@ -3,6 +3,32 @@ import { SAP_SEARCH_HELP_TABLES } from '../data/sapSearchHelpData';
 
 const DD02L_STORAGE_KEY = 'sap_ddic_dd02l_tables';
 const DD03L_STORAGE_KEY = 'sap_ddic_dd03l_fields';
+export const SAP_DDIC_UPDATED_EVENT = 'sap-ddic-updated';
+
+const PENDING_DDIC_WRITE_TTL_MS = 8000;
+const pendingDdicWrites = new Map<string, number>();
+
+export function markDdicPendingWrite(tabname?: string): void {
+  const clean = (tabname || '').trim().toUpperCase();
+  if (!clean) return;
+  pendingDdicWrites.set(clean, Date.now() + PENDING_DDIC_WRITE_TTL_MS);
+}
+
+function isDdicWritePending(tabname?: string): boolean {
+  const clean = (tabname || '').trim().toUpperCase();
+  if (!clean) return false;
+  const exp = pendingDdicWrites.get(clean);
+  if (!exp) return false;
+  if (exp > Date.now()) return true;
+  pendingDdicWrites.delete(clean);
+  return false;
+}
+
+function emitDdicUpdated(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(SAP_DDIC_UPDATED_EVENT));
+  }
+}
 
 // Build initial default seed data from SAP_SEARCH_HELP_TABLES
 function buildInitialDdicSeed(): { tables: SapDD02LTable[]; fields: SapDD03LField[] } {
@@ -124,7 +150,9 @@ export function upsertDD02LTable(table: SapDD02LTable): SapDD02LTable[] {
     updated = [...current, newEntry];
   }
 
+  if (newEntry.is_custom) markDdicPendingWrite(cleanName);
   saveDD02LTables(updated);
+  emitDdicUpdated();
   return updated;
 }
 
@@ -140,8 +168,10 @@ export function deleteDD02LTable(tabname: string): {
   const updatedTables = currentTables.filter((t) => t.tabname.toUpperCase() !== cleanName);
   const updatedFields = currentFields.filter((f) => f.tabname.toUpperCase() !== cleanName);
 
+  pendingDdicWrites.delete(cleanName);
   saveDD02LTables(updatedTables);
   saveDD03LFields(updatedFields);
+  emitDdicUpdated();
 
   return { tables: updatedTables, fields: updatedFields };
 }
@@ -169,22 +199,101 @@ export function upsertDD03LField(field: SapDD03LField): SapDD03LField[] {
     updated = [...allFields, newEntry];
   }
 
+  markDdicPendingWrite(cleanTab);
   saveDD03LFields(updated);
+  emitDdicUpdated();
   return updated;
 }
 
 // Delete a field from DD03L
 export function deleteDD03LField(fieldId: string): SapDD03LField[] {
   const allFields = getDD03LFields();
+  const target = allFields.find((f) => f.id === fieldId);
+  if (target) markDdicPendingWrite(target.tabname);
   const updated = allFields.filter((f) => f.id !== fieldId);
   saveDD03LFields(updated);
+  emitDdicUpdated();
   return updated;
+}
+
+// Reconcile shared custom DDIC tables & fields from Firestore
+export function reconcileCustomDdicFromRemote(
+  remoteEntries: { table: SapDD02LTable; fields: SapDD03LField[] }[]
+): { tables: SapDD02LTable[]; fields: SapDD03LField[] } {
+  const currentTables = getDD02LTables();
+  const currentFields = getDD03LFields();
+
+  const remoteByTab = new Map<string, { table: SapDD02LTable; fields: SapDD03LField[] }>();
+  remoteEntries.forEach((entry) => {
+    const clean = entry.table?.tabname?.trim().toUpperCase();
+    if (clean) {
+      remoteByTab.set(clean, {
+        table: { ...entry.table, tabname: clean, is_custom: true },
+        fields: (entry.fields || []).map((f, idx) => ({
+          ...f,
+          id: f.id || `dd03l-${clean}-${f.fieldname}`,
+          tabname: clean,
+          position: f.position || idx + 1,
+          is_custom: true,
+        })),
+      });
+    }
+  });
+
+  const nextTables: SapDD02LTable[] = [];
+  const nextFields: SapDD03LField[] = [];
+  const handledCustomTabs = new Set<string>();
+
+  // Preserve standard tables and pending local custom tables; replace/prune synced custom tables
+  for (const t of currentTables) {
+    const clean = t.tabname.trim().toUpperCase();
+    if (!t.is_custom) {
+      nextTables.push(t);
+      continue;
+    }
+    const remote = remoteByTab.get(clean);
+    if (isDdicWritePending(clean)) {
+      nextTables.push(t);
+      nextFields.push(...currentFields.filter((f) => f.tabname.trim().toUpperCase() === clean));
+      handledCustomTabs.add(clean);
+    } else if (remote) {
+      nextTables.push(remote.table);
+      nextFields.push(...remote.fields);
+      handledCustomTabs.add(clean);
+    }
+    // else: custom table deleted remotely -> omit
+  }
+
+  // Keep fields belonging to non-custom tables
+  const standardTabSet = new Set(
+    nextTables.filter((t) => !t.is_custom).map((t) => t.tabname.trim().toUpperCase())
+  );
+  for (const f of currentFields) {
+    const cleanTab = f.tabname.trim().toUpperCase();
+    if (standardTabSet.has(cleanTab)) {
+      nextFields.push(f);
+    }
+  }
+
+  // Append newly received remote custom tables
+  for (const [clean, entry] of remoteByTab.entries()) {
+    if (handledCustomTabs.has(clean)) continue;
+    nextTables.push(entry.table);
+    nextFields.push(...entry.fields);
+  }
+
+  saveDD02LTables(nextTables);
+  saveDD03LFields(nextFields);
+  emitDdicUpdated();
+  return { tables: nextTables, fields: nextFields };
 }
 
 // Reset DDIC database to standard SAP dictionary presets
 export function resetDdicToStandard(): { tables: SapDD02LTable[]; fields: SapDD03LField[] } {
   const seed = buildInitialDdicSeed();
+  pendingDdicWrites.clear();
   saveDD02LTables(seed.tables);
   saveDD03LFields(seed.fields);
+  emitDdicUpdated();
   return seed;
 }

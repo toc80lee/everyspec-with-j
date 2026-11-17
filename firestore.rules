@@ -115,6 +115,24 @@ service cloud.firestore {
       );
     }
 
+    function getUserDefaultRole(uid) {
+      return isAdmin()
+        ? 'ADMIN'
+        : (userExists(uid) && 'projectRole' in getUserDoc(uid)
+            ? getUserDoc(uid).projectRole
+            : 'FUNC');
+    }
+
+    function hasEffectiveProjectRole(projectId, allowedRoles) {
+      return isAdmin() || (
+        projectExists(projectId) && (
+          ('memberRoles' in getProject(projectId) && request.auth.uid in getProject(projectId).memberRoles)
+            ? (getProject(projectId).memberRoles[request.auth.uid] in allowedRoles)
+            : (getUserDefaultRole(request.auth.uid) in allowedRoles)
+        )
+      );
+    }
+
     // 3. Entity Validators (Synced with firebase-blueprint.json)
     function isValidUserPublic(data, userId) {
       return data.keys().hasAll([
@@ -199,6 +217,7 @@ service cloud.firestore {
           'id', 'project_code', 'projectVisibility', 'projectMemberUids',
           'program_id', 'tcode', 'title', 'module', 'sample_type',
           'authorId', 'author', 'status', 'approvedBy', 'approvedAt',
+          'revision', 'lastEditedBy', 'lastEditedByUid',
           'specData', 'createdAt', 'updatedAt'
         ]) &&
         data.id == specId &&
@@ -216,6 +235,9 @@ service cloud.firestore {
         data.status in ['draft', 'in_review', 'approved', 'developed', 'qa_passed'] &&
         (!('approvedBy' in data) || isValidString(data.approvedBy, 0, 80)) &&
         (!('approvedAt' in data) || isValidString(data.approvedAt, 0, 40)) &&
+        (!('revision' in data) || (data.revision is int && data.revision >= 0)) &&
+        (!('lastEditedBy' in data) || isValidString(data.lastEditedBy, 0, 80)) &&
+        (!('lastEditedByUid' in data) || isValidId(data.lastEditedByUid)) &&
         data.specData is map &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
@@ -317,6 +339,41 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidSpecPresence(data, projectId, specId, userId) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'projectRole', 'mode',
+          'project_code', 'spec_id', 'projectVisibility', 'projectMemberUids', 'lastActiveAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'displayName', 'projectRole', 'mode',
+          'project_code', 'spec_id', 'projectVisibility', 'projectMemberUids', 'lastActiveAt'
+        ]) &&
+        data.uid == userId &&
+        isValidId(data.uid) &&
+        isValidString(data.displayName, 1, 80) &&
+        data.projectRole in ['PM', 'FUNC', 'ABAP', 'QA', 'PI', 'ADMIN'] &&
+        data.mode in ['viewing', 'editing'] &&
+        data.project_code == projectId &&
+        data.spec_id == specId &&
+        data.projectVisibility in ['common', 'project', 'temp'] &&
+        isStringList(data.projectMemberUids, 50) &&
+        data.lastActiveAt is timestamp;
+    }
+
+    function isValidUserPreferences(data, userId) {
+      return data.keys().hasAll(['uid', 'favoriteProgramIds', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'uid', 'favoriteProgramIds', 'sapGuiTheme', 'splitLayout', 'splitRatio', 'updatedAt'
+        ]) &&
+        data.uid == userId &&
+        isValidId(data.uid) &&
+        isStringList(data.favoriteProgramIds, 100) &&
+        (!('sapGuiTheme' in data) || isValidString(data.sapGuiTheme, 1, 40)) &&
+        (!('splitLayout' in data) || data.splitLayout in ['top-bottom', 'left-right', 'bottom-top', 'right-left']) &&
+        (!('splitRatio' in data) || ((data.splitRatio is number || data.splitRatio is int) && data.splitRatio >= 20 && data.splitRatio <= 80)) &&
+        data.updatedAt is timestamp;
+    }
+
     // 4. Collection Rules
     match /users/{userId} {
       allow get: if isValidId(userId) && isSignedIn() && (isOwner(userId) || isAdmin() || isApprovedUser());
@@ -330,7 +387,8 @@ service cloud.firestore {
           (isOwner(userId) &&
             incoming().role == 'user' &&
             incoming().status == 'pending' &&
-            incoming().assignedProjects.size() == 0)
+            incoming().assignedProjects.size() == 0 &&
+            (!('projectRole' in incoming()) || incoming().projectRole == 'FUNC'))
         );
       allow update: if isVerifiedUser() &&
         isValidId(userId) &&
@@ -344,14 +402,16 @@ service cloud.firestore {
             incoming().role == existing().role &&
             incoming().status == existing().status &&
             incoming().assignedProjects == existing().assignedProjects &&
+            (!('projectRole' in existing()) || incoming().projectRole == existing().projectRole) &&
             incoming().diff(existing()).affectedKeys().hasOnly([
-              'displayName', 'photoURL', 'projectRole', 'department', 'updatedAt'
+              'displayName', 'photoURL', 'department', 'updatedAt'
             ])) ||
           (isOwner(userId) &&
             !('status' in existing()) &&
             incoming().role == 'user' &&
             incoming().status == 'pending' &&
-            incoming().assignedProjects.size() == 0)
+            incoming().assignedProjects.size() == 0 &&
+            (!('projectRole' in incoming()) || incoming().projectRole == 'FUNC'))
         );
       allow delete: if isValidId(userId) && isAdmin();
 
@@ -375,6 +435,28 @@ service cloud.firestore {
           incoming().updatedAt == request.time &&
           incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt']);
         allow delete: if isValidId(userId) && isValidId(docId) && isAdmin();
+      }
+
+      match /preferences/{prefId} {
+        allow get: if isValidId(userId) && isValidId(prefId) && isOwner(userId);
+        allow list: if isSignedIn() && userId == request.auth.uid;
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(prefId) &&
+          isOwner(userId) &&
+          isValidUserPreferences(incoming(), userId) &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(prefId) &&
+          isOwner(userId) &&
+          isValidUserPreferences(incoming(), userId) &&
+          incoming().uid == existing().uid &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'favoriteProgramIds', 'sapGuiTheme', 'splitLayout', 'splitRatio', 'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(prefId) && isVerifiedUser() && isOwner(userId);
       }
     }
 
@@ -449,7 +531,13 @@ service cloud.firestore {
           projectExists(projectId) && (
             (getProject(projectId).visibility == 'common' && isAdmin() && incoming().projectVisibility == 'common') ||
             (getProject(projectId).visibility == 'temp' && incoming().projectVisibility == 'temp') ||
-            (getProject(projectId).visibility == 'project' && incoming().projectVisibility == 'project' && isProjectWriter(projectId))
+            (getProject(projectId).visibility == 'project' &&
+              incoming().projectVisibility == 'project' &&
+              isProjectWriter(projectId) && (
+                isAdmin() ||
+                incoming().status in ['draft', 'in_review'] ||
+                (incoming().status == 'approved' && hasEffectiveProjectRole(projectId, ['PM']))
+              ))
           );
         allow update: if isApprovedUser() &&
           isValidId(projectId) &&
@@ -469,11 +557,36 @@ service cloud.firestore {
                 incoming().diff(existing()).affectedKeys().hasOnly([
                   'program_id', 'tcode', 'title', 'module', 'sample_type',
                   'author', 'status', 'approvedBy', 'approvedAt',
+                  'revision', 'lastEditedBy', 'lastEditedByUid',
+                  'projectMemberUids', 'specData', 'updatedAt'
+                ]) && (
+                  (incoming().status in ['draft', 'in_review', 'developed'] &&
+                    (!('approvedBy' in incoming()) || ('approvedBy' in existing() && incoming().approvedBy == existing().approvedBy)) &&
+                    (!('approvedAt' in incoming()) || ('approvedAt' in existing() && incoming().approvedAt == existing().approvedAt))) ||
+                  (incoming().status == 'approved' && hasEffectiveProjectRole(projectId, ['PM'])) ||
+                  (incoming().status == 'qa_passed' &&
+                    existing().status == 'developed' &&
+                    hasEffectiveProjectRole(projectId, ['QA', 'PM']) &&
+                    (!('approvedBy' in incoming()) || ('approvedBy' in existing() && incoming().approvedBy == existing().approvedBy)) &&
+                    (!('approvedAt' in incoming()) || ('approvedAt' in existing() && incoming().approvedAt == existing().approvedAt)))
+                )) ||
+              (existing().status == 'approved' &&
+                incoming().status == 'developed' &&
+                hasEffectiveProjectRole(projectId, ['ABAP', 'PM']) &&
+                (!('approvedBy' in existing()) || incoming().approvedBy == existing().approvedBy) &&
+                (!('approvedAt' in existing()) || incoming().approvedAt == existing().approvedAt) &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'status', 'revision', 'lastEditedBy', 'lastEditedByUid',
                   'projectMemberUids', 'specData', 'updatedAt'
                 ])) ||
-              incoming().diff(existing()).affectedKeys().hasOnly([
-                'status', 'approvedBy', 'approvedAt', 'updatedAt'
-              ])
+              (existing().status in ['approved', 'qa_passed'] &&
+                hasEffectiveProjectRole(projectId, ['PM']) &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'program_id', 'tcode', 'title', 'module', 'sample_type',
+                  'author', 'status', 'approvedBy', 'approvedAt',
+                  'revision', 'lastEditedBy', 'lastEditedByUid',
+                  'projectMemberUids', 'specData', 'updatedAt'
+                ]))
             ))
           );
         allow delete: if isApprovedUser() &&
@@ -581,6 +694,52 @@ service cloud.firestore {
               (getProject(projectId).visibility != 'temp' && isAdmin()) ||
               (getProject(projectId).visibility == 'project' && isProjectCollaborator(projectId) && existing().authorId == request.auth.uid)
             );
+        }
+
+        // Subcollection: Real-time Collaborator Presence Heartbeats
+        match /presence/{userId} {
+          allow get: if isValidId(projectId) && isValidId(specId) && isValidId(userId) && isApprovedUser() && (
+            (projectExists(projectId) && getProject(projectId).visibility == 'common') ||
+            (projectExists(projectId) && getProject(projectId).visibility == 'project' && (isAdmin() || isAssignedToProject(projectId)))
+          );
+          allow list: if isSignedIn() && (
+            existing().projectVisibility == 'common' ||
+            (existing().projectVisibility == 'project' && (
+              isBootstrappedAdmin() ||
+              request.auth.uid in existing().projectMemberUids
+            ))
+          );
+          allow create: if isApprovedUser() &&
+            isValidId(projectId) &&
+            isValidId(specId) &&
+            isValidId(userId) &&
+            isOwner(userId) &&
+            isValidSpecPresence(incoming(), projectId, specId, userId) &&
+            incoming().lastActiveAt == request.time &&
+            projectExists(projectId) &&
+            getProject(projectId).visibility != 'temp' &&
+            isProjectCollaborator(projectId);
+          allow update: if isApprovedUser() &&
+            isValidId(projectId) &&
+            isValidId(specId) &&
+            isValidId(userId) &&
+            isOwner(userId) &&
+            isValidSpecPresence(incoming(), projectId, specId, userId) &&
+            incoming().uid == existing().uid &&
+            incoming().project_code == existing().project_code &&
+            incoming().spec_id == existing().spec_id &&
+            incoming().lastActiveAt == request.time &&
+            projectExists(projectId) &&
+            getProject(projectId).visibility != 'temp' &&
+            isProjectCollaborator(projectId) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'projectRole', 'mode', 'projectMemberUids', 'lastActiveAt'
+            ]);
+          allow delete: if isApprovedUser() &&
+            isValidId(projectId) &&
+            isValidId(specId) &&
+            isValidId(userId) &&
+            (isOwner(userId) || isAdmin());
         }
       }
 

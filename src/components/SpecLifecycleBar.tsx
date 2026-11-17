@@ -95,7 +95,9 @@ export const SpecLifecycleBar: React.FC<SpecLifecycleBarProps> = ({
   const statusLabel = t(meta.label, STATUS_KO[status].label);
   const statusDesc = t(meta.desc, STATUS_KO[status].desc);
   const canApprove = projectRole === 'PM' || projectRole === 'ADMIN';
-  const isLockedApproved = status === 'approved' && !canApprove;
+  const canDevelop = projectRole === 'ABAP' || canApprove;
+  const canQaPass = projectRole === 'QA' || canApprove;
+  const isLockedApproved = (status === 'approved' || status === 'qa_passed') && !canApprove;
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -104,8 +106,24 @@ export const SpecLifecycleBar: React.FC<SpecLifecycleBarProps> = ({
 
   const handleTransitionStatus = async (nextStatus: SpecLifecycleStatus) => {
     if (isReadOnlyCommon) return;
-    if ((nextStatus === 'approved' || status === 'approved') && !canApprove) {
-      showToast(t('Only PM or ADMIN roles can approve or unlock specifications.', 'PM 또는 ADMIN 권한만 사양을 승인하거나 잠금 해제할 수 있습니다.'));
+    if (nextStatus === 'approved' && !canApprove) {
+      showToast(t('Only PM or ADMIN roles can approve specifications.', 'PM 또는 ADMIN 권한만 사양을 승인할 수 있습니다.'));
+      return;
+    }
+    if (status === 'qa_passed' && !canApprove) {
+      showToast(t('Only PM or ADMIN roles can revise a QA Passed specification.', 'QA 통과된 사양은 PM 또는 ADMIN 권한만 개정(잠금 해제)할 수 있습니다.'));
+      return;
+    }
+    if (status === 'approved' && nextStatus !== 'developed' && !canApprove) {
+      showToast(t('Only PM or ADMIN roles can unlock an Approved specification.', 'PM 또는 ADMIN 권한만 승인된 사양의 잠금을 해제할 수 있습니다.'));
+      return;
+    }
+    if (status === 'approved' && nextStatus === 'developed' && !canDevelop) {
+      showToast(t('Only ABAP, PM, or ADMIN roles can mark an Approved spec as Developed.', 'ABAP, PM 또는 ADMIN 권한만 개발 완료 처리할 수 있습니다.'));
+      return;
+    }
+    if (nextStatus === 'qa_passed' && !canQaPass) {
+      showToast(t('Only QA, PM, or ADMIN roles can mark QA Passed.', 'QA, PM 또는 ADMIN 권한만 QA 통과 처리할 수 있습니다.'));
       return;
     }
 
@@ -228,7 +246,17 @@ export const SpecLifecycleBar: React.FC<SpecLifecycleBarProps> = ({
                   <button
                     type="button"
                     onClick={() => handleTransitionStatus('developed')}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                    disabled={!canDevelop}
+                    title={
+                      canDevelop
+                        ? t('Mark ABAP implementation complete', 'ABAP 개발 완료 상태로 전환합니다')
+                        : t('Only ABAP, PM, or ADMIN roles can mark as Developed', 'ABAP, PM 또는 ADMIN 권한만 개발 완료 처리할 수 있습니다')
+                    }
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                      canDevelop
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+                        : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                    }`}
                   >
                     <Wrench className="w-3 h-3" />
                     {t('Developed', '개발 완료')}
@@ -250,7 +278,17 @@ export const SpecLifecycleBar: React.FC<SpecLifecycleBarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleTransitionStatus('qa_passed')}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  disabled={!canQaPass}
+                  title={
+                    canQaPass
+                      ? t('Mark UAT / QA verification passed', 'QA/UAT 검증 통과 상태로 전환합니다')
+                      : t('Only QA, PM, or ADMIN roles can mark QA Passed', 'QA, PM 또는 ADMIN 권한만 QA 통과 처리할 수 있습니다')
+                  }
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                    canQaPass
+                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                      : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                  }`}
                 >
                   <CheckCircle2 className="w-3 h-3" />
                   {t('QA Passed', 'QA 통과')}

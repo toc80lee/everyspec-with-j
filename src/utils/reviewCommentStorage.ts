@@ -11,6 +11,21 @@ import {
 } from '../services/firestoreSync';
 
 const REVIEW_COMMENTS_KEY = 'sap_spec_review_comments_v1';
+const PENDING_COMMENT_WRITE_TTL_MS = 8000;
+const pendingCommentWrites = new Map<string, number>();
+
+function markCommentPendingWrite(commentId: string): void {
+  if (!commentId) return;
+  pendingCommentWrites.set(commentId, Date.now() + PENDING_COMMENT_WRITE_TTL_MS);
+}
+
+function isCommentWritePending(commentId: string): boolean {
+  const exp = pendingCommentWrites.get(commentId);
+  if (!exp) return false;
+  if (exp > Date.now()) return true;
+  pendingCommentWrites.delete(commentId);
+  return false;
+}
 
 function readAllComments(): SpecReviewComment[] {
   try {
@@ -87,6 +102,7 @@ export function addReviewComment(params: {
   };
 
   const all = readAllComments();
+  markCommentPendingWrite(comment.id);
   writeAllComments([...all, comment]);
 
   const proj = getProjectByCode(comment.project_code);
@@ -125,6 +141,7 @@ export function addReviewCommentReply(
   };
 
   all[idx] = updated;
+  markCommentPendingWrite(updated.id);
   writeAllComments(all);
 
   const proj = getProjectByCode(updated.project_code);
@@ -154,6 +171,7 @@ export function toggleResolveReviewComment(
   };
 
   all[idx] = updated;
+  markCommentPendingWrite(updated.id);
   writeAllComments(all);
 
   const proj = getProjectByCode(updated.project_code);
@@ -169,6 +187,7 @@ export function deleteReviewComment(commentId: string): boolean {
   const target = all.find((c) => c.id === commentId);
   if (!target) return false;
 
+  pendingCommentWrites.delete(commentId);
   writeAllComments(all.filter((c) => c.id !== commentId));
 
   deleteReviewCommentFromFirestore(
@@ -200,13 +219,26 @@ export function mergeRemoteReviewComments(
       c.spec_id === specId
   );
 
+  const remoteMap = new Map<string, SpecReviewComment>();
+  for (const remote of remoteComments) {
+    if (remote?.id) remoteMap.set(remote.id, remote);
+  }
+
   const mergedMap = new Map<string, SpecReviewComment>();
   for (const item of localForSpec) {
-    mergedMap.set(item.id, item);
+    const remote = remoteMap.get(item.id);
+    if (remote) {
+      mergedMap.set(
+        item.id,
+        isCommentWritePending(item.id) && item.updated_at > remote.updated_at ? item : remote
+      );
+    } else if (isCommentWritePending(item.id)) {
+      mergedMap.set(item.id, item);
+    }
+    // Else: comment deleted remotely -> removed locally
   }
   for (const remote of remoteComments) {
-    const existing = mergedMap.get(remote.id);
-    if (!existing || remote.updated_at >= existing.updated_at) {
+    if (remote?.id && !mergedMap.has(remote.id)) {
       mergedMap.set(remote.id, remote);
     }
   }

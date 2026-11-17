@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Database,
   Table,
@@ -21,6 +21,7 @@ import {
   SapDataType,
 } from '../types/sap';
 import {
+  SAP_DDIC_UPDATED_EVENT,
   getDD02LTables,
   getDD03LFields,
   upsertDD02LTable,
@@ -85,6 +86,19 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
     scrtext_l: '',
     ddtext: '',
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const syncFromStorage = () => {
+      setTables(getDD02LTables());
+      setFields(getDD03LFields());
+    };
+    syncFromStorage();
+    window.addEventListener(SAP_DDIC_UPDATED_EVENT, syncFromStorage);
+    return () => {
+      window.removeEventListener(SAP_DDIC_UPDATED_EVENT, syncFromStorage);
+    };
+  }, [isOpen]);
 
   const notifyChange = () => {
     if (onDataChanged) onDataChanged();

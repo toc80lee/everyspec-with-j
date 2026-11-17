@@ -30,6 +30,34 @@ export interface SavedProgramSpecItem {
   spec: ProgramSpec;
 }
 
+const PENDING_SPEC_WRITE_TTL_MS = 8000;
+const pendingSpecWrites = new Map<string, number>();
+
+export const markSpecPendingWrite = (programIdOrSpecId?: string): void => {
+  const clean = (programIdOrSpecId || '').trim().toUpperCase();
+  if (!clean) return;
+  pendingSpecWrites.set(clean, Date.now() + PENDING_SPEC_WRITE_TTL_MS);
+};
+
+export const clearSpecPendingWrite = (programIdOrSpecId?: string): void => {
+  const clean = (programIdOrSpecId || '').trim().toUpperCase();
+  if (!clean) return;
+  pendingSpecWrites.delete(clean);
+};
+
+const isSpecWritePending = (spec: { program_id?: string; id?: string }): boolean => {
+  const now = Date.now();
+  const keys = [spec.program_id, spec.id]
+    .map((v) => (v || '').trim().toUpperCase())
+    .filter(Boolean);
+  for (const key of keys) {
+    const exp = pendingSpecWrites.get(key);
+    if (exp && exp > now) return true;
+    if (exp && exp <= now) pendingSpecWrites.delete(key);
+  }
+  return false;
+};
+
 /**
  * Seed initial sample programs if storage is empty
  */
@@ -246,6 +274,8 @@ export const upsertWorkingSpecQuietly = (spec: ProgramSpec): boolean => {
     } else {
       updatedList = [itemToSave, ...list];
     }
+    markSpecPendingWrite(cleanProgramId);
+    if (updatedSpec.id) markSpecPendingWrite(updatedSpec.id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
     return true;
   } catch {
@@ -339,6 +369,8 @@ export const saveSpecToStorage = (
       updatedList = [itemToSave, ...list];
     }
 
+    markSpecPendingWrite(cleanProgramId);
+    if (updatedSpec.id) markSpecPendingWrite(updatedSpec.id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
     return { success: true, savedItem: itemToSave };
   } catch (err) {
@@ -437,6 +469,10 @@ export const copySpecInStorage = (
     author_id: authorId || undefined,
     created_date: new Date().toISOString().split('T')[0],
     is_system: false,
+    status: 'draft',
+    approved_by: undefined,
+    approved_at: undefined,
+    revision: undefined,
     change_history: initialHistory,
   };
 
@@ -456,6 +492,8 @@ export const copySpecInStorage = (
 
   const updatedList = [newItem, ...list];
   try {
+    markSpecPendingWrite(cleanNewId);
+    if (newSpec.id) markSpecPendingWrite(newSpec.id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
     return {
       success: true,
@@ -502,12 +540,175 @@ export const reassignSpecsProjectToTemp = (deletedProjectCode: string): void => 
 };
 
 /**
+ * Reconcile a project's cached specs against the authoritative Firestore snapshot.
+ * Propagates remote deletions (even when remoteSpecs is empty) while preserving
+ * COMM protected samples, active local in-flight writes, and other users' TEMP drafts.
+ */
+export const reconcileProjectSpecsFromRemote = (
+  projectCode: string,
+  remoteSpecs: ProgramSpec[],
+  currentUserName?: string,
+  currentUserId?: string
+): SavedProgramSpecItem[] => {
+  const targetProj = normalizeLegacyProjectCode(projectCode || TEMP_PROJECT_CODE);
+  if (!targetProj) return getSavedSpecList();
+
+  const currentList = getSavedSpecList();
+  const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+  const remoteByKey = new Map<string, ProgramSpec>();
+  remoteSpecs.forEach((r) => {
+    if (!r) return;
+    if (r.program_id) remoteByKey.set(`PID:${r.program_id.trim().toUpperCase()}`, r);
+    if (r.id) remoteByKey.set(`ID:${r.id.trim().toUpperCase()}`, r);
+  });
+
+  const existingByKey = new Map<string, SavedProgramSpecItem>();
+  currentList.forEach((item) => {
+    if (item.program_id) existingByKey.set(`PID:${item.program_id.trim().toUpperCase()}`, item);
+    if (item.spec?.id) existingByKey.set(`ID:${item.spec.id.trim().toUpperCase()}`, item);
+  });
+
+  const nextItems: SavedProgramSpecItem[] = [];
+  const consumedRemoteKeys = new Set<string>();
+
+  for (const item of currentList) {
+    const itemProj = normalizeLegacyProjectCode(item.project_code || item.spec?.project_code || TEMP_PROJECT_CODE);
+    const pidKey = `PID:${item.program_id.trim().toUpperCase()}`;
+    const idKey = item.spec?.id ? `ID:${item.spec.id.trim().toUpperCase()}` : '';
+
+    if (itemProj !== targetProj) {
+      nextItems.push(item);
+      continue;
+    }
+
+    if (isCommonProtectedSample(item.spec)) {
+      nextItems.push(item);
+      consumedRemoteKeys.add(pidKey);
+      if (idKey) consumedRemoteKeys.add(idKey);
+      continue;
+    }
+
+    // For TEMP scope, Firestore only returns docs owned by currentUserId. Do not prune cached items from other offline profiles.
+    if (targetProj === TEMP_PROJECT_CODE && currentUserId) {
+      const belongsToCurrent =
+        item.spec?.author_id
+          ? item.spec.author_id === currentUserId
+          : !currentUserName || item.author === currentUserName;
+      if (!belongsToCurrent) {
+        nextItems.push(item);
+        continue;
+      }
+    }
+
+    const remote = remoteByKey.get(pidKey) || (idKey ? remoteByKey.get(idKey) : undefined);
+    if (remote) {
+      consumedRemoteKeys.add(`PID:${remote.program_id.trim().toUpperCase()}`);
+      if (remote.id) consumedRemoteKeys.add(`ID:${remote.id.trim().toUpperCase()}`);
+
+      const pendingLocal = isSpecWritePending(item.spec);
+      const localRev = item.spec?.revision ?? 0;
+      const remoteRev = remote.revision ?? 0;
+      if (pendingLocal && localRev >= remoteRev) {
+        nextItems.push(item);
+      } else {
+        const cleanPid = (remote.program_id || item.program_id).trim().toUpperCase();
+        const history = remote.change_history && remote.change_history.length > 0
+          ? remote.change_history
+          : item.change_history;
+        const mergedSpec: ProgramSpec = {
+          ...remote,
+          program_id: cleanPid,
+          project_code: targetProj,
+          is_system: false,
+          change_history: history,
+        };
+        nextItems.push({
+          program_id: cleanPid,
+          project_code: targetProj,
+          tcode: mergedSpec.tcode,
+          title: mergedSpec.title,
+          module: mergedSpec.module,
+          sample_type: mergedSpec.sample_type || '01',
+          author: mergedSpec.author,
+          updated_at: item.updated_at || now,
+          is_system: false,
+          change_history: history,
+          spec: mergedSpec,
+        });
+      }
+    } else if (isSpecWritePending(item.spec)) {
+      // Keep locally created/modified item during in-flight write grace window
+      nextItems.push(item);
+    }
+    // Else: item was deleted remotely -> omitted from nextItems!
+  }
+
+  // Append newly discovered remote specs not yet in localStorage
+  for (const remote of remoteSpecs) {
+    if (!remote || isCommonProtectedSample(remote)) continue;
+    const cleanPid = (remote.program_id || 'ZPROG01').trim().toUpperCase();
+    const pidKey = `PID:${cleanPid}`;
+    const idKey = remote.id ? `ID:${remote.id.trim().toUpperCase()}` : '';
+    if (consumedRemoteKeys.has(pidKey) || (idKey && consumedRemoteKeys.has(idKey))) {
+      continue;
+    }
+    const existing = existingByKey.get(pidKey) || (idKey ? existingByKey.get(idKey) : undefined);
+    const history =
+      remote.change_history && remote.change_history.length > 0
+        ? remote.change_history
+        : existing?.change_history || [
+            {
+              id: `h-${Date.now()}`,
+              version: 'v1.0',
+              changed_at: now,
+              author: remote.author || 'SAP User',
+              comment: 'Synced from cloud workspace',
+            },
+          ];
+    const cleanSpec: ProgramSpec = {
+      ...remote,
+      program_id: cleanPid,
+      project_code: targetProj,
+      is_system: false,
+      change_history: history,
+    };
+    nextItems.unshift({
+      program_id: cleanPid,
+      project_code: targetProj,
+      tcode: cleanSpec.tcode,
+      title: cleanSpec.title,
+      module: cleanSpec.module,
+      sample_type: cleanSpec.sample_type || '01',
+      author: cleanSpec.author,
+      updated_at: now,
+      is_system: false,
+      change_history: history,
+      spec: cleanSpec,
+    });
+  }
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextItems));
+  } catch {
+    // ignore storage quota errors
+  }
+  return nextItems;
+};
+
+/**
  * Delete a spec from storage
  */
 export const deleteSpecFromStorage = (
   programId: string,
-  currentUserName?: string
-): { success: boolean; message?: string; list: SavedProgramSpecItem[] } => {
+  currentUserName?: string,
+  options?: { currentUserId?: string; isAdmin?: boolean }
+): {
+  success: boolean;
+  message?: string;
+  list: SavedProgramSpecItem[];
+  deletedItem?: SavedProgramSpecItem;
+} => {
   const cleanId = programId.trim().toUpperCase();
   const list = getSavedSpecList();
   const target = list.find((item) => item.program_id.toUpperCase() === cleanId);
@@ -524,7 +725,13 @@ export const deleteSpecFromStorage = (
     };
   }
 
-  if (currentUserName && target.author && target.author !== currentUserName) {
+  const isUidOwner =
+    Boolean(options?.currentUserId) &&
+    Boolean(target.spec?.author_id) &&
+    target.spec.author_id === options?.currentUserId;
+  const isNameOwner = !currentUserName || !target.author || target.author === currentUserName;
+
+  if (!options?.isAdmin && !isUidOwner && !isNameOwner) {
     return {
       success: false,
       message: `Only the author can delete this spec (Author: ${target.author}, Current: ${currentUserName}).`,
@@ -533,9 +740,11 @@ export const deleteSpecFromStorage = (
   }
 
   const updatedList = list.filter((item) => item.program_id.toUpperCase() !== cleanId);
+  clearSpecPendingWrite(cleanId);
+  if (target.spec?.id) clearSpecPendingWrite(target.spec.id);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
-    return { success: true, list: updatedList };
+    return { success: true, list: updatedList, deletedItem: target };
   } catch (err) {
     console.error('Failed to delete spec from localStorage', err);
     return {

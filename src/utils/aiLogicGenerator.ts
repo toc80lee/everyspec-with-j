@@ -2,6 +2,7 @@ import { AlvField, ProgramSpec, SapModule, SelectionParameter } from '../types/s
 import { SAMPLE_SPECS } from '../data/sampleSpecs';
 import { COMMON_PROJECT_CODE, TEMP_PROJECT_CODE } from './projectStorage';
 import { getDD02LTables, getDD03LFields } from './sapDdicStorage';
+import { authorizedFetch } from './authorizedFetch';
 
 /**
  * AI Data Extraction Logic Generator & Context-Aware Markdown Suggestion
@@ -55,7 +56,7 @@ export async function requestMarkdownAiSuggestion(
   const { spec, section, sectionTitle, nodeInfo, currentValue } = req;
 
   try {
-    const res = await fetch('/api/suggest-markdown', {
+    const res = await authorizedFetch('/api/suggest-markdown', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -241,7 +242,7 @@ export interface GenerateLogicRequest {
 
 export async function requestAiLogicGeneration(req: GenerateLogicRequest): Promise<{ logic: string; source: 'ai' | 'fallback'; error?: string }> {
   try {
-    const res = await fetch('/api/generate-logic', {
+    const res = await authorizedFetch('/api/generate-logic', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -384,7 +385,7 @@ export async function requestAiFullSpecDraft(
   req: FullSpecDraftRequest
 ): Promise<FullSpecDraftResponse> {
   try {
-    const res = await fetch('/api/generate-full-spec', {
+    const res = await authorizedFetch('/api/generate-full-spec', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -444,7 +445,7 @@ export async function requestAiReverseExtract(
   req: ReverseExtractRequest
 ): Promise<ReverseExtractResponse> {
   try {
-    const res = await fetch('/api/extract-spec-elements', {
+    const res = await authorizedFetch('/api/extract-spec-elements', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -687,7 +688,7 @@ export async function requestAiMeetingMinutes(
   req: MeetingMinutesRequest
 ): Promise<MeetingMinutesResult> {
   try {
-    const res = await fetch('/api/summarize-meeting-minutes', {
+    const res = await authorizedFetch('/api/summarize-meeting-minutes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
@@ -772,7 +773,7 @@ export async function requestAiSampleRecommendation(
   req: SampleRecommendationRequest
 ): Promise<SampleRecommendationResult> {
   try {
-    const res = await fetch('/api/recommend-sample-from-minutes', {
+    const res = await authorizedFetch('/api/recommend-sample-from-minutes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
@@ -925,7 +926,7 @@ export async function requestAiPatchSpec(
   currentSpec: ProgramSpec
 ): Promise<{ patch: AiSpecPatchResult; source: 'ai' | 'fallback'; error?: string }> {
   try {
-    const res = await fetch('/api/patch-spec', {
+    const res = await authorizedFetch('/api/patch-spec', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1080,7 +1081,7 @@ export async function requestLegacyAbapImport(
   targetSapRelease: string = 'SAP S/4HANA 2023 / ECC 6.0'
 ): Promise<{ spec: ProgramSpec; detectedTables: string[]; source: 'ai' | 'fallback'; error?: string }> {
   try {
-    const res = await fetch('/api/reverse-import-abap', {
+    const res = await authorizedFetch('/api/reverse-import-abap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ abapSource, targetSapRelease }),

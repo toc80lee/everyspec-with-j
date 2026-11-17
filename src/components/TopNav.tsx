@@ -18,11 +18,12 @@ import {
   ShieldCheck,
   Plus,
 } from 'lucide-react';
-import { ProgramSpec, UserProjectRole } from '../types/sap';
+import { ProgramSpec, SapProject, UserProjectRole } from '../types/sap';
 import { SapGuiTheme, SAP_GUI_THEMES } from '../data/sapGuiThemes';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { COMMON_PROJECT_CODE } from '../utils/projectStorage';
+import { getProjectRoleLabel, getProjectRoleOption } from '../utils/projectRoles';
 
 export type MainWorkspaceMode =
   | 'overview'
@@ -58,6 +59,7 @@ interface TopNavProps {
   onOpenProjectManager?: () => void;
   onOpenAdmin?: () => void;
   selectedProjectCode?: string;
+  activeProject?: SapProject | null;
   isCurrentSpecFavorite?: boolean;
   onToggleCurrentSpecFavorite?: () => void;
   onOpenCommandPalette?: () => void;
@@ -84,6 +86,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenProjectManager: _onOpenProjectManager,
   onOpenAdmin,
   selectedProjectCode,
+  activeProject,
   isCurrentSpecFavorite = false,
   onToggleCurrentSpecFavorite,
   onOpenCommandPalette: _onOpenCommandPalette,
@@ -98,10 +101,12 @@ export const TopNav: React.FC<TopNavProps> = ({
     isFirebaseAuthenticated,
     projectRole,
     setProjectRole,
+    resolveEffectiveProjectRole,
     loginWithGoogle,
     logoutGoogle,
     authError,
   } = useAuth();
+  const effectiveRole = resolveEffectiveProjectRole(activeProject);
   const { lang, setLang, t } = useLanguage();
   const isOverviewOrList =
     currentMode === 'overview' ||
@@ -142,14 +147,14 @@ export const TopNav: React.FC<TopNavProps> = ({
   }, [isUserMenuOpen, isThemeMenuOpen]);
 
   const modeBreadcrumbLabel: Record<MainWorkspaceMode, string> = {
-    overview: t('Project Dashboard', '프로젝트 대시보드'),
+    overview: t('Overview', '현황'),
     program_list: t('Programs', '프로그램 목록'),
-    meeting_minutes: t('Meeting Minutes', '프로젝트 회의록'),
+    meeting_minutes: t('Meeting Minutes', '회의록'),
     meeting_wizard: t('AI Spec Wizard', 'AI 사양서 생성'),
     user_guide: t('User Guide', '사용 가이드'),
-    project_settings: t('Project Settings', '프로젝트 설정'),
-    admin_dashboard: t('Admin Console', '관리자 콘솔'),
-    shortcuts: t('Keyboard Shortcuts', '단축키 안내'),
+    project_settings: t('Basic Settings', '기본 설정'),
+    admin_dashboard: t('User Management', '사용자 관리'),
+    shortcuts: t('Keyboard Shortcuts', '키보드 단축키 안내'),
     split: t('Split Workspace', '분할 작업실'),
     mockup_only: t('GUI Simulator', 'GUI 시뮬레이터'),
     editor_only: t('Spec Editor', '사양서 편집기'),
@@ -441,7 +446,7 @@ export const TopNav: React.FC<TopNavProps> = ({
             )}
             {!isUserMenuOpen &&
               renderTopTooltip(
-                `${activeUser.name} · ${isAdmin ? 'ADMIN' : projectRole}`,
+                `${activeUser.name} · ${effectiveRole}`,
                 undefined,
                 true
               )}
@@ -529,28 +534,44 @@ export const TopNav: React.FC<TopNavProps> = ({
                 </div>
               </div>
 
-              {/* Project RBAC Role Selector */}
-              <div>
-                <div className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1">
-                  {t('Project Role (Approval)', '프로젝트 역할 (승인 권한)')}
+              {/* Project RBAC Role (Interactive Preview for Admin only; Read-Only Assigned Role for Users) */}
+              {isAdmin ? (
+                <div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1">
+                    {t('Admin Role Preview', '관리자 역할 미리보기')}
+                  </div>
+                  <div className="grid grid-cols-6 gap-1">
+                    {availableProjectRoles.map((role) => (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => setProjectRole(role)}
+                        className={`py-1 rounded text-[10px] font-mono font-bold border transition-colors cursor-pointer ${
+                          projectRole === role
+                            ? 'bg-slate-900 text-white border-slate-900'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {role}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className={`grid ${isAdmin ? 'grid-cols-6' : 'grid-cols-5'} gap-1`}>
-                  {availableProjectRoles.map((role) => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => setProjectRole(role)}
-                      className={`py-1 rounded text-[10px] font-mono font-bold border transition-colors cursor-pointer ${
-                        projectRole === role
-                          ? 'bg-slate-900 text-white border-slate-900'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      {role}
-                    </button>
-                  ))}
+              ) : (
+                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-2">
+                  <span className="text-[11px] font-bold text-slate-700">
+                    {t('Assigned Project Role', '할당 프로젝트 역할')}
+                  </span>
+                  <span
+                    title={t('Assigned by Admin', '관리자 할당 역할')}
+                    className={`px-2 py-0.5 rounded border text-[10px] font-mono font-bold ${
+                      getProjectRoleOption(effectiveRole).badgeClass
+                    }`}
+                  >
+                    {getProjectRoleLabel(effectiveRole, lang, 'short')} ({effectiveRole})
+                  </span>
                 </div>
-              </div>
+              )}
 
               {/* SAP GUI Theme & Shortcuts */}
               {(onSelectTheme || onOpenShortcuts) && (

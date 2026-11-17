@@ -9,7 +9,8 @@ import {
   getVisibleMinutesForProject,
   saveMeetingMinute,
 } from '../meetingStorage';
-import { SapProject } from '../../types/sap';
+import { copySpecInStorage, saveSpecToStorage } from '../specStorage';
+import { ProgramSpec, SapProject } from '../../types/sap';
 
 function installMemoryLocalStorage() {
   const store = new Map<string, string>();
@@ -178,5 +179,63 @@ describe('RBAC 3-scope isolation', () => {
     expect(getVisibleMinutesForProject('TEMP', 'Alex Kim', 'uid-alice')).toHaveLength(1);
     expect(getVisibleMinutesForProject('TEMP', 'Alex Kim', 'uid-other')).toHaveLength(0);
     expect(getVisibleMinutesForProject('TEMP', 'Josh Lee', 'uid-josh')).toHaveLength(0);
+  });
+
+  it('resets approval status and metadata when copying approved or qa_passed specs', () => {
+    for (const sourceStatus of ['approved', 'qa_passed'] as const) {
+      const sourceId = `ZSRC_${sourceStatus.toUpperCase()}`;
+      const copyId = `ZCPY_${sourceStatus.toUpperCase()}`;
+      const baseSpec: ProgramSpec = {
+        id: `spec-${sourceStatus}`,
+        project_code: '2601',
+        program_id: sourceId,
+        tcode: `Z${sourceStatus.slice(0, 6).toUpperCase()}`,
+        title: `Source ${sourceStatus}`,
+        module: 'SD',
+        author: 'PM User',
+        author_id: 'uid-pm',
+        created_date: '2026-11-10',
+        target_sap_release: 'SAP S/4HANA 2023',
+        program_type: 'REPORT',
+        business_purpose: 'Purpose',
+        data_extraction_logic: '',
+        selection_params: [],
+        field_catalog: [],
+        layout: {
+          grid_title: 'Test Grid',
+          zebra: true,
+          cwidth_opt: true,
+          sel_mode: 'A',
+        },
+        custom_toolbar: [],
+        test_cases: [],
+        mock_rows: [],
+        status: sourceStatus,
+        approved_by: 'PM User',
+        approved_at: '2026-11-11 10:00:00',
+        revision: 7,
+      };
+
+      const saved = saveSpecToStorage(baseSpec, 'Initial save', 'PM User');
+      expect(saved.success).toBe(true);
+
+      const copied = copySpecInStorage(
+        sourceId,
+        copyId,
+        'Alice Kim',
+        '2601',
+        undefined,
+        undefined,
+        'uid-alice'
+      );
+
+      expect(copied.success).toBe(true);
+      expect(copied.newSpec?.status).toBe('draft');
+      expect(copied.newSpec?.approved_by).toBeUndefined();
+      expect(copied.newSpec?.approved_at).toBeUndefined();
+      expect(copied.newSpec?.revision).toBeUndefined();
+      expect(copied.newSpec?.author).toBe('Alice Kim');
+      expect(copied.newSpec?.author_id).toBe('uid-alice');
+    }
   });
 });

@@ -127,16 +127,22 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
           'Spec Editor, 마크다운 편집기, SAP GUI 시뮬레이터에서 지원하는 단축키입니다. Esc 키로 돌아갈 수 있습니다.'
         )}
         actions={
-          <button
-            type="button"
-            onClick={onClose}
-            title={t('Back', '돌아가기')}
-            aria-label={t('Back', '돌아가기')}
-            className="h-9 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{t('Back', '돌아가기')}</span>
-          </button>
+          <div className="group relative inline-flex shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('Back', '뒤로가기')}
+              className="w-9 h-9 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute top-full right-0 mt-2 z-50 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-white text-xs font-medium whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+            >
+              {t('Back', '뒤로가기')}
+            </span>
+          </div>
         }
       />
 

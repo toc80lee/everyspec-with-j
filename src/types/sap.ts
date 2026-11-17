@@ -398,6 +398,9 @@ export interface ProgramSpec {
   module: SapModule;       // SD, MM, FI, etc.
   author: string;          // e.g. Josh Lee
   author_id?: string;      // Firebase UID when authenticated
+  revision?: number;       // Optimistic concurrency counter incremented per cloud save
+  last_edited_by?: string;
+  last_edited_by_uid?: string;
   status?: SpecLifecycleStatus; // draft -> in_review -> approved -> developed -> qa_passed
   approved_by?: string;
   approved_at?: string;
@@ -535,5 +538,22 @@ export interface ProjectMeetingMinute {
   action_items?: MeetingActionItem[];
 }
 
+export interface SpecPresenceEntry {
+  uid: string;
+  displayName: string;
+  projectRole: UserProjectRole;
+  mode: 'viewing' | 'editing';
+  project_code: string;
+  spec_id: string;
+  lastActiveAt?: string;
+}
 
+export interface UserWorkspacePreferences {
+  uid: string;
+  favoriteProgramIds: string[];
+  sapGuiTheme?: string;
+  splitLayout?: 'top-bottom' | 'left-right' | 'bottom-top' | 'right-left';
+  splitRatio?: number;
+  updatedAt?: string;
+}
 

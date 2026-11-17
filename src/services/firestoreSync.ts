@@ -5,6 +5,7 @@ import {
   getDocs,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   deleteDoc,
@@ -19,8 +20,10 @@ import {
   SapDD03LField,
   SapProject,
   SpecLifecycleStatus,
+  SpecPresenceEntry,
   SpecReviewComment,
   UserProjectRole,
+  UserWorkspacePreferences,
 } from '../types/sap';
 
 import {
@@ -250,12 +253,45 @@ export function subscribeAccessibleProjects(
   };
 }
 
+export class SpecSyncConflictError extends Error {
+  readonly specId: string;
+  readonly programId: string;
+  readonly expectedRevision: number;
+  readonly remoteRevision: number;
+  readonly remoteEditor: string;
+  readonly remoteEditorUid?: string;
+  readonly remoteSpec: ProgramSpec;
+
+  constructor(params: {
+    specId: string;
+    programId: string;
+    expectedRevision: number;
+    remoteRevision: number;
+    remoteEditor: string;
+    remoteEditorUid?: string;
+    remoteSpec: ProgramSpec;
+  }) {
+    super(
+      `Spec '${params.programId}' was modified by ${params.remoteEditor} (remote rev ${params.remoteRevision}, local base rev ${params.expectedRevision}).`
+    );
+    this.name = 'SpecSyncConflictError';
+    this.specId = params.specId;
+    this.programId = params.programId;
+    this.expectedRevision = params.expectedRevision;
+    this.remoteRevision = params.remoteRevision;
+    this.remoteEditor = params.remoteEditor;
+    this.remoteEditorUid = params.remoteEditorUid;
+    this.remoteSpec = params.remoteSpec;
+  }
+}
+
 export async function syncSpecToFirestore(
   spec: ProgramSpec,
-  project?: SapProject
-): Promise<void> {
+  project?: SapProject,
+  options?: { expectedRevision?: number; forceOverwrite?: boolean }
+): Promise<{ revision: number } | undefined> {
   const user = auth.currentUser;
-  if (!user || !user.emailVerified) return;
+  if (!user || !user.emailVerified) return undefined;
 
   const projectId = sanitizeProjectCode(spec.project_code);
   const specId = sanitizeId(spec.id || spec.program_id);
@@ -290,6 +326,9 @@ export async function syncSpecToFirestore(
     }
 
     const latestProjSnap = await getDoc(projRef);
+    const resolvedVisibility = latestProjSnap.exists()
+      ? latestProjSnap.data().visibility
+      : projVisibility;
     const memberUids: string[] =
       projectId === TEMP_PROJECT_CODE
         ? [user.uid]
@@ -300,46 +339,136 @@ export async function syncSpecToFirestore(
             ])
           ).slice(0, 50);
 
-    const existingSnap = await getDoc(ref);
     const status: SpecLifecycleStatus = spec.status || 'draft';
+    const editorName = (user.displayName || spec.author || 'SAP User').slice(0, 80);
 
-    // Strip embedded snapshot_spec copies inside change_history to stay well below 1MB doc limit;
-    // full snapshots are persisted in /snapshots subcollection
-    const compactSpec: ProgramSpec = stripUndefinedDeep({
-      ...spec,
-      change_history: (spec.change_history || []).map(({ snapshot_spec: _omit, ...rest }) => rest),
+    const committedRevision = await runTransaction(db, async (tx) => {
+      const existingSnap = await tx.get(ref);
+      const existingData = existingSnap.exists() ? existingSnap.data() : undefined;
+      const remoteRev =
+        existingData && typeof existingData.revision === 'number' ? existingData.revision : 0;
+      const remoteEditorUid: string | undefined = existingData
+        ? existingData.lastEditedByUid || existingData.authorId
+        : undefined;
+      const remoteEditor: string = existingData
+        ? existingData.lastEditedBy || existingData.author || 'Teammate'
+        : 'Teammate';
+
+      if (
+        existingSnap.exists() &&
+        !options?.forceOverwrite &&
+        typeof options?.expectedRevision === 'number' &&
+        remoteRev > options.expectedRevision &&
+        remoteEditorUid &&
+        remoteEditorUid !== user.uid &&
+        existingData?.specData
+      ) {
+        const hydratedRemote: ProgramSpec = {
+          ...(existingData.specData as ProgramSpec),
+          author_id: existingData.authorId || existingData.specData.author_id,
+          revision: remoteRev,
+          last_edited_by: remoteEditor,
+          last_edited_by_uid: remoteEditorUid,
+          status: existingData.status || existingData.specData.status || 'draft',
+          approved_by: existingData.approvedBy || existingData.specData.approved_by,
+          approved_at: existingData.approvedAt || existingData.specData.approved_at,
+        };
+        throw new SpecSyncConflictError({
+          specId,
+          programId: existingData.program_id || spec.program_id,
+          expectedRevision: options.expectedRevision,
+          remoteRevision: remoteRev,
+          remoteEditor,
+          remoteEditorUid,
+          remoteSpec: hydratedRemote,
+        });
+      }
+
+      const nextRevision = existingSnap.exists() ? remoteRev + 1 : 1;
+
+      // Strip embedded snapshot_spec copies inside change_history to stay well below 1MB doc limit;
+      // full snapshots are persisted in /snapshots subcollection
+      const compactSpec: ProgramSpec = stripUndefinedDeep({
+        ...spec,
+        revision: nextRevision,
+        last_edited_by: editorName,
+        last_edited_by_uid: user.uid,
+        change_history: (spec.change_history || []).map(({ snapshot_spec: _omit, ...rest }) => rest),
+      });
+
+      const payload: Record<string, any> = {
+        id: specId,
+        project_code: projectId,
+        projectVisibility: resolvedVisibility,
+        projectMemberUids: memberUids,
+        program_id: (spec.program_id || 'ZPROG01').toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 40),
+        tcode: (spec.tcode || 'ZREP01').toUpperCase().slice(0, 20),
+        title: (spec.title || 'SAP ALV Report').slice(0, 200),
+        module: spec.module || 'SD',
+        sample_type: (['01', '02', '03', '04'].includes(spec.sample_type || '') ? spec.sample_type : '01') as '01' | '02' | '03' | '04',
+        authorId: existingSnap.exists() ? existingData!.authorId : spec.author_id || user.uid,
+        author: (spec.author || user.displayName || 'SAP User').slice(0, 80),
+        status,
+        revision: nextRevision,
+        lastEditedBy: editorName,
+        lastEditedByUid: user.uid,
+        specData: compactSpec,
+        updatedAt: serverTimestamp(),
+      };
+
+      if (spec.approved_by) payload.approvedBy = spec.approved_by.slice(0, 80);
+      if (spec.approved_at) payload.approvedAt = spec.approved_at.slice(0, 40);
+
+      if (!existingSnap.exists()) {
+        payload.createdAt = serverTimestamp();
+        tx.set(ref, payload);
+      } else {
+        tx.set(ref, payload, { merge: true });
+      }
+
+      return nextRevision;
     });
 
-    const payload: Record<string, any> = {
-      id: specId,
-      project_code: projectId,
-      projectVisibility: latestProjSnap.exists()
-        ? latestProjSnap.data().visibility
-        : projVisibility,
-      projectMemberUids: memberUids,
-      program_id: (spec.program_id || 'ZPROG01').toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 40),
-      tcode: (spec.tcode || 'ZREP01').toUpperCase().slice(0, 20),
-      title: (spec.title || 'SAP ALV Report').slice(0, 200),
-      module: spec.module || 'SD',
-      sample_type: (['01', '02', '03', '04'].includes(spec.sample_type || '') ? spec.sample_type : '01') as '01' | '02' | '03' | '04',
-      authorId: existingSnap.exists() ? existingSnap.data().authorId : spec.author_id || user.uid,
-      author: (spec.author || user.displayName || 'SAP User').slice(0, 80),
-      status,
-      specData: compactSpec,
-      updatedAt: serverTimestamp(),
-    };
-
-    if (spec.approved_by) payload.approvedBy = spec.approved_by.slice(0, 80);
-    if (spec.approved_at) payload.approvedAt = spec.approved_at.slice(0, 40);
-
-    if (!existingSnap.exists()) {
-      payload.createdAt = serverTimestamp();
-      await setDoc(ref, payload);
-    } else {
-      await setDoc(ref, payload, { merge: true });
-    }
+    return { revision: committedRevision };
   } catch (err) {
+    if (err instanceof SpecSyncConflictError) {
+      throw err;
+    }
     handleFirestoreError(err, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteSpecFromFirestore(
+  projectCode: string,
+  specIdOrProgramId: string
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.emailVerified) return;
+
+  const projectId = sanitizeProjectCode(projectCode);
+  const specId = sanitizeId(specIdOrProgramId);
+  const path = `projects/${projectId}/specs/${specId}`;
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'specs', specId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+}
+
+export async function deleteMeetingFromFirestore(
+  projectCode: string,
+  minuteId: string
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.emailVerified) return;
+
+  const projectId = sanitizeProjectCode(projectCode);
+  const cleanMinute = sanitizeId(minuteId);
+  const path = `projects/${projectId}/meetings/${cleanMinute}`;
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'meetings', cleanMinute));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
   }
 }
 
@@ -566,6 +695,14 @@ export function subscribeProjectSpecs(
           list.push({
             ...(data.specData as ProgramSpec),
             author_id: data.authorId || data.specData.author_id,
+            revision:
+              typeof data.revision === 'number'
+                ? data.revision
+                : typeof data.specData.revision === 'number'
+                ? data.specData.revision
+                : 0,
+            last_edited_by: data.lastEditedBy || data.specData.last_edited_by,
+            last_edited_by_uid: data.lastEditedByUid || data.specData.last_edited_by_uid,
             status: data.status || data.specData.status || 'draft',
             approved_by: data.approvedBy || data.specData.approved_by,
             approved_at: data.approvedAt || data.specData.approved_at,
@@ -762,4 +899,237 @@ export function subscribeSpecReviewComments(
     }
   );
 }
+
+export function subscribeCustomDdicTables(
+  onData: (entries: { table: SapDD02LTable; fields: SapDD03LField[] }[]) => void
+): Unsubscribe {
+  const user = auth.currentUser;
+  if (!user) return () => {};
+
+  const q = query(collection(db, 'ddic_tables'), where('is_custom', '==', true));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const entries: { table: SapDD02LTable; fields: SapDD03LField[] }[] = [];
+      snapshot.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (!d?.tabname) return;
+        const table: SapDD02LTable = {
+          tabname: String(d.tabname).toUpperCase(),
+          ddtext: d.ddtext || String(d.tabname),
+          module: d.module || 'CUSTOM',
+          tabclass: d.tabclass || 'TRANSP',
+          description: d.description || '',
+          is_custom: true,
+        };
+        const fields: SapDD03LField[] = Array.isArray(d.fields) ? d.fields : [];
+        entries.push({ table, fields });
+      });
+      onData(entries);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'ddic_tables');
+    }
+  );
+}
+
+export async function syncSpecPresence(params: {
+  projectCode: string;
+  specId: string;
+  displayName: string;
+  projectRole: UserProjectRole;
+  mode: 'viewing' | 'editing';
+  project?: SapProject;
+}): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.emailVerified) return;
+
+  const projectId = sanitizeProjectCode(params.projectCode);
+  if (projectId === TEMP_PROJECT_CODE || projectId === COMMON_PROJECT_CODE) return;
+  const specId = sanitizeId(params.specId);
+  const path = `projects/${projectId}/specs/${specId}/presence/${user.uid}`;
+  const ref = doc(db, 'projects', projectId, 'specs', specId, 'presence', user.uid);
+
+  try {
+    const projSnap = await getDoc(doc(db, 'projects', projectId));
+    if (!projSnap.exists()) return;
+    const projData = projSnap.data();
+    const projectVisibility = projData?.visibility || params.project?.visibility || 'project';
+    if (projectVisibility === 'temp') return;
+
+    const projectMemberUids: string[] = Array.from(
+      new Set([...(Array.isArray(projData?.memberUids) ? projData.memberUids : []), user.uid])
+    ).slice(0, 50);
+
+    const payload = {
+      uid: user.uid,
+      displayName: (params.displayName || user.displayName || 'SAP User').slice(0, 80),
+      projectRole: isValidProjectRole(params.projectRole) ? params.projectRole : 'FUNC',
+      mode: params.mode,
+      project_code: projectId,
+      spec_id: specId,
+      projectVisibility,
+      projectMemberUids,
+      lastActiveAt: serverTimestamp(),
+    };
+
+    await setDoc(ref, payload, { merge: true });
+  } catch (err) {
+    // Non-fatal heartbeat warning unless permission denied needs surfacing
+    console.warn('Spec presence heartbeat notice:', path, err);
+  }
+}
+
+export async function clearSpecPresence(projectCode: string, specId: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.emailVerified) return;
+
+  const projectId = sanitizeProjectCode(projectCode);
+  if (projectId === TEMP_PROJECT_CODE || projectId === COMMON_PROJECT_CODE) return;
+  const cleanSpec = sanitizeId(specId);
+  try {
+    await deleteDoc(doc(db, 'projects', projectId, 'specs', cleanSpec, 'presence', user.uid));
+  } catch {
+    // Ignore missing presence doc cleanup
+  }
+}
+
+export function subscribeSpecPresence(
+  projectCode: string,
+  specId: string,
+  onData: (collaborators: SpecPresenceEntry[]) => void
+): Unsubscribe {
+  const user = auth.currentUser;
+  if (!user) return () => {};
+
+  const projectId = sanitizeProjectCode(projectCode);
+  if (projectId === TEMP_PROJECT_CODE || projectId === COMMON_PROJECT_CODE) {
+    onData([]);
+    return () => {};
+  }
+  const cleanSpec = sanitizeId(specId);
+  const colPath = `projects/${projectId}/specs/${cleanSpec}/presence`;
+  const q = query(
+    collection(db, colPath),
+    where('projectVisibility', '==', 'project'),
+    where('projectMemberUids', 'array-contains', user.uid)
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const cutoff = Date.now() - 65_000;
+      const list: SpecPresenceEntry[] = [];
+      snapshot.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (!d || d.uid === user.uid) return;
+        const lastMs = d.lastActiveAt?.toMillis ? d.lastActiveAt.toMillis() : Date.now();
+        if (lastMs < cutoff) return;
+        list.push({
+          uid: d.uid,
+          displayName: d.displayName || 'SAP User',
+          projectRole: isValidProjectRole(d.projectRole) ? d.projectRole : 'FUNC',
+          mode: d.mode === 'editing' ? 'editing' : 'viewing',
+          project_code: d.project_code || projectId,
+          spec_id: d.spec_id || cleanSpec,
+          lastActiveAt: d.lastActiveAt?.toDate ? d.lastActiveAt.toDate().toISOString() : undefined,
+        });
+      });
+      onData(list);
+    },
+    (error) => {
+      console.warn('Spec presence subscription warning:', colPath, error);
+    }
+  );
+}
+
+export async function syncUserPreferencesToFirestore(
+  prefs: Omit<UserWorkspacePreferences, 'uid' | 'updatedAt'>
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.emailVerified) return;
+
+  const path = `users/${user.uid}/preferences/workspace`;
+  const ref = doc(db, 'users', user.uid, 'preferences', 'workspace');
+
+  const cleanFavorites = Array.from(
+    new Set(
+      (prefs.favoriteProgramIds || [])
+        .map((id) => String(id || '').trim().toUpperCase())
+        .filter(Boolean)
+    )
+  ).slice(0, 100);
+
+  const payload: Record<string, any> = {
+    uid: user.uid,
+    favoriteProgramIds: cleanFavorites,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (prefs.sapGuiTheme) {
+    payload.sapGuiTheme = String(prefs.sapGuiTheme).slice(0, 40);
+  }
+  if (
+    prefs.splitLayout &&
+    ['top-bottom', 'left-right', 'bottom-top', 'right-left'].includes(prefs.splitLayout)
+  ) {
+    payload.splitLayout = prefs.splitLayout;
+  }
+  if (typeof prefs.splitRatio === 'number' && !Number.isNaN(prefs.splitRatio)) {
+    payload.splitRatio = Math.min(80, Math.max(20, prefs.splitRatio));
+  }
+
+  try {
+    await setDoc(ref, payload, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+  }
+}
+
+export function subscribeUserPreferences(
+  uid: string,
+  onData: (prefs: UserWorkspacePreferences | null) => void
+): Unsubscribe {
+  const user = auth.currentUser;
+  if (!user || user.uid !== uid) return () => {};
+
+  const path = `users/${uid}/preferences/workspace`;
+  return onSnapshot(
+    doc(db, 'users', uid, 'preferences', 'workspace'),
+    (snap) => {
+      if (!snap.exists()) {
+        onData(null);
+        return;
+      }
+      const d = snap.data();
+      onData({
+        uid: d.uid || uid,
+        favoriteProgramIds: Array.isArray(d.favoriteProgramIds) ? d.favoriteProgramIds : [],
+        sapGuiTheme: typeof d.sapGuiTheme === 'string' ? d.sapGuiTheme : undefined,
+        splitLayout: d.splitLayout,
+        splitRatio: typeof d.splitRatio === 'number' ? d.splitRatio : undefined,
+        updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate().toISOString() : undefined,
+      });
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, path);
+    }
+  );
+}
+
+export async function deleteProjectFromFirestore(projectCode: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.emailVerified) return;
+
+  const projectId = sanitizeProjectCode(projectCode);
+  if (!projectId || projectId === COMMON_PROJECT_CODE || projectId === TEMP_PROJECT_CODE) return;
+
+  const path = `projects/${projectId}`;
+  try {
+    await deleteDoc(doc(db, 'projects', projectId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+}
+
 

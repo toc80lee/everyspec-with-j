@@ -1,15 +1,22 @@
 import { GoogleGenAI } from '@google/genai';
+import { authorizeStandardRawRequest } from '../server/middleware/authMiddleware';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const caller = await authorizeStandardRawRequest(req, res);
+  if (!caller) return;
+
   try {
     const { business_purpose, module, program_id, title, customTables = [] } = req.body || {};
 
-    if (!business_purpose) {
+    if (!business_purpose || typeof business_purpose !== 'string') {
       return res.status(400).json({ error: '업무 개요를 입력해주세요.' });
+    }
+    if (business_purpose.length > 10_000) {
+      return res.status(400).json({ error: '업무 개요 입력 길이가 허용 한도(10,000자)를 초과했습니다.' });
     }
 
     const ai = new GoogleGenAI({

@@ -268,6 +268,20 @@
           "type": "string",
           "maxLength": 40
         },
+        "revision": {
+          "type": "integer",
+          "description": "Optimistic concurrency revision counter incremented atomically per spec update."
+        },
+        "lastEditedBy": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "lastEditedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
         "specData": {
           "type": "object",
           "description": "Native Map representation of the full ProgramSpec."
@@ -595,6 +609,100 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "SpecPresenceDoc": {
+      "title": "SpecPresenceDoc",
+      "description": "Real-time collaborator presence heartbeat for an active specification.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "projectRole": {
+          "type": "string",
+          "enum": ["PM", "FUNC", "ABAP", "QA", "PI", "ADMIN"]
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["viewing", "editing"]
+        },
+        "project_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "spec_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "projectVisibility": {
+          "type": "string",
+          "enum": ["common", "project", "temp"]
+        },
+        "projectMemberUids": {
+          "type": "array",
+          "description": "Synced member UIDs from parent project for query-enforced list security (max 50)."
+        },
+        "lastActiveAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "projectRole",
+        "mode",
+        "project_code",
+        "spec_id",
+        "projectVisibility",
+        "projectMemberUids",
+        "lastActiveAt"
+      ]
+    },
+    "UserWorkspacePreferences": {
+      "title": "UserWorkspacePreferences",
+      "description": "Per-user workspace preferences synced across devices (favorites, SAP GUI theme, split layout).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "favoriteProgramIds": {
+          "type": "array",
+          "description": "Bounded list of favorited program IDs (max 100)."
+        },
+        "sapGuiTheme": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "splitLayout": {
+          "type": "string",
+          "enum": ["top-bottom", "left-right", "bottom-top", "right-left"]
+        },
+        "splitRatio": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "favoriteProgramIds", "updatedAt"]
     }
   },
   "firestore": {
@@ -609,6 +717,12 @@
         "$ref": "#/entities/UserProfilePrivate"
       },
       "description": "Private user PII document (email), strictly readable/writable only by owner or verified admin."
+    },
+    "/users/{userId}/preferences/{prefId}": {
+      "schema": {
+        "$ref": "#/entities/UserWorkspacePreferences"
+      },
+      "description": "User workspace preferences (favorite program IDs, SAP GUI theme, split layout/ratio)."
     },
     "/admins/{userId}": {
       "schema": {
@@ -639,6 +753,12 @@
         "$ref": "#/entities/SpecReviewCommentDoc"
       },
       "description": "Section-level review comment threads for spec collaboration."
+    },
+    "/projects/{projectId}/specs/{specId}/presence/{userId}": {
+      "schema": {
+        "$ref": "#/entities/SpecPresenceDoc"
+      },
+      "description": "Real-time active collaborator presence heartbeats on a shared spec."
     },
     "/projects/{projectId}/meetings/{minuteId}": {
       "schema": {

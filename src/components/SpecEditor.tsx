@@ -37,6 +37,7 @@ import {
   MoreHorizontal,
   ShieldCheck,
   MessageSquare,
+  Users,
   X,
 } from 'lucide-react';
 import { PdfExportModal } from './PdfExportModal';
@@ -72,6 +73,7 @@ import {
   SelectionParameter,
   SelectionKind,
   SapDataType,
+  SpecPresenceEntry,
 } from '../types/sap';
 import { FieldCatalogEditor } from './FieldCatalogEditor';
 import { AlvSortEditor } from './AlvSortEditor';
@@ -113,6 +115,7 @@ interface SpecEditorProps {
   onCommentsChanged?: () => void;
   onNotify?: (message: string) => void;
   remoteProjects?: SapProject[];
+  activeCollaborators?: SpecPresenceEntry[];
 }
 
 export const SpecEditor: React.FC<SpecEditorProps> = ({
@@ -128,6 +131,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
   onCommentsChanged,
   onNotify,
   remoteProjects = [],
+  activeCollaborators = [],
 }) => {
   const { lang, t } = useLanguage();
   // Main Tabs: 1. Program Spec -> 2. Selection Screen -> 3. Main Screen
@@ -188,7 +192,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
     return () => window.removeEventListener(USERS_UPDATED_EVENT, syncUsers);
   }, []);
 
-  const { activeUser, projectRole, userProfile, isAdmin } = useAuth();
+  const { activeUser, userProfile, isAdmin, resolveEffectiveProjectRole } = useAuth();
   const { confirmDelete } = useConfirmDialog();
   const accessibleProjects = useMemo(
     () =>
@@ -209,9 +213,19 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
       spec.project_code,
     ]
   );
+  const currentSpecProject = useMemo(
+    () =>
+      accessibleProjects.find(
+        (p) => p.code === (spec.project_code || TEMP_PROJECT_CODE).toUpperCase()
+      ) || null,
+    [accessibleProjects, spec.project_code]
+  );
+  const effectiveProjectRole = resolveEffectiveProjectRole(currentSpecProject);
   const isReadOnlyCommon = isReadOnlyCommonSpec(spec);
   const isLockedApproved =
-    spec.status === 'approved' && projectRole !== 'PM' && projectRole !== 'ADMIN';
+    (spec.status === 'approved' || spec.status === 'qa_passed') &&
+    effectiveProjectRole !== 'PM' &&
+    effectiveProjectRole !== 'ADMIN';
   const isEffectiveReadOnly = isReadOnlyCommon || isLockedApproved;
 
   const governanceIssueCount = useMemo(() => {
@@ -238,8 +252,8 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
     if (isLockedApproved) {
       onNotify?.(
         t(
-          `Locked by Approved status. Only PM or ADMIN can edit or unlock (${projectRole}).`,
-          `승인(Approved) 상태로 잠겨 있습니다. PM 또는 ADMIN 권한만 수정/잠금 해제가 가능합니다 (${projectRole}).`
+          `Locked by ${spec.status === 'qa_passed' ? 'QA Passed' : 'Approved'} status. Only PM or ADMIN can edit or unlock (${effectiveProjectRole}).`,
+          `${spec.status === 'qa_passed' ? 'QA 통과(QA Passed)' : '승인(Approved)'} 상태로 잠겨 있습니다. PM 또는 ADMIN 권한만 수정/잠금 해제가 가능합니다 (${effectiveProjectRole}).`
         )
       );
       return;
@@ -632,8 +646,31 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
           </button>
         </div>
 
-        {/* Consolidated Action Toolbar: Undo/Redo + AI ▾ + Export ▾ + More ⋯ */}
+        {/* Consolidated Action Toolbar: Collaborators + Undo/Redo + AI ▾ + Export ▾ + More ⋯ */}
         <div ref={toolbarMenuRef} className="flex items-center gap-1.5 py-1.5 shrink-0">
+          {activeCollaborators.length > 0 && (
+            <div
+              className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold shrink-0"
+              title={activeCollaborators
+                .map(
+                  (c) =>
+                    `${c.displayName} (${c.projectRole}) · ${
+                      c.mode === 'editing' ? t('Editing', '편집 중') : t('Viewing', '조회 중')
+                    }`
+                )
+                .join('\n')}
+            >
+              <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span className="truncate max-w-[145px]">
+                {activeCollaborators.length === 1
+                  ? `${activeCollaborators[0].displayName} (${activeCollaborators[0].projectRole})`
+                  : t(
+                      `${activeCollaborators[0].displayName} +${activeCollaborators.length - 1}`,
+                      `${activeCollaborators[0].displayName} 외 ${activeCollaborators.length - 1}명`
+                    )}
+              </span>
+            </div>
+          )}
           {onUndo && (
             <button
               type="button"
@@ -876,11 +913,11 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
       )}
       {isLockedApproved && !isReadOnlyCommon && (
         <div
-          title={t('Specification is approved and locked. Only PM or ADMIN roles can unlock to edit.', '승인 완료(Approved)로 잠긴 사양서입니다. PM 또는 ADMIN 권한만 수정/잠금 해제할 수 있습니다.')}
+          title={t('Specification is approved/QA-passed and locked. Only PM or ADMIN roles can unlock to edit.', '승인(Approved)/QA 통과로 잠긴 사양서입니다. PM 또는 ADMIN 권한만 수정/잠금 해제할 수 있습니다.')}
           className="px-4 py-1.5 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 flex items-center gap-1.5 font-medium shrink-0"
         >
           <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-          <span>{t(`Approved Lock — Read-Only (${projectRole})`, `승인 잠금 — 읽기 전용 (${projectRole})`)}</span>
+          <span>{t(`Approved Lock — Read-Only (${effectiveProjectRole})`, `승인 잠금 — 읽기 전용 (${effectiveProjectRole})`)}</span>
         </div>
       )}
 
@@ -971,7 +1008,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 <SpecLifecycleBar
                   spec={spec}
                   currentUserName={activeUser.name}
-                  projectRole={projectRole}
+                  projectRole={effectiveProjectRole}
                   isReadOnlyCommon={isReadOnlyCommon}
                   onChange={(updated) => {
                     if (isReadOnlyCommon) return;
@@ -1383,7 +1420,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 spec={spec}
                 currentUserName={activeUser.name}
                 currentUserId={activeUser.id}
-                projectRole={projectRole}
+                projectRole={effectiveProjectRole}
                 isReadOnly={isReadOnlyCommon}
                 onCommentsUpdated={() => {
                   setLocalCommentTick((t) => t + 1);

@@ -7,7 +7,7 @@ import {
   signInWithGoogle,
   signOutFirebase,
 } from '../lib/firebase';
-import { UserProfileRecord, UserProjectRole } from '../types/sap';
+import { SapProject, UserProfileRecord, UserProjectRole } from '../types/sap';
 import { CurrentUser, getCurrentUser, setCurrentUser } from '../utils/authStorage';
 import {
   BOOTSTRAPPED_ADMIN_EMAILS,
@@ -16,6 +16,7 @@ import {
   sanitizeFirebaseId,
   subscribeCurrentUserProfile,
 } from '../services/userManagementService';
+import { getEffectiveMemberRole, normalizeProjectRole } from '../utils/projectRoles';
 
 export const BOOTSTRAPPED_ADMIN_EMAIL = 'toc80.lee@gmail.com';
 export { BOOTSTRAPPED_ADMIN_EMAILS };
@@ -31,6 +32,7 @@ interface AuthContextValue {
   activeUser: CurrentUser;
   projectRole: UserProjectRole;
   setProjectRole: (role: UserProjectRole) => void;
+  resolveEffectiveProjectRole: (project?: SapProject | null) => UserProjectRole;
   loginWithGoogle: () => Promise<User | null>;
   logoutGoogle: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -38,6 +40,11 @@ interface AuthContextValue {
 }
 
 const ROLE_STORAGE_KEY = 'sap_spec_user_project_role_v1';
+
+function clampNonAdminRole(role: unknown, fallback: UserProjectRole = 'FUNC'): UserProjectRole {
+  const normalized = normalizeProjectRole(role, fallback);
+  return normalized === 'ADMIN' ? 'FUNC' : normalized;
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -48,15 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userProfile, setUserProfile] = useState<UserProfileRecord | null>(null);
   const [hasAdminDoc, setHasAdminDoc] = useState(false);
   const [activeUser, setActiveUser] = useState<CurrentUser>(() => getCurrentUser());
-  const [projectRole, setProjectRoleState] = useState<UserProjectRole>(() => {
-    try {
-      const saved = localStorage.getItem(ROLE_STORAGE_KEY) as UserProjectRole | null;
-      if (saved && ['PM', 'FUNC', 'ABAP', 'QA', 'PI', 'ADMIN'].includes(saved)) return saved;
-    } catch {
-      // ignore
-    }
-    return 'FUNC';
-  });
+  const [projectRole, setProjectRoleState] = useState<UserProjectRole>('FUNC');
   const [authError, setAuthError] = useState<string | null>(null);
 
   const isAdmin = Boolean(
@@ -71,17 +70,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (isAdmin || userProfile?.status === 'approved')
   );
 
-  const setProjectRole = (role: UserProjectRole) => {
-    if (role === 'ADMIN' && !isAdmin) {
-      return;
-    }
-    setProjectRoleState(role);
-    try {
-      localStorage.setItem(ROLE_STORAGE_KEY, role);
-    } catch {
-      // ignore
-    }
-  };
+  // Only verified Admins may switch role preview; non-admins strictly inherit Firestore-assigned role
+  const setProjectRole = useCallback(
+    (role: UserProjectRole) => {
+      if (!isAdmin) {
+        return;
+      }
+      setProjectRoleState(role);
+      try {
+        localStorage.setItem(ROLE_STORAGE_KEY, role);
+      } catch {
+        // ignore
+      }
+    },
+    [isAdmin]
+  );
+
+  const resolveEffectiveProjectRole = useCallback(
+    (project?: SapProject | null): UserProjectRole => {
+      if (isAdmin) {
+        return projectRole;
+      }
+      const safeProfileRole = clampNonAdminRole(userProfile?.projectRole, 'FUNC');
+      const effective = getEffectiveMemberRole(
+        project ?? undefined,
+        userProfile?.uid,
+        safeProfileRole
+      );
+      return effective === 'ADMIN' ? 'FUNC' : effective;
+    },
+    [isAdmin, projectRole, userProfile?.projectRole, userProfile?.uid]
+  );
 
   const syncLegacyActiveUser = useCallback(
     (user: User, profile: UserProfileRecord | null) => {
@@ -96,25 +115,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         Boolean(user.emailVerified && isBootstrappedAdminEmail(user.email)) ||
         profile?.role === 'admin';
 
+      const assignedProfileRole = clampNonAdminRole(profile?.projectRole, 'FUNC');
+
+      let resolvedRole: UserProjectRole = assignedProfileRole;
+      if (adminFlag) {
+        resolvedRole = 'ADMIN';
+        try {
+          const savedPreview = localStorage.getItem(ROLE_STORAGE_KEY) as UserProjectRole | null;
+          if (savedPreview && ['PM', 'FUNC', 'ABAP', 'QA', 'PI', 'ADMIN'].includes(savedPreview)) {
+            resolvedRole = savedPreview;
+          }
+        } catch {
+          // ignore
+        }
+      } else {
+        try {
+          localStorage.removeItem(ROLE_STORAGE_KEY);
+        } catch {
+          // ignore
+        }
+      }
+
+      setProjectRoleState(resolvedRole);
+
       const syncedUser: CurrentUser = {
         id: uid,
         name: displayName,
         role: adminFlag
           ? 'Platform Admin / Architect'
-          : profile?.projectRole || projectRole,
+          : assignedProfileRole,
         department: profile?.department || 'SAP ERP Project Workspace',
         email: user.email || profile?.email || '',
       };
       setCurrentUser(syncedUser);
       setActiveUser(syncedUser);
-
-      if (adminFlag) {
-        setProjectRoleState('ADMIN');
-      } else if (projectRole === 'ADMIN') {
-        setProjectRoleState(profile?.projectRole && profile.projectRole !== 'ADMIN' ? profile.projectRole : 'FUNC');
-      }
     },
-    [projectRole]
+    []
   );
 
   useEffect(() => {
@@ -132,6 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!user) {
         setUserProfile(null);
         setHasAdminDoc(false);
+        setProjectRoleState('FUNC');
         setProfileLoading(false);
         return;
       }
@@ -140,7 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const uid = sanitizeFirebaseId(user.uid);
 
       try {
-        const ensured = await ensureUserProfileOnSignIn(user, projectRole);
+        const ensured = await ensureUserProfileOnSignIn(user, 'FUNC');
         setUserProfile(ensured);
         syncLegacyActiveUser(user, ensured);
 
@@ -264,6 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activeUser,
         projectRole,
         setProjectRole,
+        resolveEffectiveProjectRole,
         loginWithGoogle,
         logoutGoogle,
         refreshProfile,

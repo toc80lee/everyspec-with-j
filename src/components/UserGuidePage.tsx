@@ -99,7 +99,7 @@ export const UserGuidePage: React.FC<UserGuidePageProps> = ({
       <PageHeader
         icon={BookOpen}
         eyebrow={t('Documentation · Workflow Reference', '사용 안내 · 유형별 워크플로우')}
-        title={t('EverySpec User Guide', 'EverySpec 프로그램 사용 가이드')}
+        title={t('User Guide', '사용 가이드')}
         titleBadge={
           <>
             <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">

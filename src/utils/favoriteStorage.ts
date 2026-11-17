@@ -92,3 +92,35 @@ export function removeFavoriteProgram(userName: string, programId: string): stri
   writeFavoriteMap(map);
   return next;
 }
+
+export function setFavoriteProgramIds(userKey: string, ids: string[]): string[] {
+  const key = normalizeUserKey(userKey);
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  for (const raw of ids) {
+    if (typeof raw !== 'string') continue;
+    const upper = raw.trim().toUpperCase();
+    if (upper && !seen.has(upper)) {
+      seen.add(upper);
+      cleaned.push(upper);
+      if (cleaned.length >= 100) break;
+    }
+  }
+  const map = readFavoriteMap();
+  map[key] = cleaned;
+  writeFavoriteMap(map);
+  return cleaned;
+}
+
+export function migrateFavoriteUserKey(legacyUserName: string, uid: string): string[] {
+  const cleanLegacy = normalizeUserKey(legacyUserName);
+  const cleanUid = normalizeUserKey(uid);
+  if (!cleanUid || cleanLegacy === cleanUid) {
+    return getFavoriteProgramIds(cleanUid || cleanLegacy);
+  }
+  const uidIds = getFavoriteProgramIds(cleanUid);
+  const legacyIds = getFavoriteProgramIds(cleanLegacy);
+  if (legacyIds.length === 0) return uidIds;
+  const merged = setFavoriteProgramIds(cleanUid, [...uidIds, ...legacyIds]);
+  return merged;
+}

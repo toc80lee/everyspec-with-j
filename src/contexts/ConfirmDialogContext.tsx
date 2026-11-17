@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Save, Trash2, X } from 'lucide-react';
 import { useLanguage } from './LanguageContext';
 
 export interface ConfirmDialogOptions {
@@ -9,11 +9,12 @@ export interface ConfirmDialogOptions {
   targetName?: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  tone?: 'danger' | 'warning';
+  tone?: 'danger' | 'warning' | 'primary';
 }
 
 interface ConfirmDialogContextValue {
   confirmDelete: (options?: ConfirmDialogOptions) => Promise<boolean>;
+  confirmAction: (options?: ConfirmDialogOptions) => Promise<boolean>;
 }
 
 const ConfirmDialogContext = createContext<ConfirmDialogContextValue | null>(null);
@@ -28,7 +29,7 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
   const [pending, setPending] = useState<PendingDialogState | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const confirmDelete = useCallback((options: ConfirmDialogOptions = {}): Promise<boolean> => {
+  const openConfirmDialog = useCallback((options: ConfirmDialogOptions = {}): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
       setPending((prev) => {
         if (prev) {
@@ -69,9 +70,10 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const tone = pending?.options.tone || 'danger';
   const isWarning = tone === 'warning';
+  const isPrimary = tone === 'primary';
 
   return (
-    <ConfirmDialogContext.Provider value={{ confirmDelete }}>
+    <ConfirmDialogContext.Provider value={{ confirmDelete: openConfirmDialog, confirmAction: openConfirmDialog }}>
       {children}
 
       {pending && (
@@ -90,10 +92,16 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
               <div className="flex items-center gap-2.5">
                 <div
                   className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                    isWarning ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'
+                    isPrimary
+                      ? 'bg-blue-500/20 text-blue-300'
+                      : isWarning
+                      ? 'bg-amber-500/20 text-amber-300'
+                      : 'bg-rose-500/20 text-rose-300'
                   }`}
                 >
-                  {isWarning ? (
+                  {isPrimary ? (
+                    <Save className="w-4 h-4" />
+                  ) : isWarning ? (
                     <AlertTriangle className="w-4 h-4" />
                   ) : (
                     <Trash2 className="w-4 h-4" />
@@ -101,7 +109,7 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
                 </div>
                 <h3 id="global-confirm-delete-title" className="text-sm font-bold leading-tight">
                   {pending.options.title ||
-                    t('Confirm Deletion', '삭제 확인')}
+                    (isPrimary ? t('Confirm Save', '저장 확인') : t('Confirm Deletion', '삭제 확인'))}
                 </h3>
               </div>
               <button
@@ -118,7 +126,9 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
             <div className="p-5 space-y-3">
               <p className="text-sm font-semibold text-slate-900 leading-relaxed">
                 {pending.options.message ||
-                  t('Are you sure you want to delete this item?', '삭제하시겠습니까?')}
+                  (isPrimary
+                    ? t('Are you sure you want to save?', '저장하시겠습니까?')
+                    : t('Are you sure you want to delete this item?', '삭제하시겠습니까?'))}
               </p>
 
               {pending.options.targetName && (
@@ -147,15 +157,25 @@ export const ConfirmDialogProvider: React.FC<{ children: React.ReactNode }> = ({
                 type="button"
                 onClick={() => handleClose(true)}
                 className={`px-4 py-2 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer ${
-                  isWarning
+                  isPrimary
+                    ? 'bg-blue-600 hover:bg-blue-700'
+                    : isWarning
                     ? 'bg-amber-600 hover:bg-amber-700'
                     : 'bg-rose-600 hover:bg-rose-700'
                 }`}
               >
-                {!isWarning && <Trash2 className="w-3.5 h-3.5" />}
+                {isPrimary ? (
+                  <Save className="w-3.5 h-3.5" />
+                ) : !isWarning ? (
+                  <Trash2 className="w-3.5 h-3.5" />
+                ) : null}
                 <span>
                   {pending.options.confirmLabel ||
-                    (isWarning ? t('Confirm', '확인') : t('Delete', '삭제'))}
+                    (isPrimary
+                      ? t('Save', '저장')
+                      : isWarning
+                      ? t('Confirm', '확인')
+                      : t('Delete', '삭제'))}
                 </span>
               </button>
             </div>
@@ -171,6 +191,7 @@ export function useConfirmDialog(): ConfirmDialogContextValue {
   if (!ctx) {
     return {
       confirmDelete: async () => true,
+      confirmAction: async () => true,
     };
   }
   return ctx;

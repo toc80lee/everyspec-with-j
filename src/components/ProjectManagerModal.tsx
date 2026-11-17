@@ -10,6 +10,8 @@ import {
   Users,
   Check,
   AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
   Code2,
   Mail,
   Search,
@@ -43,7 +45,10 @@ import {
   DEFAULT_OPERATOR_USER,
   isDefaultOperatorUser,
 } from '../utils/authStorage';
-import { syncProjectToFirestore } from '../services/firestoreSync';
+import {
+  deleteProjectFromFirestore,
+  syncProjectToFirestore,
+} from '../services/firestoreSync';
 import {
   subscribeAllUsersForAdmin,
   syncProjectMembershipChange,
@@ -90,7 +95,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   remoteProjects = [],
 }) => {
   const { lang, t } = useLanguage();
-  const { confirmDelete } = useConfirmDialog();
+  const { confirmDelete, confirmAction } = useConfirmDialog();
   const { isAdmin, userProfile: currentAdminProfile } = useAuth();
   const [approvedUsers, setApprovedUsers] = useState<UserProfileRecord[]>([]);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
@@ -124,10 +129,75 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   });
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  interface FormSnapshotState {
+    code: string;
+    name: string;
+    desc: string;
+    release: string;
+    startDate: string;
+    endDate: string;
+    owner: string;
+    members: string[];
+    memberUids: string[];
+    memberRoles: Record<string, UserProjectRole>;
+    modules: SapModule[];
+    abapStandards: ProjectAbapStandards;
+  }
+
+  const serializeFormSnapshot = (s: FormSnapshotState) => {
+    const sortedRoles: Record<string, UserProjectRole> = {};
+    Object.keys(s.memberRoles || {})
+      .sort()
+      .forEach((k) => {
+        sortedRoles[k] = s.memberRoles[k];
+      });
+    return JSON.stringify({
+      code: s.code.trim().toUpperCase(),
+      name: s.name,
+      desc: s.desc,
+      release: s.release,
+      startDate: s.startDate,
+      endDate: s.endDate,
+      owner: s.owner,
+      members: [...s.members],
+      memberUids: [...s.memberUids].sort(),
+      memberRoles: sortedRoles,
+      modules: [...s.modules].sort(),
+      abapStandards: {
+        common_top_include: s.abapStandards.common_top_include || '',
+        common_form_include: s.abapStandards.common_form_include || '',
+        grid_class_name: s.abapStandards.grid_class_name || '',
+        message_class: s.abapStandards.message_class || '',
+        default_syntax_mode: s.abapStandards.default_syntax_mode || 'modern_740',
+        program_prefix: s.abapStandards.program_prefix || '',
+        tcode_pattern: s.abapStandards.tcode_pattern || '',
+        dev_package: s.abapStandards.dev_package || '',
+      },
+    });
+  };
+
+  const [savedSnapshotState, setSavedSnapshotState] = useState<FormSnapshotState | null>(null);
+
   const loadIntoForm = (proj: SapProject) => {
     const safeOwner = !proj.owner || proj.owner === 'SYSTEM' ? DEFAULT_OPERATOR_USER.name : proj.owner;
     const isSys = proj.code === COMMON_PROJECT_CODE || proj.code === TEMP_PROJECT_CODE;
     const nextUids = Array.isArray(proj.memberUids) ? proj.memberUids.filter(Boolean) : [];
+    const nextMembers = isSys
+      ? [DEFAULT_OPERATOR_USER.name]
+      : enforceProjectMembers(proj.members || [], safeOwner);
+    const nextRoles = proj.memberRoles ? { ...proj.memberRoles } : {};
+    const nextModules = proj.modules || ALL_MODULES;
+    const nextStandards: ProjectAbapStandards = {
+      common_top_include: proj.abap_standards?.common_top_include || 'zcommtop',
+      common_form_include: proj.abap_standards?.common_form_include || 'zcommf01',
+      grid_class_name: proj.abap_standards?.grid_class_name || 'cl_gui_alv_grid',
+      message_class: proj.abap_standards?.message_class || 'Z01',
+      default_syntax_mode: proj.abap_standards?.default_syntax_mode || 'modern_740',
+      program_prefix: proj.abap_standards?.program_prefix ?? 'ZR_',
+      tcode_pattern: proj.abap_standards?.tcode_pattern ?? 'Z*',
+      dev_package: proj.abap_standards?.dev_package ?? '$TMP',
+    };
+
     setIsCreatingNew(false);
     setEditingCode(proj.code);
     setFormCode(proj.code);
@@ -137,24 +207,25 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setFormStartDate(proj.start_date || '');
     setFormEndDate(proj.end_date || '');
     setFormOwner(safeOwner);
-    setFormMembers(
-      isSys
-        ? [DEFAULT_OPERATOR_USER.name]
-        : enforceProjectMembers(proj.members || [], safeOwner)
-    );
+    setFormMembers(nextMembers);
     setFormMemberUids(nextUids);
-    setFormMemberRoles(proj.memberRoles ? { ...proj.memberRoles } : {});
+    setFormMemberRoles(nextRoles);
     setPrevMemberUids(nextUids);
-    setFormModules(proj.modules || ALL_MODULES);
-    setAbapStandards({
-      common_top_include: proj.abap_standards?.common_top_include || 'zcommtop',
-      common_form_include: proj.abap_standards?.common_form_include || 'zcommf01',
-      grid_class_name: proj.abap_standards?.grid_class_name || 'cl_gui_alv_grid',
-      message_class: proj.abap_standards?.message_class || 'Z01',
-      default_syntax_mode: proj.abap_standards?.default_syntax_mode || 'modern_740',
-      program_prefix: proj.abap_standards?.program_prefix ?? 'ZR_',
-      tcode_pattern: proj.abap_standards?.tcode_pattern ?? 'Z*',
-      dev_package: proj.abap_standards?.dev_package ?? '$TMP',
+    setFormModules(nextModules);
+    setAbapStandards(nextStandards);
+    setSavedSnapshotState({
+      code: proj.code,
+      name: proj.name,
+      desc: proj.description,
+      release: proj.target_sap_release,
+      startDate: proj.start_date || '',
+      endDate: proj.end_date || '',
+      owner: safeOwner,
+      members: nextMembers,
+      memberUids: nextUids,
+      memberRoles: nextRoles,
+      modules: nextModules,
+      abapStandards: nextStandards,
     });
     setNotice(null);
   };
@@ -230,6 +301,47 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
   const isSystemProject =
     !isCreatingNew && (editingCode === COMMON_PROJECT_CODE || editingCode === TEMP_PROJECT_CODE);
+
+  const currentSnapshotSerialized = useMemo(
+    () =>
+      serializeFormSnapshot({
+        code: formCode,
+        name: formName,
+        desc: formDesc,
+        release: formRelease,
+        startDate: formStartDate,
+        endDate: formEndDate,
+        owner: formOwner,
+        members: formMembers,
+        memberUids: formMemberUids,
+        memberRoles: formMemberRoles,
+        modules: formModules,
+        abapStandards,
+      }),
+    [
+      formCode,
+      formName,
+      formDesc,
+      formRelease,
+      formStartDate,
+      formEndDate,
+      formOwner,
+      formMembers,
+      formMemberUids,
+      formMemberRoles,
+      formModules,
+      abapStandards,
+    ]
+  );
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (isSystemProject || !savedSnapshotState) return false;
+    return currentSnapshotSerialized !== serializeFormSnapshot(savedSnapshotState);
+  }, [isSystemProject, savedSnapshotState, currentSnapshotSerialized]);
+
+  useEffect(() => {
+    setNotice((prev) => (prev?.type === 'error' ? null : prev));
+  }, [currentSnapshotSerialized]);
 
   const memberCardEntries = useMemo(() => {
     const userByUid = new Map<string, UserProfileRecord>();
@@ -334,6 +446,17 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
   const startNewProject = () => {
     const initialUids = currentAdminProfile?.uid ? [currentAdminProfile.uid] : [];
+    const draftStandards: ProjectAbapStandards = {
+      common_top_include: 'zcommtop',
+      common_form_include: 'zcommf01',
+      grid_class_name: 'cl_gui_alv_grid',
+      message_class: 'Z01',
+      default_syntax_mode: 'modern_740',
+      program_prefix: 'ZR_',
+      tcode_pattern: 'Z*',
+      dev_package: 'ZDEV',
+    };
+    const draftModules: SapModule[] = ['SD', 'MM', 'FI', 'CO'];
     setIsCreatingNew(true);
     setEditingCode(null);
     setFormCode('');
@@ -347,16 +470,21 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setFormMemberUids(initialUids);
     setFormMemberRoles({});
     setPrevMemberUids([]);
-    setFormModules(['SD', 'MM', 'FI', 'CO']);
-    setAbapStandards({
-      common_top_include: 'zcommtop',
-      common_form_include: 'zcommf01',
-      grid_class_name: 'cl_gui_alv_grid',
-      message_class: 'Z01',
-      default_syntax_mode: 'modern_740',
-      program_prefix: 'ZR_',
-      tcode_pattern: 'Z*',
-      dev_package: 'ZDEV',
+    setFormModules(draftModules);
+    setAbapStandards(draftStandards);
+    setSavedSnapshotState({
+      code: '',
+      name: '',
+      desc: '',
+      release: 'SAP S/4HANA 2023',
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      owner: DEFAULT_OPERATOR_USER.name,
+      members: [DEFAULT_OPERATOR_USER.name],
+      memberUids: initialUids,
+      memberRoles: {},
+      modules: draftModules,
+      abapStandards: draftStandards,
     });
     setNotice(null);
   };
@@ -369,7 +497,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   };
 
   const handleAddApprovedUser = async (user: UserProfileRecord, assignedRole?: UserProjectRole) => {
-    if (isSystemProject) return;
+    if (!isAdmin || isSystemProject) return;
     if (user.status !== 'approved') {
       setNotice({
         type: 'error',
@@ -440,6 +568,20 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
             return;
           }
           setProjects(saveRes.list);
+          setSavedSnapshotState({
+            code: saveRes.savedProject.code,
+            name: saveRes.savedProject.name,
+            desc: saveRes.savedProject.description,
+            release: saveRes.savedProject.target_sap_release,
+            startDate: saveRes.savedProject.start_date || '',
+            endDate: saveRes.savedProject.end_date || '',
+            owner: saveRes.savedProject.owner,
+            members: saveRes.savedProject.members,
+            memberUids: saveRes.savedProject.memberUids || [],
+            memberRoles: saveRes.savedProject.memberRoles ? { ...saveRes.savedProject.memberRoles } : {},
+            modules: saveRes.savedProject.modules,
+            abapStandards: { ...(saveRes.savedProject.abap_standards || abapStandards) },
+          });
           onProjectsChanged(editingCode);
           setNotice({
             type: 'success',
@@ -467,7 +609,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     memberName: string,
     nextRole: UserProjectRole
   ) => {
-    if (isSystemProject || isDefaultOperatorUser(memberName)) return;
+    if (!isAdmin || isSystemProject || isDefaultOperatorUser(memberName)) return;
     const roleKey = memberUid || memberName.trim();
     const nextMemberRoles: Record<string, UserProjectRole> = {
       ...formMemberRoles,
@@ -488,6 +630,18 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
           try {
             await syncProjectToFirestore(saveRes.savedProject);
             setProjects(saveRes.list);
+            setSavedSnapshotState((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    members: saveRes.savedProject!.members,
+                    memberUids: saveRes.savedProject!.memberUids || [],
+                    memberRoles: saveRes.savedProject!.memberRoles
+                      ? { ...saveRes.savedProject!.memberRoles }
+                      : {},
+                  }
+                : prev
+            );
             onProjectsChanged(editingCode);
             setNotice({
               type: 'success',
@@ -509,7 +663,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   };
 
   const handleRemoveMember = async (memberName: string, memberUid?: string) => {
-    if (isSystemProject || isDefaultOperatorUser(memberName)) return;
+    if (!isAdmin || isSystemProject || isDefaultOperatorUser(memberName)) return;
 
     const confirmed = await confirmDelete({
       title: t('Remove Project Member', '프로젝트 멤버 제외'),
@@ -577,6 +731,19 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
             return;
           }
           setProjects(saveRes.list);
+          setSavedSnapshotState((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  owner: saveRes.savedProject!.owner,
+                  members: saveRes.savedProject!.members,
+                  memberUids: saveRes.savedProject!.memberUids || [],
+                  memberRoles: saveRes.savedProject!.memberRoles
+                    ? { ...saveRes.savedProject!.memberRoles }
+                    : {},
+                }
+              : prev
+          );
           onProjectsChanged(editingCode);
           setNotice({
             type: 'success',
@@ -608,7 +775,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSystemProject) return;
+    if (!isAdmin || isSystemProject) return;
 
     const cleanCode = formCode.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
     if (!isValidFourCharProjectCode(cleanCode)) {
@@ -631,6 +798,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       });
       return;
     }
+    if (!formName.trim()) {
+      setNotice({
+        type: 'error',
+        text: t('Please enter a project name.', '프로젝트명을 입력하세요.'),
+      });
+      return;
+    }
     if (formStartDate && formEndDate && formEndDate < formStartDate) {
       setNotice({
         type: 'error',
@@ -641,6 +815,21 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       });
       return;
     }
+
+    const confirmed = await confirmAction({
+      title: isCreatingNew
+        ? t('Create Project', '프로젝트 생성')
+        : t('Save Project Settings', '프로젝트 설정 저장'),
+      message: t('Are you sure you want to save?', '저장하시겠습니까?'),
+      targetName: `${cleanCode} · ${formName.trim()}`,
+      description: t(
+        'Project settings, active modules, members, and ABAP standards will be saved.',
+        '프로젝트 기본 정보, 활성 모듈, 참여 멤버 및 ABAP 개발 표준이 저장됩니다.'
+      ),
+      confirmLabel: t('Save', '저장'),
+      tone: 'primary',
+    });
+    if (!confirmed) return;
 
     const enforcedMembers = enforceProjectMembers(formMembers, formOwner);
     const resolvedMemberUids = enforcedMembers
@@ -714,7 +903,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   };
 
   const handleDelete = async () => {
-    if (!editingCode || isSystemProject) return;
+    if (!isAdmin || !editingCode || isSystemProject) return;
     const deletedCode = editingCode;
     const confirmed = await confirmDelete({
       title: t('Delete Project', '프로젝트 삭제'),
@@ -729,6 +918,17 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       ),
     });
     if (!confirmed) return;
+
+    try {
+      await deleteProjectFromFirestore(deletedCode);
+    } catch (err: any) {
+      console.error('Firestore project delete failed:', err);
+      setNotice({
+        type: 'error',
+        text: err?.message || t('Failed to delete project from Firestore.', 'Firestore 프로젝트 삭제에 실패했습니다.'),
+      });
+      return;
+    }
 
     const res = deleteProject(deletedCode);
     if (!res.success) {
@@ -761,22 +961,28 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       <PageHeader
         icon={FolderKanban}
         eyebrow={t('Administration · Workspace Governance', '관리자 설정 · 프로젝트 거버넌스')}
-        title={t('Project Settings & Members', '프로젝트 설정 및 멤버 관리')}
+        title={t('Basic Settings', '기본 설정')}
         subtitle={t(
           'Configure projects, manage project-specific members, and assign active SAP modules.',
           '프로젝트를 생성하고 프로젝트별 참여 멤버와 활성 SAP 모듈을 구성합니다.'
         )}
         actions={
-          <button
-            type="button"
-            onClick={onClose}
-            title={t('Back', '뒤로가기')}
-            aria-label={t('Back', '뒤로가기')}
-            className="h-9 px-3 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{t('Back', '뒤로가기')}</span>
-          </button>
+          <div className="group relative inline-flex shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('Back', '뒤로가기')}
+              className="w-9 h-9 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute top-full right-0 mt-2 z-50 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-white text-xs font-medium whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+            >
+              {t('Back', '뒤로가기')}
+            </span>
+          </div>
         }
       />
 
@@ -851,18 +1057,47 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
           {/* Right Form */}
           <form onSubmit={handleSave} className="flex-1 p-6 overflow-y-auto space-y-5">
-            {notice && (
-              <div
-                className={`p-3 rounded-lg border text-xs flex items-center gap-2 ${
-                  notice.type === 'success'
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                    : 'bg-rose-50 border-rose-200 text-rose-900'
-                }`}
-              >
-                <AlertCircle className="w-4 h-4 shrink-0" />
+            {isSystemProject ? (
+              notice && (
+                <div
+                  className={`p-3 rounded-lg border text-xs flex items-center gap-2 ${
+                    notice.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                  }`}
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{notice.text}</span>
+                </div>
+              )
+            ) : notice?.type === 'error' ? (
+              <div className="p-3 rounded-lg border text-xs font-medium flex items-center gap-2 bg-rose-50 border-rose-200 text-rose-900">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                 <span>{notice.text}</span>
               </div>
-            )}
+            ) : hasUnsavedChanges ? (
+              <div className="p-3 rounded-lg border text-xs font-semibold flex items-center gap-2 bg-amber-50 border-amber-300 text-amber-900">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>
+                  {t(
+                    'Unsaved changes exist. Click Save to apply.',
+                    '변경된 데이터가 존재합니다'
+                  )}
+                </span>
+              </div>
+            ) : notice?.type === 'success' || (!isCreatingNew && editingCode) ? (
+              <div className="p-3 rounded-lg border text-xs font-medium flex items-center gap-2 bg-emerald-50 border-emerald-200 text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>
+                  {notice?.type === 'success'
+                    ? notice.text
+                    : t(
+                        `Saved settings for project [${editingCode}].`,
+                        `프로젝트 [${editingCode}] 설정이 저장되었습니다.`
+                      )}
+                </span>
+              </div>
+            ) : null}
 
             {isSystemProject && (
               <div className="p-3 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-700 flex items-center gap-2">
@@ -975,7 +1210,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
             {/* Active Modules */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                {t('Active SAP Modules', '프로젝트 활성 모듈')}
+                {t('Active Modules', '활성 모듈')}
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {MODULE_OPTIONS.map((mod) => {
@@ -1009,7 +1244,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                   <Users className="w-3.5 h-3.5 text-blue-600" />
                   <span>
                     {isSystemProject
-                      ? t('Default System Project Membership', '시스템 프로젝트 기본 멤버')
+                      ? t('Members', '구성 멤버')
                       : t(
                           `Project Members (${editingCode || 'New Project'})`,
                           `프로젝트 참여 멤버 (${editingCode || '신규 프로젝트'})`
@@ -1372,32 +1607,23 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
             )}
 
             {/* Footer actions */}
-            <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
-              <div>
-                {!isCreatingNew && !isSystemProject && (
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete()}
-                    title={t('Delete Project', '프로젝트 삭제')}
-                    aria-label={t('Delete Project', '프로젝트 삭제')}
-                    className="w-9 h-9 text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+            {!isSystemProject && (
+              <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
+                <div>
+                  {!isCreatingNew && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete()}
+                      title={t('Delete Project', '프로젝트 삭제')}
+                      aria-label={t('Delete Project', '프로젝트 삭제')}
+                      className="w-9 h-9 text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  title={t('Back', '뒤로가기')}
-                  aria-label={t('Back', '뒤로가기')}
-                  className="w-9 h-9 text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-                {!isSystemProject && (
+                <div className="flex items-center gap-2">
                   <button
                     type="submit"
                     title={
@@ -1410,13 +1636,19 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                         ? t('Create Project', '프로젝트 생성')
                         : t('Save Changes', '변경사항 저장')
                     }
-                    className="w-9 h-9 text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                    className="relative w-9 h-9 text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs flex items-center justify-center shrink-0 cursor-pointer transition-colors"
                   >
                     <Save className="w-4 h-4" />
+                    {hasUnsavedChanges && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-400 border-2 border-white"
+                      />
+                    )}
                   </button>
-                )}
+                </div>
               </div>
-            </div>
+            )}
           </form>
         </div>
         </div>

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { GEMINI_TEXT_MODEL, getGeminiClient } from '../geminiClient';
+import { requireStandardAiAuth } from '../middleware/authMiddleware';
 import {
   buildMeetingMinutesFallback,
   buildSampleRecommendationFallback,
@@ -8,7 +9,7 @@ import {
 export const meetingRoutes = Router();
 
 // Step 1 -> Step 2: Summarize or enrich SAP meeting minutes
-meetingRoutes.post('/api/summarize-meeting-minutes', async (req, res) => {
+meetingRoutes.post('/api/summarize-meeting-minutes', requireStandardAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const {
@@ -23,6 +24,9 @@ meetingRoutes.post('/api/summarize-meeting-minutes', async (req, res) => {
     const combinedInput = `${rawTranscript}\n${supplementalNotes}\n${existingMinutes}`.trim();
     if (!combinedInput) {
       return res.status(400).json({ error: '회의 녹음 내용 또는 메모 텍스트가 비어 있습니다.' });
+    }
+    if (combinedInput.length > 30_000) {
+      return res.status(400).json({ error: '회의록 입력 길이가 허용 한도(30,000자)를 초과했습니다.' });
     }
 
     const systemPrompt = `You are a Principal SAP ERP Business Analyst & Solution Architect.
@@ -112,7 +116,7 @@ ${supplementalNotes || '(없음)'}`;
 });
 
 // Step 2 -> Step 3: Recommend best COMMON sample type 01~04 + Program ID / T-Code
-meetingRoutes.post('/api/recommend-sample-from-minutes', async (req, res) => {
+meetingRoutes.post('/api/recommend-sample-from-minutes', requireStandardAiAuth, async (req, res) => {
   try {
     const ai = getGeminiClient();
     const {
@@ -123,6 +127,9 @@ meetingRoutes.post('/api/recommend-sample-from-minutes', async (req, res) => {
 
     if (!minutesMarkdown || typeof minutesMarkdown !== 'string' || !minutesMarkdown.trim()) {
       return res.status(400).json({ error: '분석할 회의록 본문이 비어 있습니다.' });
+    }
+    if (minutesMarkdown.length > 25_000) {
+      return res.status(400).json({ error: '회의록 분석 길이가 허용 한도(25,000자)를 초과했습니다.' });
     }
 
     const systemPrompt = `You are a Principal SAP ABAP Architect.

@@ -33,6 +33,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
+import { deleteSpecFromFirestore } from '../services/firestoreSync';
 
 interface SpecManagerModalProps {
   currentSpec: ProgramSpec;
@@ -51,7 +52,7 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
 }) => {
   const { t } = useLanguage();
   const { confirmDelete } = useConfirmDialog();
-  const { activeUser: currentUser, userProfile, isAdmin } = useAuth();
+  const { activeUser: currentUser, userProfile, isAdmin, isFirebaseAuthenticated } = useAuth();
   const [specs, setSpecs] = useState<SavedProgramSpecItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -196,7 +197,9 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
       return;
     }
 
-    if (item.author !== currentUser.name) {
+    const isUidOwner = Boolean(userProfile?.uid) && item.spec?.author_id === userProfile?.uid;
+    const isNameOwner = item.author === currentUser.name;
+    if (!isAdmin && !isUidOwner && !isNameOwner) {
       showToast(
         'error',
         t(
@@ -218,9 +221,22 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
     });
     if (!confirmed) return;
 
-    const res = deleteSpecFromStorage(item.program_id, currentUser.name);
+    const res = deleteSpecFromStorage(item.program_id, currentUser.name, {
+      currentUserId: userProfile?.uid || currentUser.id,
+      isAdmin,
+    });
     if (res.success) {
       setSpecs(res.list);
+      if (isFirebaseAuthenticated) {
+        try {
+          await deleteSpecFromFirestore(
+            res.deletedItem?.project_code || item.project_code,
+            item.spec.id || item.program_id
+          );
+        } catch (err) {
+          console.warn('Firestore spec delete notice:', err);
+        }
+      }
       showToast('success', t(`Deleted spec '${item.program_id}'.`, `'${item.program_id}' 사양서가 삭제되었습니다.`));
     } else {
       showToast('error', res.message || t('Failed to delete spec.', '사양서 삭제에 실패했습니다.'));

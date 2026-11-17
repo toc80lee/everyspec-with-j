@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ProgramSpec, ProjectMeetingMinute, SapProject } from './types/sap';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { ProgramSpec, ProjectMeetingMinute, SapProject, SpecPresenceEntry } from './types/sap';
 import { SAMPLE_SPECS } from './data/sampleSpecs';
 import { TopNav, MainWorkspaceMode, DualSplitLayout } from './components/TopNav';
 import { SideNav } from './components/SideNav';
@@ -32,11 +32,19 @@ import { CurrentUser, getCurrentUser } from './utils/authStorage';
 import { useAuth } from './contexts/AuthContext';
 import { useLanguage } from './contexts/LanguageContext';
 import {
-  syncSpecToFirestore,
-  subscribeProjectSpecs,
+  SpecSyncConflictError,
+  clearSpecPresence,
   subscribeAccessibleProjects,
+  subscribeCustomDdicTables,
   subscribeProjectMeetings,
+  subscribeProjectSpecs,
+  subscribeSpecPresence,
+  subscribeSpecReviewComments,
+  subscribeUserPreferences,
   syncProjectToFirestore,
+  syncSpecPresence,
+  syncSpecToFirestore,
+  syncUserPreferencesToFirestore,
 } from './services/firestoreSync';
 import {
   COMMON_PROJECT_CODE,
@@ -52,23 +60,31 @@ import {
 import {
   SavedProgramSpecItem,
   getSavedSpecList,
+  markSpecPendingWrite,
+  reconcileProjectSpecsFromRemote,
   upsertWorkingSpecQuietly,
 } from './utils/specStorage';
 import {
   deleteMeetingMinute,
   getVisibleMinutesForProject,
-  upsertMeetingMinutesFromRemote,
+  reconcileProjectMeetingsFromRemote,
 } from './utils/meetingStorage';
-import { getUnresolvedCommentCountsMap } from './utils/reviewCommentStorage';
+import { reconcileCustomDdicFromRemote } from './utils/sapDdicStorage';
+import {
+  getUnresolvedCommentCountsMap,
+  mergeRemoteReviewComments,
+} from './utils/reviewCommentStorage';
 import { suggestCompliantIdsForProject } from './utils/sapValidation';
 import { createRevisionSnapshot } from './utils/specSnapshotStorage';
 import {
   FAVORITE_STORAGE_KEY,
   getFavoriteProgramIds,
+  migrateFavoriteUserKey,
   removeFavoriteProgram,
+  setFavoriteProgramIds,
   toggleFavoriteProgram,
 } from './utils/favoriteStorage';
-import { AlertTriangle, CheckCircle2, Save, Undo2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Copy, RefreshCw, Save, Undo2, X } from 'lucide-react';
 
 const DUAL_SPLIT_CYCLE: DualSplitLayout[] = [
   'top-bottom',
@@ -81,7 +97,7 @@ export default function App() {
   const {
     activeUser: authActiveUser,
     isFirebaseAuthenticated,
-    projectRole,
+    resolveEffectiveProjectRole,
     userProfile,
     isAdmin,
   } = useAuth();
@@ -93,16 +109,24 @@ export default function App() {
   const [remoteProjectsLoaded, setRemoteProjectsLoaded] = useState(false);
   const seededProjectsRef = useRef(false);
   const [allSavedSpecs, setAllSavedSpecs] = useState<SavedProgramSpecItem[]>(() => getSavedSpecList());
-  const [favoriteProgramIds, setFavoriteProgramIds] = useState<string[]>(() =>
+  const favoriteUserKey =
+    isFirebaseAuthenticated && userProfile?.uid ? userProfile.uid : currentUser.name;
+  const [favoriteProgramIds, setFavoriteProgramIdsState] = useState<string[]>(() =>
     getFavoriteProgramIds(getCurrentUser().name)
   );
+  const prefsHydratedRef = useRef(false);
+  const applyingRemotePrefsRef = useRef(false);
 
   useEffect(() => {
     setCurrentUserState(authActiveUser);
-    setFavoriteProgramIds(getFavoriteProgramIds(authActiveUser.name));
+    if (isFirebaseAuthenticated && userProfile?.uid) {
+      setFavoriteProgramIdsState(migrateFavoriteUserKey(authActiveUser.name, userProfile.uid));
+    } else {
+      setFavoriteProgramIdsState(getFavoriteProgramIds(authActiveUser.name));
+    }
     setProjectRefreshKey((k) => k + 1);
     setAllSavedSpecs(getSavedSpecList());
-  }, [authActiveUser]);
+  }, [authActiveUser, isFirebaseAuthenticated, userProfile?.uid]);
 
   const assignedProjectsKey = JSON.stringify(userProfile?.assignedProjects || []);
 
@@ -203,14 +227,6 @@ export default function App() {
     setAllSavedSpecs(getSavedSpecList());
   };
 
-  const [currentSpec, setCurrentSpec] = useState<ProgramSpec>(SAMPLE_SPECS[0]);
-  const isCurrentSpecReadOnly =
-    isReadOnlyCommonSpec(currentSpec) ||
-    (currentSpec.status === 'approved' && projectRole !== 'PM' && projectRole !== 'ADMIN');
-  const [historyPast, setHistoryPast] = useState<ProgramSpec[]>([]);
-  const [historyFuture, setHistoryFuture] = useState<ProgramSpec[]>([]);
-  const lastEditTimestampRef = useRef<number>(0);
-
   // Default entry screen is Project Overview Dashboard (or /admin for admins)
   const [workspaceMode, setWorkspaceMode] = useState<MainWorkspaceMode>(() => {
     if (typeof window !== 'undefined' && window.location.pathname === '/admin') {
@@ -219,6 +235,35 @@ export default function App() {
     return 'overview';
   });
   const returnFromPageModeRef = useRef<MainWorkspaceMode>('overview');
+
+  const [currentSpec, setCurrentSpec] = useState<ProgramSpec>(SAMPLE_SPECS[0]);
+  const activeWorkspaceProject = useMemo(() => {
+    const specProjCode = normalizeLegacyProjectCode(currentSpec.project_code || '') || selectedProjectCode;
+    const isSpecViewport =
+      workspaceMode === 'split' ||
+      workspaceMode === 'mockup_only' ||
+      workspaceMode === 'editor_only' ||
+      workspaceMode === 'abap_code' ||
+      workspaceMode === 'document';
+    const targetCode = isSpecViewport ? specProjCode : selectedProjectCode;
+    return accessibleProjects.find((p) => p.code === targetCode) || null;
+  }, [accessibleProjects, currentSpec.project_code, selectedProjectCode, workspaceMode]);
+  const currentSpecProject = useMemo(
+    () =>
+      accessibleProjects.find(
+        (p) => p.code === normalizeLegacyProjectCode(currentSpec.project_code || TEMP_PROJECT_CODE)
+      ) || null,
+    [accessibleProjects, currentSpec.project_code]
+  );
+  const effectiveSpecRole = resolveEffectiveProjectRole(currentSpecProject);
+  const isCurrentSpecReadOnly =
+    isReadOnlyCommonSpec(currentSpec) ||
+    ((currentSpec.status === 'approved' || currentSpec.status === 'qa_passed') &&
+      effectiveSpecRole !== 'PM' &&
+      effectiveSpecRole !== 'ADMIN');
+  const [historyPast, setHistoryPast] = useState<ProgramSpec[]>([]);
+  const [historyFuture, setHistoryFuture] = useState<ProgramSpec[]>([]);
+  const lastEditTimestampRef = useRef<number>(0);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isPdfExportModalOpen, setIsPdfExportModalOpen] = useState(false);
   const [copyingSpec, setCopyingSpec] = useState<ProgramSpec | null>(null);
@@ -237,6 +282,21 @@ export default function App() {
     | { type: 'minute'; minuteId: string }
     | null
   >(null);
+  const [activeCollaborators, setActiveCollaborators] = useState<SpecPresenceEntry[]>([]);
+  const [syncConflict, setSyncConflict] = useState<{
+    specId: string;
+    programId: string;
+    localSpec: ProgramSpec;
+    remoteSpec: ProgramSpec;
+    remoteEditor: string;
+    expectedRevision: number;
+    remoteRevision: number;
+  } | null>(null);
+  const loadedRevisionRef = useRef<Record<string, number>>({});
+  const specSyncTimerRef = useRef<number | null>(null);
+  const pendingSpecSyncRef = useRef<{ spec: ProgramSpec; expectedRevision?: number } | null>(null);
+  const accessibleProjectsRef = useRef<SapProject[]>(accessibleProjects);
+  accessibleProjectsRef.current = accessibleProjects;
 
   const unresolvedCommentCounts = useMemo(
     () => getUnresolvedCommentCountsMap(),
@@ -351,50 +411,241 @@ export default function App() {
     }, 3600);
   };
 
+  const accessibleProjectCodesKey = useMemo(
+    () =>
+      accessibleProjects
+        .map((p) => p.code)
+        .filter(Boolean)
+        .sort()
+        .join(','),
+    [accessibleProjects]
+  );
+
+  // Multi-project real-time subscriptions for specs & meetings (propagates remote deletes & updates across all accessible projects)
   useEffect(() => {
-    if (
-      !isFirebaseAuthenticated ||
-      !selectedProjectCode ||
-      selectedProjectCode === COMMON_PROJECT_CODE
-    ) {
-      return;
-    }
+    if (!isFirebaseAuthenticated || !accessibleProjectCodesKey) return;
 
-    const unsubscribeSpecs = subscribeProjectSpecs(selectedProjectCode, (remoteSpecs) => {
-      if (!remoteSpecs || remoteSpecs.length === 0) return;
-      remoteSpecs.forEach((remote) => {
-        if (!isCommonProtectedSample(remote)) {
-          upsertWorkingSpecQuietly(remote);
-        }
-      });
-      setAllSavedSpecs(getSavedSpecList());
-      setCurrentSpec((prev) => {
-        if (isCommonProtectedSample(prev)) return prev;
-        if (Date.now() - lastEditTimestampRef.current < 2500) return prev;
-        const matched = remoteSpecs.find(
-          (r) => r.id === prev.id || r.program_id === prev.program_id
+    const projectCodes = accessibleProjectCodesKey.split(',').filter(Boolean);
+    const unsubs: (() => void)[] = [];
+
+    projectCodes.forEach((projCode) => {
+      if (projCode !== COMMON_PROJECT_CODE) {
+        unsubs.push(
+          subscribeProjectSpecs(projCode, (remoteSpecs) => {
+            reconcileProjectSpecsFromRemote(
+              projCode,
+              remoteSpecs,
+              currentUser.name,
+              userProfile?.uid
+            );
+            setAllSavedSpecs(getSavedSpecList());
+
+            setCurrentSpec((prev) => {
+              if (isCommonProtectedSample(prev)) return prev;
+              const specKey = prev.id || prev.program_id;
+              const matched = remoteSpecs.find(
+                (r) => r.id === prev.id || r.program_id === prev.program_id
+              );
+              if (!matched) return prev;
+              if (syncConflict && syncConflict.specId === specKey) return prev;
+              if (pendingSpecSyncRef.current?.spec.id === prev.id) return prev;
+              if (Date.now() - lastEditTimestampRef.current < 2500) return prev;
+
+              const remoteRev = matched.revision ?? 0;
+              const prevRev = prev.revision ?? 0;
+              const editedByOther =
+                Boolean(matched.last_edited_by_uid) &&
+                matched.last_edited_by_uid !== userProfile?.uid;
+
+              if (!editedByOther && remoteRev <= prevRev && JSON.stringify(matched) === JSON.stringify(prev)) {
+                return prev;
+              }
+              loadedRevisionRef.current[specKey] = remoteRev;
+              return matched;
+            });
+          })
         );
-        if (!matched) return prev;
-        return JSON.stringify(matched) === JSON.stringify(prev) ? prev : matched;
-      });
-    });
+      }
 
-    const unsubscribeMeetings = subscribeProjectMeetings(selectedProjectCode, (remoteMinutes) => {
-      if (!remoteMinutes || remoteMinutes.length === 0) return;
-      upsertMeetingMinutesFromRemote(remoteMinutes);
-      setMeetingRefreshKey((k) => k + 1);
+      if (projCode !== COMMON_PROJECT_CODE) {
+        unsubs.push(
+          subscribeProjectMeetings(projCode, (remoteMinutes) => {
+            reconcileProjectMeetingsFromRemote(
+              projCode,
+              remoteMinutes,
+              currentUser.name,
+              userProfile?.uid
+            );
+            setMeetingRefreshKey((k) => k + 1);
+          })
+        );
+      }
     });
 
     return () => {
-      unsubscribeSpecs();
-      unsubscribeMeetings();
+      unsubs.forEach((u) => u());
     };
-  }, [isFirebaseAuthenticated, selectedProjectCode]);
+  }, [isFirebaseAuthenticated, accessibleProjectCodesKey, currentUser.name, userProfile?.uid, syncConflict]);
+
+  // Shared custom DDIC subscription (DD02L / DD03L live sync across teammates)
+  useEffect(() => {
+    if (!isFirebaseAuthenticated) return;
+    const unsub = subscribeCustomDdicTables((entries) => {
+      reconcileCustomDdicFromRemote(entries);
+    });
+    return () => unsub();
+  }, [isFirebaseAuthenticated]);
+
+  // Live unresolved review comments subscription for visible specs on Overview / Program List
+  const activeProjectSpecIdsKey = useMemo(() => {
+    if (
+      !isFirebaseAuthenticated ||
+      (workspaceMode !== 'overview' && workspaceMode !== 'program_list') ||
+      !selectedProjectCode ||
+      selectedProjectCode === COMMON_PROJECT_CODE
+    ) {
+      return '';
+    }
+    return allSavedSpecs
+      .filter((item) =>
+        isSpecVisibleInProject(item, selectedProjectCode, currentUser.name, currentUser.id)
+      )
+      .slice(0, 25)
+      .map((item) => item.spec.id)
+      .filter(Boolean)
+      .sort()
+      .join(',');
+  }, [
+    isFirebaseAuthenticated,
+    workspaceMode,
+    selectedProjectCode,
+    allSavedSpecs,
+    currentUser.name,
+    currentUser.id,
+  ]);
+
+  useEffect(() => {
+    if (!activeProjectSpecIdsKey || !selectedProjectCode || selectedProjectCode === COMMON_PROJECT_CODE) {
+      return;
+    }
+    const specIds = activeProjectSpecIdsKey.split(',').filter(Boolean);
+    const unsubs = specIds.map((specId) =>
+      subscribeSpecReviewComments(selectedProjectCode, specId, (remote) => {
+        mergeRemoteReviewComments(selectedProjectCode, specId, remote);
+        setCommentRefreshKey((k) => k + 1);
+      })
+    );
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [activeProjectSpecIdsKey, selectedProjectCode]);
 
   const formatNowHms = () => {
     const d = new Date();
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
   };
+
+  const executeFirestoreSpecSync = useCallback(
+    async (
+      targetSpec: ProgramSpec,
+      expectedRevision?: number,
+      forceOverwrite = false
+    ): Promise<number | undefined> => {
+      if (!isFirebaseAuthenticated || isCommonProtectedSample(targetSpec)) return undefined;
+      const specKey = targetSpec.id || targetSpec.program_id;
+      const projObj = accessibleProjectsRef.current.find(
+        (p) => p.code === (targetSpec.project_code || TEMP_PROJECT_CODE)
+      );
+      try {
+        const res = await syncSpecToFirestore(targetSpec, projObj, {
+          expectedRevision,
+          forceOverwrite,
+        });
+        if (res && typeof res.revision === 'number') {
+          loadedRevisionRef.current[specKey] = res.revision;
+          setCurrentSpec((prev) => {
+            if ((prev.id || prev.program_id) !== specKey) return prev;
+            if ((prev.revision ?? 0) >= res.revision) return prev;
+            const stamped: ProgramSpec = {
+              ...prev,
+              revision: res.revision,
+              last_edited_by: currentUser.name,
+              last_edited_by_uid: userProfile?.uid,
+            };
+            upsertWorkingSpecQuietly(stamped);
+            return stamped;
+          });
+          return res.revision;
+        }
+      } catch (err) {
+        if (err instanceof SpecSyncConflictError) {
+          setSyncConflict({
+            specId: err.specId,
+            programId: err.programId,
+            localSpec: targetSpec,
+            remoteSpec: err.remoteSpec,
+            remoteEditor: err.remoteEditor,
+            expectedRevision: err.expectedRevision,
+            remoteRevision: err.remoteRevision,
+          });
+        } else {
+          console.warn('Firestore spec sync skipped:', err);
+        }
+      }
+      return undefined;
+    },
+    [isFirebaseAuthenticated, currentUser.name, userProfile?.uid]
+  );
+
+  const scheduleSpecCloudSync = useCallback(
+    (stampedSpec: ProgramSpec, immediate = false) => {
+      if (!isFirebaseAuthenticated || isCommonProtectedSample(stampedSpec)) return;
+      const specKey = stampedSpec.id || stampedSpec.program_id;
+      const expectedRev = loadedRevisionRef.current[specKey] ?? stampedSpec.revision;
+
+      if (specSyncTimerRef.current) {
+        window.clearTimeout(specSyncTimerRef.current);
+        specSyncTimerRef.current = null;
+      }
+
+      if (immediate) {
+        pendingSpecSyncRef.current = null;
+        void executeFirestoreSpecSync(stampedSpec, expectedRev, false);
+        return;
+      }
+
+      pendingSpecSyncRef.current = { spec: stampedSpec, expectedRevision: expectedRev };
+      specSyncTimerRef.current = window.setTimeout(() => {
+        specSyncTimerRef.current = null;
+        const pending = pendingSpecSyncRef.current;
+        pendingSpecSyncRef.current = null;
+        if (pending) {
+          void executeFirestoreSpecSync(pending.spec, pending.expectedRevision, false);
+        }
+      }, 600);
+    },
+    [isFirebaseAuthenticated, executeFirestoreSpecSync]
+  );
+
+  const flushPendingSpecSync = useCallback(async () => {
+    if (specSyncTimerRef.current) {
+      window.clearTimeout(specSyncTimerRef.current);
+      specSyncTimerRef.current = null;
+    }
+    const pending = pendingSpecSyncRef.current;
+    pendingSpecSyncRef.current = null;
+    if (pending) {
+      await executeFirestoreSpecSync(pending.spec, pending.expectedRevision, false);
+    }
+  }, [executeFirestoreSpecSync]);
+
+  useEffect(() => {
+    return () => {
+      if (specSyncTimerRef.current) {
+        window.clearTimeout(specSyncTimerRef.current);
+      }
+    };
+  }, []);
 
   const applySpecChange = (updated: ProgramSpec, forceNewHistoryStep = false) => {
     const stampedSpec: ProgramSpec =
@@ -420,17 +671,14 @@ export default function App() {
     setCurrentSpec(stampedSpec);
 
     if (!isCommonProtectedSample(stampedSpec)) {
+      markSpecPendingWrite(stampedSpec.program_id);
+      if (stampedSpec.id) markSpecPendingWrite(stampedSpec.id);
       upsertWorkingSpecQuietly(stampedSpec);
       refreshAllSpecs();
       setLastSavedAt(formatNowHms());
       setHasUnsavedChanges(!forceNewHistoryStep);
       if (isFirebaseAuthenticated) {
-        const projObj = accessibleProjects.find(
-          (p) => p.code === (stampedSpec.project_code || TEMP_PROJECT_CODE)
-        );
-        syncSpecToFirestore(stampedSpec, projObj).catch((err) => {
-          console.warn('Firestore spec sync skipped:', err);
-        });
+        scheduleSpecCloudSync(stampedSpec, forceNewHistoryStep);
       }
     }
   };
@@ -441,12 +689,69 @@ export default function App() {
     workspaceMode === 'editor_only' ||
     workspaceMode === 'abap_code';
 
+  // Real-time collaborator presence heartbeat & listener while viewing/editing a shared spec
+  const isViewingOrEditingSpec = isInSpecEditingMode || workspaceMode === 'document';
+  useEffect(() => {
+    const specId = currentSpec.id || currentSpec.program_id;
+    const projCode = normalizeLegacyProjectCode(currentSpec.project_code || TEMP_PROJECT_CODE);
+    if (
+      !isFirebaseAuthenticated ||
+      !userProfile?.uid ||
+      !isViewingOrEditingSpec ||
+      !specId ||
+      projCode === COMMON_PROJECT_CODE ||
+      projCode === TEMP_PROJECT_CODE ||
+      isCommonProtectedSample(currentSpec)
+    ) {
+      setActiveCollaborators([]);
+      return;
+    }
+
+    const mode: 'viewing' | 'editing' = isCurrentSpecReadOnly ? 'viewing' : 'editing';
+    const sendHeartbeat = () => {
+      const projObj = accessibleProjectsRef.current.find((p) => p.code === projCode);
+      void syncSpecPresence({
+        projectCode: projCode,
+        specId,
+        displayName: currentUser.name,
+        projectRole: resolveEffectiveProjectRole(projObj),
+        mode,
+        project: projObj,
+      });
+    };
+
+    const unsubscribe = subscribeSpecPresence(projCode, specId, (collaborators) => {
+      setActiveCollaborators(collaborators);
+    });
+
+    sendHeartbeat();
+    const intervalId = window.setInterval(sendHeartbeat, 25_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      unsubscribe();
+      void clearSpecPresence(projCode, specId);
+    };
+  }, [
+    isFirebaseAuthenticated,
+    userProfile?.uid,
+    isViewingOrEditingSpec,
+    currentSpec.id,
+    currentSpec.program_id,
+    currentSpec.project_code,
+    isCurrentSpecReadOnly,
+    currentUser.name,
+    effectiveSpecRole,
+    resolveEffectiveProjectRole,
+  ]);
+
   const executePendingNavigation = (
     nav:
       | { type: 'mode'; mode: MainWorkspaceMode }
       | { type: 'spec'; spec: ProgramSpec }
       | { type: 'minute'; minuteId: string }
   ) => {
+    void flushPendingSpecSync();
     if (nav.type === 'mode') {
       if (nav.mode === 'overview' || nav.mode === 'program_list') {
         refreshAllSpecs();
@@ -455,6 +760,8 @@ export default function App() {
       syncBrowserPathForMode(nav.mode);
       setWorkspaceMode(nav.mode);
     } else if (nav.type === 'spec') {
+      const specKey = nav.spec.id || nav.spec.program_id;
+      loadedRevisionRef.current[specKey] = nav.spec.revision ?? 0;
       setHistoryPast([]);
       setHistoryFuture([]);
       setCurrentSpec(nav.spec);
@@ -483,6 +790,12 @@ export default function App() {
       );
       return false;
     }
+    if (specSyncTimerRef.current) {
+      window.clearTimeout(specSyncTimerRef.current);
+      specSyncTimerRef.current = null;
+    }
+    pendingSpecSyncRef.current = null;
+
     const { historyItem } = await createRevisionSnapshot(
       currentSpec,
       t('Quick workspace snapshot (Ctrl+S)', '작업실 빠른 스냅샷 (Ctrl+S)'),
@@ -492,18 +805,18 @@ export default function App() {
       ...currentSpec,
       change_history: [...(currentSpec.change_history || []), historyItem],
     };
+    const specKey = updatedSpec.id || updatedSpec.program_id;
+    const expectedRevision = loadedRevisionRef.current[specKey] ?? updatedSpec.revision;
+
     setCurrentSpec(updatedSpec);
+    markSpecPendingWrite(updatedSpec.program_id);
+    if (updatedSpec.id) markSpecPendingWrite(updatedSpec.id);
     upsertWorkingSpecQuietly(updatedSpec);
     refreshAllSpecs();
     setLastSavedAt(formatNowHms());
     setHasUnsavedChanges(false);
     if (isFirebaseAuthenticated) {
-      const projObj = accessibleProjects.find(
-        (p) => p.code === (updatedSpec.project_code || TEMP_PROJECT_CODE)
-      );
-      syncSpecToFirestore(updatedSpec, projObj).catch((err) => {
-        console.warn('Firestore snapshot spec sync skipped:', err);
-      });
+      await executeFirestoreSpecSync(updatedSpec, expectedRevision, false);
     }
     showWorkspaceToast(
       t(
@@ -562,6 +875,13 @@ export default function App() {
     setHistoryPast((prev) => prev.slice(0, -1));
     setHistoryFuture((prev) => [currentSpec, ...prev.slice(0, 29)]);
     setCurrentSpec(previous);
+    if (!isCommonProtectedSample(previous)) {
+      markSpecPendingWrite(previous.program_id);
+      if (previous.id) markSpecPendingWrite(previous.id);
+      upsertWorkingSpecQuietly(previous);
+      refreshAllSpecs();
+      scheduleSpecCloudSync(previous, false);
+    }
     showWorkspaceToast(
       t(
         `Reverted to previous spec state (${previous.program_id})`,
@@ -576,6 +896,13 @@ export default function App() {
     setHistoryFuture((prev) => prev.slice(1));
     setHistoryPast((prev) => [...prev.slice(-29), currentSpec]);
     setCurrentSpec(next);
+    if (!isCommonProtectedSample(next)) {
+      markSpecPendingWrite(next.program_id);
+      if (next.id) markSpecPendingWrite(next.id);
+      upsertWorkingSpecQuietly(next);
+      refreshAllSpecs();
+      scheduleSpecCloudSync(next, false);
+    }
     showWorkspaceToast(
       t(`Redid spec state (${next.program_id})`, `사양서 상태를 다시 실행했습니다 (${next.program_id})`)
     );
@@ -592,18 +919,18 @@ export default function App() {
         setCurrentTheme(e.newValue);
       }
       if (e.key === FAVORITE_STORAGE_KEY) {
-        setFavoriteProgramIds(getFavoriteProgramIds(currentUser.name));
+        setFavoriteProgramIdsState(getFavoriteProgramIds(favoriteUserKey));
       }
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [currentUser.name]);
+  }, [favoriteUserKey]);
 
   const handleToggleFavorite = (programId: string) => {
     const cleanId = (programId || '').trim().toUpperCase();
     if (!cleanId) return;
-    const res = toggleFavoriteProgram(currentUser.name, cleanId);
-    setFavoriteProgramIds(res.ids);
+    const res = toggleFavoriteProgram(favoriteUserKey, cleanId);
+    setFavoriteProgramIdsState(res.ids);
     showWorkspaceToast(
       res.favorited
         ? t(`Added '${cleanId}' to favorites.`, `'${cleanId}'을(를) 즐겨찾기에 추가했습니다.`)
@@ -710,6 +1037,101 @@ export default function App() {
       return next;
     });
   };
+
+  // Cloud-backed user workspace preferences subscription (favorites, theme, split layout/ratio)
+  useEffect(() => {
+    prefsHydratedRef.current = false;
+    if (!isFirebaseAuthenticated || !userProfile?.uid) return;
+
+    const uid = userProfile.uid;
+    const unsubscribe = subscribeUserPreferences(uid, (remotePrefs) => {
+      if (!remotePrefs) {
+        prefsHydratedRef.current = true;
+        void syncUserPreferencesToFirestore({
+          favoriteProgramIds: getFavoriteProgramIds(uid),
+          sapGuiTheme: currentTheme,
+          splitLayout,
+          splitRatio: splitRatioRef.current,
+        }).catch(() => {});
+        return;
+      }
+
+      applyingRemotePrefsRef.current = true;
+      if (Array.isArray(remotePrefs.favoriteProgramIds)) {
+        const syncedFavs = setFavoriteProgramIds(uid, remotePrefs.favoriteProgramIds);
+        setFavoriteProgramIdsState(syncedFavs);
+      }
+      if (remotePrefs.sapGuiTheme && isValidSapGuiTheme(remotePrefs.sapGuiTheme)) {
+        setCurrentTheme(remotePrefs.sapGuiTheme);
+        saveSapTheme(remotePrefs.sapGuiTheme);
+      }
+      if (remotePrefs.splitLayout && DUAL_SPLIT_CYCLE.includes(remotePrefs.splitLayout)) {
+        setSplitLayout(remotePrefs.splitLayout);
+        try {
+          localStorage.setItem('sap_spec_dual_split_layout', remotePrefs.splitLayout);
+        } catch {
+          // ignore
+        }
+      }
+      if (
+        typeof remotePrefs.splitRatio === 'number' &&
+        remotePrefs.splitRatio >= 20 &&
+        remotePrefs.splitRatio <= 80
+      ) {
+        setSplitRatio(remotePrefs.splitRatio);
+        splitRatioRef.current = remotePrefs.splitRatio;
+        try {
+          localStorage.setItem('sap_spec_dual_split_ratio', String(remotePrefs.splitRatio));
+        } catch {
+          // ignore
+        }
+      }
+      prefsHydratedRef.current = true;
+      window.setTimeout(() => {
+        applyingRemotePrefsRef.current = false;
+      }, 0);
+    });
+
+    return () => {
+      unsubscribe();
+      prefsHydratedRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFirebaseAuthenticated, userProfile?.uid]);
+
+  // Persist local workspace preference updates back to Firestore (debounced, post-hydration)
+  useEffect(() => {
+    if (
+      !isFirebaseAuthenticated ||
+      !userProfile?.uid ||
+      !prefsHydratedRef.current ||
+      applyingRemotePrefsRef.current ||
+      isResizingSplit
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void syncUserPreferencesToFirestore({
+        favoriteProgramIds,
+        sapGuiTheme: currentTheme,
+        splitLayout,
+        splitRatio,
+      }).catch((err) => {
+        console.warn('User preferences sync notice:', err);
+      });
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    isFirebaseAuthenticated,
+    userProfile?.uid,
+    favoriteProgramIds,
+    currentTheme,
+    splitLayout,
+    splitRatio,
+    isResizingSplit,
+  ]);
 
   // Global keyboard shortcuts (Ctrl+K search, Ctrl+S snapshot, Alt+1..5 views, Alt+L layout, Ctrl+Z/Y undo/redo, ? help)
   useEffect(() => {
@@ -1179,6 +1601,7 @@ export default function App() {
             }
           }}
           selectedProjectCode={selectedProjectCode}
+          activeProject={activeWorkspaceProject}
           isCurrentSpecFavorite={favoriteProgramIds.includes((currentSpec.program_id || '').toUpperCase())}
           onToggleCurrentSpecFavorite={() => handleToggleFavorite(currentSpec.program_id)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
@@ -1214,7 +1637,9 @@ export default function App() {
             onToggleFavorite={handleToggleFavorite}
             onSpecsChanged={(deletedProgramId) => {
               if (deletedProgramId) {
-                setFavoriteProgramIds(removeFavoriteProgram(currentUser.name, deletedProgramId));
+                setFavoriteProgramIdsState(
+                  removeFavoriteProgram(favoriteUserKey, deletedProgramId)
+                );
               }
               refreshAllSpecs();
             }}
@@ -1383,6 +1808,7 @@ export default function App() {
                 onCommentsChanged={() => setCommentRefreshKey((k) => k + 1)}
                 onNotify={(msg) => showWorkspaceToast(msg)}
                 remoteProjects={remoteProjects}
+                activeCollaborators={activeCollaborators}
               />
             </div>
 
@@ -1482,6 +1908,7 @@ export default function App() {
               onCommentsChanged={() => setCommentRefreshKey((k) => k + 1)}
               onNotify={(msg) => showWorkspaceToast(msg)}
               remoteProjects={remoteProjects}
+              activeCollaborators={activeCollaborators}
             />
           </div>
         )}
@@ -1492,6 +1919,7 @@ export default function App() {
               spec={currentSpec}
               sapGuiTheme={currentTheme}
               onUpdateSpec={(updated) => applySpecChange(updated)}
+              remoteProjects={remoteProjects}
             />
           </div>
         )}
@@ -1575,13 +2003,21 @@ export default function App() {
         remoteProjects={remoteProjects}
         onClose={() => setCopyingSpec(null)}
         onCopied={(newSpec) => {
+          markSpecPendingWrite(newSpec.program_id);
+          if (newSpec.id) markSpecPendingWrite(newSpec.id);
           if (isFirebaseAuthenticated) {
             const projObj = accessibleProjects.find(
               (p) => p.code === (newSpec.project_code || TEMP_PROJECT_CODE)
             );
-            syncSpecToFirestore(newSpec, projObj).catch((err) => {
-              console.warn('Firestore copied spec sync skipped:', err);
-            });
+            syncSpecToFirestore(newSpec, projObj)
+              .then((res) => {
+                if (res && typeof res.revision === 'number') {
+                  loadedRevisionRef.current[newSpec.id || newSpec.program_id] = res.revision;
+                }
+              })
+              .catch((err) => {
+                console.warn('Firestore copied spec sync skipped:', err);
+              });
           }
           refreshAllSpecs();
           handleOpenProgramFromProject(newSpec);
@@ -1681,6 +2117,144 @@ export default function App() {
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>{t('Save Snapshot & Leave', '스냅샷 저장 후 이동')}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Optimistic Concurrency Conflict Resolution Dialog */}
+      {syncConflict && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sync-conflict-title"
+          className="no-print fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-[1px] flex items-center justify-center p-4"
+        >
+          <div className="bg-white border border-rose-200 rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4 text-slate-900">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 id="sync-conflict-title" className="text-sm font-bold text-slate-900">
+                  {t(
+                    `Sync Conflict Detected (${syncConflict.programId})`,
+                    `동시 편집 충돌 감지 (${syncConflict.programId})`
+                  )}
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {t(
+                    `${syncConflict.remoteEditor} saved a newer revision (rev ${syncConflict.remoteRevision}) while you were editing from rev ${syncConflict.expectedRevision}. Choose how to resolve:`,
+                    `편집 중이던 기준 버전(rev ${syncConflict.expectedRevision})보다 최신 서버 버전(rev ${syncConflict.remoteRevision})이 ${syncConflict.remoteEditor}님에 의해 먼저 저장되었습니다. 해결 방법을 선택하세요.`
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const conflict = syncConflict;
+                  setSyncConflict(null);
+                  const specKey = conflict.remoteSpec.id || conflict.remoteSpec.program_id;
+                  loadedRevisionRef.current[specKey] = conflict.remoteRevision;
+                  markSpecPendingWrite(conflict.remoteSpec.program_id);
+                  if (conflict.remoteSpec.id) markSpecPendingWrite(conflict.remoteSpec.id);
+                  upsertWorkingSpecQuietly(conflict.remoteSpec);
+                  refreshAllSpecs();
+                  setCurrentSpec(conflict.remoteSpec);
+                  setHasUnsavedChanges(false);
+                  showWorkspaceToast(
+                    t(
+                      `Loaded latest remote version (rev ${conflict.remoteRevision}).`,
+                      `서버 최신 버전(rev ${conflict.remoteRevision})을 불러왔습니다.`
+                    )
+                  );
+                }}
+                className="w-full px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>
+                  {t(
+                    `Load Remote Version (rev ${syncConflict.remoteRevision})`,
+                    `서버 최신 버전 불러오기 (rev ${syncConflict.remoteRevision})`
+                  )}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const conflict = syncConflict;
+                  const cleanPid = `${conflict.localSpec.program_id}_CONFLICT`;
+                  const backupSpec: ProgramSpec = {
+                    ...JSON.parse(JSON.stringify(conflict.localSpec)),
+                    id: `spec-conflict-${Date.now()}`,
+                    project_code: TEMP_PROJECT_CODE,
+                    program_id: cleanPid,
+                    title: `${conflict.localSpec.title} (Conflict Backup)`,
+                    author: currentUser.name,
+                    author_id: currentUser.id,
+                    revision: 1,
+                    is_system: false,
+                  };
+                  markSpecPendingWrite(backupSpec.program_id);
+                  markSpecPendingWrite(backupSpec.id);
+                  upsertWorkingSpecQuietly(backupSpec);
+                  if (isFirebaseAuthenticated) {
+                    const tempProj = accessibleProjects.find((p) => p.code === TEMP_PROJECT_CODE);
+                    syncSpecToFirestore(backupSpec, tempProj, { forceOverwrite: true }).catch(() => {});
+                  }
+
+                  setSyncConflict(null);
+                  const specKey = conflict.remoteSpec.id || conflict.remoteSpec.program_id;
+                  loadedRevisionRef.current[specKey] = conflict.remoteRevision;
+                  upsertWorkingSpecQuietly(conflict.remoteSpec);
+                  refreshAllSpecs();
+                  setCurrentSpec(conflict.remoteSpec);
+                  setHasUnsavedChanges(false);
+                  showWorkspaceToast(
+                    t(
+                      `Backed up local edits to TEMP (${cleanPid}) & loaded remote version.`,
+                      `내 편집본을 TEMP(${cleanPid})에 백업하고 서버 최신 버전을 불러왔습니다.`
+                    )
+                  );
+                }}
+                className="w-full px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>
+                  {t(
+                    'Backup My Changes to TEMP & Load Remote Version',
+                    '내 변경사항을 TEMP에 백업 후 서버 버전 불러오기'
+                  )}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const conflict = syncConflict;
+                  setSyncConflict(null);
+                  await executeFirestoreSpecSync(conflict.localSpec, undefined, true);
+                  showWorkspaceToast(
+                    t(
+                      `Overwrote remote spec '${conflict.programId}' with your changes.`,
+                      `'${conflict.programId}' 사양서를 내 변경사항으로 덮어썼습니다.`
+                    )
+                  );
+                }}
+                className="w-full px-3.5 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>
+                  {t(
+                    'Keep My Changes & Overwrite Remote',
+                    '내 변경사항 유지 및 서버에 덮어쓰기'
+                  )}
+                </span>
               </button>
             </div>
           </div>

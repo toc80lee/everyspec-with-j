@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { authorizeHeavyRawRequest } from '../server/middleware/authMiddleware';
 
 export const config = {
   api: {
@@ -13,11 +14,17 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const caller = await authorizeHeavyRawRequest(req, res);
+  if (!caller) return;
+
   try {
     const { audioData, mimeType } = req.body || {};
 
-    if (!audioData) {
+    if (!audioData || typeof audioData !== 'string' || !audioData.trim()) {
       return res.status(400).json({ error: '오디오 데이터가 전달되지 않았습니다.' });
+    }
+    if (audioData.length > 26_000_000) {
+      return res.status(413).json({ error: '오디오 파일 크기가 허용 한도(25MB)를 초과했습니다.' });
     }
 
     const apiKey = (process.env.GEMINI_API_KEY || '').trim();

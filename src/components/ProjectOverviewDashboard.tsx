@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
   ArrowDown,
   ArrowUp,
+  BarChart3,
   CheckCircle2,
   Copy,
   Download,
@@ -22,6 +23,17 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { PageHeader } from './PageHeader';
 import {
   ProgramSpec,
@@ -42,8 +54,10 @@ import {
   exportBatchSpecsDocuments,
   exportProjectWricefIndexXlsx,
 } from '../utils/officeExport';
+import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
+import { deleteSpecFromFirestore } from '../services/firestoreSync';
 
 const SAP_MODULES: { code: SapModule; labelEn: string; labelKo: string }[] = [
   { code: 'SD', labelEn: 'Sales & Dist.', labelKo: '영업·출하' },
@@ -179,12 +193,14 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
 }) => {
   const { lang, t } = useLanguage();
   const { confirmDelete } = useConfirmDialog();
+  const { isFirebaseAuthenticated, userProfile } = useAuth();
   const [selectedModuleFilter, setSelectedModuleFilter] = useState<'ALL' | SapModule>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [sampleTypeFilter, setSampleTypeFilter] = useState<string>('ALL');
   const [lifecycleFilter, setLifecycleFilter] = useState<'ALL' | SpecLifecycleStatus>('ALL');
   const [favoritesOnlyFilter, setFavoritesOnlyFilter] = useState(false);
   const [favoriteOverviewScope, setFavoriteOverviewScope] = useState<'ALL' | 'PROJECT'>('ALL');
+  const [moduleChartScope, setModuleChartScope] = useState<'ALL' | 'USED'>('ALL');
   const [selectedProgramIds, setSelectedProgramIds] = useState<Set<string>>(new Set());
   const [selectedSortCols, setSelectedSortCols] = useState<ProgramSortCol[]>([]);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
@@ -298,6 +314,27 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
   const modulesWithSpecs = useMemo(() => {
     return SAP_MODULES.filter((mod) => (moduleCounts[mod.code] || 0) > 0);
   }, [moduleCounts]);
+
+  const moduleChartData = useMemo(() => {
+    const activeSet = new Set(activeProject?.modules || []);
+    const total = projectSpecs.length;
+    const rows = SAP_MODULES.map((mod) => {
+      const count = moduleCounts[mod.code] || 0;
+      const isActiveModule = activeSet.size === 0 ? true : activeSet.has(mod.code);
+      return {
+        module: mod.code,
+        label: lang === 'ko' ? mod.labelKo : mod.labelEn,
+        count,
+        isActiveModule,
+        sharePct: total > 0 ? Math.round((count / total) * 100) : 0,
+      };
+    });
+    if (moduleChartScope === 'USED') {
+      const filtered = rows.filter((r) => r.count > 0 || (activeSet.size > 0 && r.isActiveModule));
+      return filtered.length > 0 ? filtered : rows.filter((r) => r.count > 0);
+    }
+    return rows;
+  }, [activeProject?.modules, projectSpecs.length, moduleCounts, lang, moduleChartScope]);
 
   const favoriteIdSet = useMemo(
     () => new Set(favoriteProgramIds.map((id) => id.toUpperCase())),
@@ -542,10 +579,23 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
     });
     if (!confirmed) return;
 
-    const res = deleteSpecFromStorage(item.program_id, currentUser.name);
+    const res = deleteSpecFromStorage(item.program_id, currentUser.name, {
+      currentUserId: userProfile?.uid || currentUser.id,
+      isAdmin: canManageProjects,
+    });
     if (!res.success) {
       onNotify?.(res.message || t('Failed to delete spec.', '사양서 삭제에 실패했습니다.'));
       return;
+    }
+    if (isFirebaseAuthenticated) {
+      try {
+        await deleteSpecFromFirestore(
+          res.deletedItem?.project_code || item.project_code,
+          item.spec.id || item.program_id
+        );
+      } catch (err) {
+        console.warn('Firestore spec delete notice:', err);
+      }
     }
     onSpecsChanged(item.program_id);
     onNotify?.(
@@ -604,7 +654,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
         }
         title={
           viewMode === 'overview'
-            ? t('Project Spec Overview', '프로젝트 사양서 현황')
+            ? t('Overview', '현황')
             : activeProject.name
         }
         titleBadge={
@@ -630,16 +680,22 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
             : visibilitySummary
         }
         actions={
-          <button
-            type="button"
-            onClick={() => onOpenMeetingWizard()}
-            className="h-9 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-xs flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors shrink-0 cursor-pointer"
-            title={t('AI Spec from Meeting', '회의록 기반 AI 사양서 생성')}
-            aria-label={t('AI Spec from Meeting', '회의록 기반 AI 사양서 생성')}
-          >
-            <Mic className="w-3.5 h-3.5 text-blue-300" />
-            <span className="hidden sm:inline">{t('AI Meeting Spec', 'AI 회의록 생성')}</span>
-          </button>
+          <div className="group relative inline-flex shrink-0">
+            <button
+              type="button"
+              onClick={() => onOpenMeetingWizard()}
+              className="w-9 h-9 bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-xs flex items-center justify-center transition-colors cursor-pointer"
+              aria-label={t('AI Meeting Spec', 'AI 회의록 생성')}
+            >
+              <Mic className="w-4 h-4 text-blue-300" />
+            </button>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute top-full right-0 mt-2 z-50 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-white text-xs font-medium whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+            >
+              {t('AI Meeting Spec', 'AI 회의록 생성')}
+            </span>
+          </div>
         }
       />
 
@@ -841,6 +897,201 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                   );
                 })}
               </div>
+            </section>
+
+            {/* Recharts Visualization: Specs per Module for Selected Project */}
+            <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {t('Module Spec Distribution', '모듈별 사양서 분포')}
+                  </h3>
+                  <span className="font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                    {activeProject.code}
+                  </span>
+                  <span
+                    className="text-slate-400 hover:text-slate-700 cursor-help inline-flex"
+                    title={t(
+                      'Visualizes spec counts per SAP module for the selected project. Click any non-zero bar to view its specs.',
+                      '선택한 프로젝트의 SAP 모듈별 사양서 개수를 시각화합니다. 사양서가 있는 막대를 클릭하면 해당 모듈 목록으로 이동합니다.'
+                    )}
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+
+                {projectSpecs.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-2.5 text-[11px] text-slate-500">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-xs bg-blue-600" />
+                        <span>{t('With Specs', '사양서 등록')}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-xs bg-slate-300" />
+                        <span>{t('Empty', '미등록')}</span>
+                      </span>
+                    </div>
+
+                    <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setModuleChartScope('ALL')}
+                        className={`px-2.5 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
+                          moduleChartScope === 'ALL'
+                            ? 'bg-white text-slate-900 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {t('All (10)', '전체 (10)')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModuleChartScope('USED')}
+                        className={`px-2.5 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
+                          moduleChartScope === 'USED'
+                            ? 'bg-white text-slate-900 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {t('Active / Used', '활성 · 등록')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {projectSpecs.length === 0 ? (
+                <div className="px-5 py-8 text-center space-y-2">
+                  <BarChart3 className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-xs text-slate-500">
+                    {t(
+                      'No specs registered in this project yet to visualize by module.',
+                      '이 프로젝트에 아직 등록된 사양서가 없어 모듈별 차트를 표시할 수 없습니다.'
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <div className="p-5">
+                  <div className="w-full h-60 min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                      <BarChart
+                        data={moduleChartData}
+                        margin={{ top: 20, right: 12, left: -16, bottom: 4 }}
+                        barCategoryGap="24%"
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="module"
+                          axisLine={{ stroke: '#cbd5e1' }}
+                          tickLine={false}
+                          tick={{
+                            fill: '#334155',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            fontFamily: 'ui-monospace, monospace',
+                          }}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{
+                            fill: '#64748b',
+                            fontSize: 11,
+                            fontFamily: 'ui-monospace, monospace',
+                          }}
+                        />
+                        <Tooltip
+                          cursor={{ fill: 'rgba(241, 245, 249, 0.85)' }}
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const row = payload[0].payload as {
+                              module: SapModule;
+                              label: string;
+                              count: number;
+                              isActiveModule: boolean;
+                              sharePct: number;
+                            };
+                            return (
+                              <div className="bg-slate-900 text-white border border-slate-700 rounded-lg px-3 py-2 shadow-xl text-xs space-y-1">
+                                <div className="font-mono font-bold text-blue-300 flex items-center gap-1.5">
+                                  <span>{row.module}</span>
+                                  <span className="text-slate-300 font-sans font-normal">
+                                    · {row.label}
+                                  </span>
+                                </div>
+                                <div className="font-mono tabular-nums flex items-center justify-between gap-4">
+                                  <span className="text-slate-400">{t('Specs', '사양서')}</span>
+                                  <span className="font-bold text-white">
+                                    {row.count}
+                                    {lang === 'ko' ? '건' : ''} ({row.sharePct}%)
+                                  </span>
+                                </div>
+                                {!isCommonProject && !isTempProject && (
+                                  <div className="text-[10px] text-slate-400">
+                                    {row.isActiveModule
+                                      ? t('Active project module', '프로젝트 활성 모듈')
+                                      : t('Inactive in project settings', '비활성 모듈')}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }}
+                        />
+                        <Bar
+                          dataKey="count"
+                          radius={[6, 6, 0, 0]}
+                          maxBarSize={44}
+                          onClick={(barData) => {
+                            const payload = (barData as unknown as {
+                              payload?: { module?: SapModule; count?: number };
+                              module?: SapModule;
+                              count?: number;
+                            });
+                            const mod = payload?.payload?.module || payload?.module;
+                            const cnt = payload?.payload?.count ?? payload?.count ?? 0;
+                            if (mod && cnt > 0) {
+                              handleOpenModuleList(mod);
+                            }
+                          }}
+                        >
+                          <LabelList
+                            dataKey="count"
+                            position="top"
+                            formatter={(val: unknown) => {
+                              const n = typeof val === 'number' ? val : Number(val || 0);
+                              return n > 0 ? String(n) : '';
+                            }}
+                            fill="#1e293b"
+                            fontSize={11}
+                            fontWeight={700}
+                            fontFamily="ui-monospace, monospace"
+                          />
+                          {moduleChartData.map((entry) => (
+                            <Cell
+                              key={`cell-${entry.module}`}
+                              fill={
+                                entry.count > 0
+                                  ? '#2563eb'
+                                  : entry.isActiveModule
+                                  ? '#cbd5e1'
+                                  : '#e2e8f0'
+                              }
+                              className={
+                                entry.count > 0
+                                  ? 'cursor-pointer hover:opacity-85 transition-opacity'
+                                  : ''
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* Starred / Favorite Specifications Quick Access */}
@@ -1318,13 +1569,23 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                         const isProtected = isCommonProtectedSample(item.spec);
                         const isFav = favoriteIdSet.has(item.program_id.toUpperCase());
                         const isSelectedRow = selectedProgramIds.has(item.program_id);
+                        const statusKey: SpecLifecycleStatus = item.spec.status || 'draft';
+                        const isOwnerByUid =
+                          Boolean(userProfile?.uid || currentUser.id) &&
+                          item.spec?.author_id === (userProfile?.uid || currentUser.id);
+                        const isOwnerByName = item.author === currentUser.name;
                         const canDelete =
-                          !isProtected && !item.is_system && item.author === currentUser.name;
+                          !isProtected &&
+                          !item.is_system &&
+                          (canManageProjects ||
+                            ((isOwnerByUid || isOwnerByName) &&
+                              (item.project_code === TEMP_PROJECT_CODE ||
+                                statusKey === 'draft' ||
+                                statusKey === 'in_review')));
                         const latestVer =
                           item.change_history && item.change_history.length > 0
                             ? item.change_history[item.change_history.length - 1].version
                             : 'v1.0';
-                        const statusKey: SpecLifecycleStatus = item.spec.status || 'draft';
                         const statusMeta = LIFECYCLE_META_MAP[statusKey];
                         const statusLabel = lang === 'ko' ? statusMeta.labelKo : statusMeta.labelEn;
                         const unresolvedCount = unresolvedCommentCounts[item.spec.id] || 0;

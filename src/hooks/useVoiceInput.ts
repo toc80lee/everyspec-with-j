@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { authorizedFetch } from '../utils/authorizedFetch';
 
 interface UseVoiceInputOptions {
   lang?: string;
@@ -44,7 +45,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
           const base64Data = reader.result as string;
           const mimeType = audioBlob.type || 'audio/webm';
 
-          const res = await fetch('/api/transcribe-audio', {
+          const res = await authorizedFetch('/api/transcribe-audio', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

@@ -20,7 +20,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { AbapSyntaxMode, ProgramSourceCodeTabs, ProgramSpec } from '../types/sap';
+import { AbapSyntaxMode, ProgramSourceCodeTabs, ProgramSpec, SapProject } from '../types/sap';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import {
@@ -43,7 +43,12 @@ import {
   generateTopInclude,
   mergeUserLogicRegions,
 } from '../utils/abapCodeEngine';
-import { getProjectAbapStandards, isCommonProtectedSample } from '../utils/projectStorage';
+import {
+  getAccessibleProjectsForUser,
+  getProjectAbapStandards,
+  isCommonProtectedSample,
+  TEMP_PROJECT_CODE,
+} from '../utils/projectStorage';
 import { downloadFile } from '../utils/specExport';
 import {
   ABAP_SYNTAX_THEMES,
@@ -78,6 +83,7 @@ interface AbapCodeGeneratorProps {
   spec: ProgramSpec;
   sapGuiTheme?: SapGuiTheme;
   onUpdateSpec?: (updated: ProgramSpec) => void;
+  remoteProjects?: SapProject[];
 }
 
 type CodeViewTab = 'full' | 'program' | 'top' | 's01' | 'c01' | 'mod' | 'f01' | 'symbols';
@@ -104,8 +110,9 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({
   spec,
   sapGuiTheme,
   onUpdateSpec,
+  remoteProjects = [],
 }) => {
-  const { projectRole } = useAuth();
+  const { activeUser, userProfile, isAdmin, resolveEffectiveProjectRole } = useAuth();
   const { t, lang } = useLanguage();
   const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<CodeViewTab>('full');
@@ -129,15 +136,37 @@ export const AbapCodeGenerator: React.FC<AbapCodeGeneratorProps> = ({
   const themeMenuRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
+  const effectiveProjectRole = useMemo(() => {
+    const projCode = (spec.project_code || TEMP_PROJECT_CODE).toUpperCase();
+    const projects = getAccessibleProjectsForUser(activeUser.name, {
+      uid: userProfile?.uid,
+      isAdmin,
+      assignedProjects: userProfile?.assignedProjects || [],
+      remoteProjects,
+    });
+    const activeProj = projects.find((p) => p.code === projCode) || null;
+    return resolveEffectiveProjectRole(activeProj);
+  }, [
+    spec.project_code,
+    activeUser.name,
+    userProfile?.uid,
+    userProfile?.assignedProjects,
+    isAdmin,
+    remoteProjects,
+    resolveEffectiveProjectRole,
+  ]);
+
   const isProtectedCommon = isCommonProtectedSample(spec);
   const isApprovedLocked =
-    spec.status === 'approved' && projectRole !== 'PM' && projectRole !== 'ADMIN';
+    (spec.status === 'approved' || spec.status === 'qa_passed') &&
+    effectiveProjectRole !== 'PM' &&
+    effectiveProjectRole !== 'ADMIN';
   const isReadOnly = !onUpdateSpec || isProtectedCommon || isApprovedLocked;
 
   const readOnlyReason = isProtectedCommon
     ? t('COMM standard samples are read-only. Copy to a project to edit.', 'COMM 표준 샘플은 읽기 전용입니다. 프로젝트로 복사 후 수정하세요.')
     : isApprovedLocked
-    ? t('Only PM/ADMIN can edit source code for Approved specs.', '승인됨(Approved) 상태는 PM/ADMIN만 소스를 수정할 수 있습니다.')
+    ? t('Only PM/ADMIN can edit source code for Approved or QA Passed specs.', '승인됨(Approved)/QA 통과 상태는 PM/ADMIN만 소스를 수정할 수 있습니다.')
     : !onUpdateSpec
     ? t('Currently in view-only mode.', '현재 보기 전용 모드입니다.')
     : '';
