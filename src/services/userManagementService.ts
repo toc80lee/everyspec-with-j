@@ -440,7 +440,35 @@ export async function updateUserAssignedProjects(
 
     try {
       const snap = await getDoc(projRef);
-      if (!snap.exists()) continue;
+      if (!snap.exists()) {
+        const fallbackOwnerId = proj.ownerId || cleanUid;
+        const nextUids = shouldInclude
+          ? Array.from(new Set([fallbackOwnerId, cleanUid])).slice(0, 50)
+          : [fallbackOwnerId];
+        const nextNames = shouldInclude
+          ? Array.from(new Set([...(proj.members || ['Josh Lee']), targetUser.displayName])).slice(0, 50)
+          : proj.members || ['Josh Lee'];
+        await setDoc(projRef, {
+          code,
+          name: (proj.name || code).slice(0, 120),
+          description: (proj.description || '').slice(0, 1000),
+          visibility: 'project',
+          target_sap_release: (proj.target_sap_release || 'SAP S/4HANA 2023').slice(0, 80),
+          start_date: (proj.start_date || '').slice(0, 20),
+          end_date: (proj.end_date || '').slice(0, 20),
+          ownerId: fallbackOwnerId,
+          ownerName: (proj.owner || 'Josh Lee').slice(0, 80),
+          memberUids: nextUids,
+          memberNames: nextNames,
+          modules: (proj.modules && proj.modules.length > 0 ? proj.modules : ['SD']).slice(0, 10),
+          is_system: false,
+          created_date: (proj.created_date || new Date().toISOString().split('T')[0]).slice(0, 30),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        await syncProjectChildMemberUids(code, nextUids);
+        continue;
+      }
 
       const data = snap.data() || {};
       const existingUids: string[] = Array.isArray(data.memberUids) ? data.memberUids : [];
@@ -483,13 +511,14 @@ export async function syncProjectMembershipChange(
   const cleanCode = projectCode.trim().toUpperCase();
   if (!cleanCode || cleanCode === COMMON_PROJECT_CODE || cleanCode === TEMP_PROJECT_CODE) return;
 
-  const prevSet = new Set(prevMemberUids);
-  const nextSet = new Set(nextMemberUids);
+  const uniqueNextUids = Array.from(new Set(nextMemberUids.filter(Boolean)));
+  const nextSet = new Set(uniqueNextUids);
+  const removedUids = Array.from(new Set(prevMemberUids.filter(Boolean))).filter(
+    (uid) => !nextSet.has(uid)
+  );
 
-  const addedUids = nextMemberUids.filter((uid) => !prevSet.has(uid));
-  const removedUids = prevMemberUids.filter((uid) => !nextSet.has(uid));
-
-  for (const uid of addedUids) {
+  // Idempotently ensure every active member UID has cleanCode in assignedProjects
+  for (const uid of uniqueNextUids) {
     const cleanUid = sanitizeFirebaseId(uid);
     try {
       const ref = doc(db, 'users', cleanUid);
@@ -530,5 +559,5 @@ export async function syncProjectMembershipChange(
     }
   }
 
-  await syncProjectChildMemberUids(cleanCode, nextMemberUids);
+  await syncProjectChildMemberUids(cleanCode, uniqueNextUids);
 }

@@ -15,7 +15,7 @@ import {
   History,
   Shield,
 } from 'lucide-react';
-import { ProgramSpec } from '../types/sap';
+import { ProgramSpec, SapProject } from '../types/sap';
 import {
   getSavedSpecList,
   saveSpecToStorage,
@@ -36,6 +36,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 interface SpecManagerModalProps {
   currentSpec: ProgramSpec;
   isOpen: boolean;
+  remoteProjects?: SapProject[];
   onClose: () => void;
   onSelectSpec: (spec: ProgramSpec) => void;
 }
@@ -43,6 +44,7 @@ interface SpecManagerModalProps {
 export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
   currentSpec,
   isOpen,
+  remoteProjects = [],
   onClose,
   onSelectSpec,
 }) => {
@@ -100,6 +102,7 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
     uid: userProfile?.uid,
     isAdmin,
     assignedProjects: userProfile?.assignedProjects || [],
+    remoteProjects,
   });
   const accessibleCodes = new Set(accessibleProjects.map((p) => p.code));
 

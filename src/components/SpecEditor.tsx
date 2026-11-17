@@ -63,6 +63,7 @@ import {
 import {
   ProgramSpec,
   SapModule,
+  SapProject,
   TestCase,
   AlvToolbarButton,
   AlvLayout,
@@ -110,6 +111,7 @@ interface SpecEditorProps {
   onOpenMeetingMinute?: (minuteId: string) => void;
   onCommentsChanged?: () => void;
   onNotify?: (message: string) => void;
+  remoteProjects?: SapProject[];
 }
 
 export const SpecEditor: React.FC<SpecEditorProps> = ({
@@ -124,6 +126,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
   onOpenMeetingMinute,
   onCommentsChanged,
   onNotify,
+  remoteProjects = [],
 }) => {
   const { lang, t } = useLanguage();
   // Main Tabs: 1. Program Spec -> 2. Selection Screen -> 3. Main Screen
@@ -184,10 +187,25 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
     return () => window.removeEventListener(USERS_UPDATED_EVENT, syncUsers);
   }, []);
 
-  const { activeUser, projectRole } = useAuth();
+  const { activeUser, projectRole, userProfile, isAdmin } = useAuth();
   const accessibleProjects = useMemo(
-    () => getAccessibleProjectsForUser(activeUser.name),
-    [activeUser.name, isSpecManagerOpen, isCopyModalOpen, spec.project_code]
+    () =>
+      getAccessibleProjectsForUser(activeUser.name, {
+        uid: userProfile?.uid,
+        isAdmin,
+        assignedProjects: userProfile?.assignedProjects || [],
+        remoteProjects,
+      }),
+    [
+      activeUser.name,
+      userProfile?.uid,
+      isAdmin,
+      userProfile?.assignedProjects,
+      remoteProjects,
+      isSpecManagerOpen,
+      isCopyModalOpen,
+      spec.project_code,
+    ]
   );
   const isReadOnlyCommon = isReadOnlyCommonSpec(spec);
   const isLockedApproved =
@@ -2166,6 +2184,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
       <SpecManagerModal
         currentSpec={spec}
         isOpen={isSpecManagerOpen}
+        remoteProjects={remoteProjects}
         onClose={() => setIsSpecManagerOpen(false)}
         onSelectSpec={(newSpec) => onChange(newSpec)}
       />
@@ -2228,6 +2247,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
         isOpen={isCopyModalOpen}
         sourceSpec={spec}
         defaultTargetProject={isReadOnlyCommon ? TEMP_PROJECT_CODE : spec.project_code}
+        remoteProjects={remoteProjects}
         onClose={() => setIsCopyModalOpen(false)}
         onCopied={(newSpec) => {
           onChange(newSpec);

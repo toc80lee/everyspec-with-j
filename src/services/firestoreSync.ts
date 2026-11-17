@@ -136,7 +136,8 @@ function mapDocToSapProject(data: Record<string, any>): SapProject {
 export function subscribeAccessibleProjects(
   uid: string,
   isAdmin: boolean,
-  onProjects: (projects: SapProject[]) => void
+  onProjects: (projects: SapProject[]) => void,
+  assignedProjectCodes: string[] = []
 ): Unsubscribe {
   const user = auth.currentUser;
   if (!user) return () => {};
@@ -155,11 +156,12 @@ export function subscribeAccessibleProjects(
   }
 
   let commonProjects: SapProject[] = [];
-  let assignedProjects: SapProject[] = [];
+  let memberQueryProjects: SapProject[] = [];
+  const directAssignedMap = new Map<string, SapProject>();
 
   const emitMerged = () => {
     const map = new Map<string, SapProject>();
-    [...commonProjects, ...assignedProjects].forEach((p) => {
+    [...commonProjects, ...memberQueryProjects, ...Array.from(directAssignedMap.values())].forEach((p) => {
       if (p.code) map.set(p.code, p);
     });
     onProjects(Array.from(map.values()));
@@ -172,24 +174,55 @@ export function subscribeAccessibleProjects(
       emitMerged();
     },
     (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'projects');
+      console.warn('Common projects subscription warning:', err);
     }
   );
 
-  const unsubAssigned = onSnapshot(
-    query(collection(db, 'projects'), where('memberUids', 'array-contains', uid)),
+  // Query includes visibility == 'project' to satisfy Firestore static allow list validation
+  const unsubAssignedQuery = onSnapshot(
+    query(
+      collection(db, 'projects'),
+      where('visibility', '==', 'project'),
+      where('memberUids', 'array-contains', uid)
+    ),
     (snap) => {
-      assignedProjects = snap.docs.map((d) => mapDocToSapProject(d.data() || {}));
+      memberQueryProjects = snap.docs.map((d) => mapDocToSapProject(d.data() || {}));
       emitMerged();
     },
     (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'projects');
+      console.warn('Assigned projects query fallback warning:', err);
     }
+  );
+
+  // Direct document listeners for each explicitly assigned project code (uses allow get, zero composite index needed)
+  const cleanCodes = Array.from(
+    new Set(
+      assignedProjectCodes
+        .map((c) => normalizeLegacyProjectCode(c))
+        .filter((c) => c && c !== COMMON_PROJECT_CODE && c !== TEMP_PROJECT_CODE)
+    )
+  );
+  const directUnsubs = cleanCodes.map((code) =>
+    onSnapshot(
+      doc(db, 'projects', code),
+      (snap) => {
+        if (snap.exists()) {
+          directAssignedMap.set(code, mapDocToSapProject(snap.data() || {}));
+        } else {
+          directAssignedMap.delete(code);
+        }
+        emitMerged();
+      },
+      (err) => {
+        console.warn(`Assigned project doc (${code}) listener warning:`, err);
+      }
+    )
   );
 
   return () => {
     unsubCommon();
-    unsubAssigned();
+    unsubAssignedQuery();
+    directUnsubs.forEach((u) => u());
   };
 }
 
@@ -233,12 +266,15 @@ export async function syncSpecToFirestore(
     }
 
     const latestProjSnap = await getDoc(projRef);
-    const memberUids: string[] = Array.from(
-      new Set([
-        ...(latestProjSnap.exists() ? latestProjSnap.data().memberUids || [] : []),
-        user.uid,
-      ])
-    ).slice(0, 50);
+    const memberUids: string[] =
+      projectId === TEMP_PROJECT_CODE
+        ? [user.uid]
+        : Array.from(
+            new Set([
+              ...(latestProjSnap.exists() ? latestProjSnap.data().memberUids || [] : []),
+              user.uid,
+            ])
+          ).slice(0, 50);
 
     const existingSnap = await getDoc(ref);
     const status: SpecLifecycleStatus = spec.status || 'draft';
@@ -309,9 +345,12 @@ export async function syncSnapshotToFirestore(
       : projectId === 'TEMP'
       ? 'temp'
       : 'project';
-    const memberUids: string[] = Array.from(
-      new Set([...(projSnap.exists() ? projSnap.data().memberUids || [] : []), user.uid])
-    ).slice(0, 50);
+    const memberUids: string[] =
+      projectId === TEMP_PROJECT_CODE
+        ? [user.uid]
+        : Array.from(
+            new Set([...(projSnap.exists() ? projSnap.data().memberUids || [] : []), user.uid])
+          ).slice(0, 50);
 
     const compactSnapshot = stripUndefinedDeep({
       ...spec,
@@ -359,9 +398,16 @@ export async function fetchSnapshotsFromFirestore(
   try {
     const q =
       cleanProj === 'TEMP'
-        ? query(collection(db, colPath), where('authorId', '==', user.uid))
+        ? query(
+            collection(db, colPath),
+            where('projectVisibility', '==', 'temp'),
+            where('authorId', '==', user.uid)
+          )
+        : cleanProj === 'COMM'
+        ? query(collection(db, colPath), where('projectVisibility', '==', 'common'))
         : query(
             collection(db, colPath),
+            where('projectVisibility', '==', 'project'),
             where('projectMemberUids', 'array-contains', user.uid)
           );
     const snap = await getDocs(q);
@@ -383,9 +429,12 @@ export async function syncMeetingMinuteToFirestore(minute: ProjectMeetingMinute)
   try {
     const projRef = doc(db, 'projects', projectId);
     const projSnap = await getDoc(projRef);
-    const memberUids: string[] = Array.from(
-      new Set([...(projSnap.exists() ? projSnap.data().memberUids || [] : []), user.uid])
-    ).slice(0, 50);
+    const memberUids: string[] =
+      projectId === TEMP_PROJECT_CODE
+        ? [user.uid]
+        : Array.from(
+            new Set([...(projSnap.exists() ? projSnap.data().memberUids || [] : []), user.uid])
+          ).slice(0, 50);
     const existingSnap = await getDoc(ref);
 
     const payload: Record<string, any> = {
@@ -470,10 +519,18 @@ export function subscribeProjectSpecs(
   const colPath = `projects/${cleanProj}/specs`;
   const q =
     cleanProj === TEMP_PROJECT_CODE
-      ? query(collection(db, colPath), where('authorId', '==', user.uid))
+      ? query(
+          collection(db, colPath),
+          where('projectVisibility', '==', 'temp'),
+          where('authorId', '==', user.uid)
+        )
       : cleanProj === COMMON_PROJECT_CODE
       ? query(collection(db, colPath), where('projectVisibility', '==', 'common'))
-      : query(collection(db, colPath), where('projectMemberUids', 'array-contains', user.uid));
+      : query(
+          collection(db, colPath),
+          where('projectVisibility', '==', 'project'),
+          where('projectMemberUids', 'array-contains', user.uid)
+        );
 
   return onSnapshot(
     q,
@@ -510,10 +567,18 @@ export function subscribeProjectMeetings(
   const colPath = `projects/${cleanProj}/meetings`;
   const q =
     cleanProj === TEMP_PROJECT_CODE
-      ? query(collection(db, colPath), where('authorId', '==', user.uid))
+      ? query(
+          collection(db, colPath),
+          where('projectVisibility', '==', 'temp'),
+          where('authorId', '==', user.uid)
+        )
       : cleanProj === COMMON_PROJECT_CODE
       ? query(collection(db, colPath), where('projectVisibility', '==', 'common'))
-      : query(collection(db, colPath), where('projectMemberUids', 'array-contains', user.uid));
+      : query(
+          collection(db, colPath),
+          where('projectVisibility', '==', 'project'),
+          where('projectMemberUids', 'array-contains', user.uid)
+        );
 
   return onSnapshot(
     q,
@@ -555,12 +620,15 @@ export async function syncReviewCommentToFirestore(
     const projVisibility = projSnap.exists()
       ? projSnap.data().visibility
       : project?.visibility || (projectId === COMMON_PROJECT_CODE ? 'common' : projectId === TEMP_PROJECT_CODE ? 'temp' : 'project');
-    const memberUids: string[] = Array.from(
-      new Set([
-        ...(projSnap.exists() ? projSnap.data().memberUids || [] : project?.memberUids || []),
-        user.uid,
-      ])
-    ).slice(0, 50);
+    const memberUids: string[] =
+      projectId === TEMP_PROJECT_CODE
+        ? [user.uid]
+        : Array.from(
+            new Set([
+              ...(projSnap.exists() ? projSnap.data().memberUids || [] : project?.memberUids || []),
+              user.uid,
+            ])
+          ).slice(0, 50);
 
     const existingSnap = await getDoc(ref);
     const payload: Record<string, any> = {
@@ -624,10 +692,18 @@ export function subscribeSpecReviewComments(
   const colPath = `projects/${cleanProj}/specs/${cleanSpec}/comments`;
   const q =
     cleanProj === TEMP_PROJECT_CODE
-      ? query(collection(db, colPath), where('authorId', '==', user.uid))
+      ? query(
+          collection(db, colPath),
+          where('projectVisibility', '==', 'temp'),
+          where('authorId', '==', user.uid)
+        )
       : cleanProj === COMMON_PROJECT_CODE
       ? query(collection(db, colPath), where('projectVisibility', '==', 'common'))
-      : query(collection(db, colPath), where('projectMemberUids', 'array-contains', user.uid));
+      : query(
+          collection(db, colPath),
+          where('projectVisibility', '==', 'project'),
+          where('projectMemberUids', 'array-contains', user.uid)
+        );
 
   return onSnapshot(
     q,

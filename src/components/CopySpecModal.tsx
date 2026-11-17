@@ -16,6 +16,7 @@ interface CopySpecModalProps {
   isOpen: boolean;
   sourceSpec: ProgramSpec | null;
   defaultTargetProject?: string;
+  remoteProjects?: SapProject[];
   onClose: () => void;
   onCopied: (newSpec: ProgramSpec) => void;
 }
@@ -24,6 +25,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
   isOpen,
   sourceSpec,
   defaultTargetProject,
+  remoteProjects = [],
   onClose,
   onCopied,
 }) => {
@@ -42,6 +44,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
       uid: userProfile?.uid,
       isAdmin,
       assignedProjects: userProfile?.assignedProjects || [],
+      remoteProjects,
     }).filter((p) => p.code !== COMMON_PROJECT_CODE);
     setProjects(accessible);
 
@@ -65,7 +68,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
     setNewTcode(compliant.tcode);
     setNewTitle(`${sourceSpec.title} (Copy)`);
     setErrorMsg(null);
-  }, [isOpen, sourceSpec, defaultTargetProject, currentUser.name, userProfile?.uid, isAdmin, userProfile?.assignedProjects]);
+  }, [isOpen, sourceSpec, defaultTargetProject, currentUser.name, userProfile?.uid, isAdmin, userProfile?.assignedProjects, remoteProjects]);
 
   const targetStandards = getProjectAbapStandards(targetProject);
 

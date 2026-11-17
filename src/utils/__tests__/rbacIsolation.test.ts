@@ -120,6 +120,19 @@ describe('RBAC 3-scope isolation', () => {
     expect(unassignedProjects.map((p) => p.code)).toEqual(['COMM', 'TEMP']);
   });
 
+  it('includes assigned projects from local fallback even when remoteProjects only contains COMM, while hiding unassigned projects', () => {
+    const partialRemoteOnlyComm = REMOTE_PROJECTS.filter((p) => p.code === COMMON_PROJECT_CODE);
+    const aliceProjects = getAccessibleProjectsForUser('Alice Kim', {
+      uid: 'uid-alice',
+      isAdmin: false,
+      assignedProjects: ['2601'],
+      remoteProjects: partialRemoteOnlyComm,
+    });
+
+    expect(aliceProjects.map((p) => p.code)).toEqual(['COMM', '2601', 'TEMP']);
+    expect(aliceProjects.some((p) => p.code === '2602')).toBe(false);
+  });
+
   it('grants admins visibility into all projects including COMM, team projects, and TEMP', () => {
     const adminProjects = getAccessibleProjectsForUser('Josh Lee', {
       uid: 'uid-josh',

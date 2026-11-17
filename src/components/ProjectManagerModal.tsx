@@ -50,6 +50,7 @@ interface ProjectManagerModalProps {
   onClose: () => void;
   onProjectsChanged: (selectedCode?: string) => void;
   initialProjectCode?: string;
+  remoteProjects?: SapProject[];
 }
 
 const MODULE_OPTIONS: { code: SapModule; labelEn: string; labelKo: string }[] = [
@@ -78,6 +79,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   onClose,
   onProjectsChanged,
   initialProjectCode,
+  remoteProjects = [],
 }) => {
   const { lang, t } = useLanguage();
   const { isAdmin, userProfile: currentAdminProfile } = useAuth();
@@ -145,18 +147,61 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setNotice(null);
   };
 
+  const initializedOpenRef = React.useRef(false);
+
   useEffect(() => {
-    if (!isOpen) return;
-    const list = getProjects();
-    setProjects(list);
-    const target =
-      (initialProjectCode && list.find((p) => p.code === initialProjectCode)) ||
-      list.find((p) => !p.is_system) ||
-      list[0];
-    if (target) {
-      loadIntoForm(target);
+    if (!isOpen) {
+      initializedOpenRef.current = false;
+      return;
     }
-  }, [isOpen, initialProjectCode]);
+    const localList = getProjects();
+    const remoteByCode = new Map<string, SapProject>();
+    remoteProjects.forEach((rp) => {
+      if (rp?.code) remoteByCode.set(rp.code.toUpperCase(), rp);
+    });
+
+    const mergedMap = new Map<string, SapProject>();
+    localList.forEach((lp) => {
+      const rp = remoteByCode.get(lp.code.toUpperCase());
+      mergedMap.set(
+        lp.code.toUpperCase(),
+        rp
+          ? {
+              ...lp,
+              ...rp,
+              members: enforceProjectMembers(
+                rp.members && rp.members.length > 0 ? rp.members : lp.members,
+                rp.owner || lp.owner
+              ),
+              memberUids: Array.isArray(rp.memberUids) ? rp.memberUids.filter(Boolean) : lp.memberUids || [],
+            }
+          : lp
+      );
+    });
+    remoteProjects.forEach((rp) => {
+      const code = rp.code.toUpperCase();
+      if (!mergedMap.has(code)) {
+        mergedMap.set(code, {
+          ...rp,
+          members: enforceProjectMembers(rp.members || [], rp.owner),
+        });
+      }
+    });
+
+    const list = Array.from(mergedMap.values());
+    setProjects(list);
+
+    if (!initializedOpenRef.current) {
+      initializedOpenRef.current = true;
+      const target =
+        (initialProjectCode && list.find((p) => p.code === initialProjectCode)) ||
+        list.find((p) => !p.is_system) ||
+        list[0];
+      if (target) {
+        loadIntoForm(target);
+      }
+    }
+  }, [isOpen, initialProjectCode, remoteProjects]);
 
   useEffect(() => {
     if (!isOpen || !isAdmin) return;
@@ -307,13 +352,29 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       return;
     }
 
+    const resolvedExistingUids = formMembers
+      .map(
+        (name) =>
+          approvedUsers.find(
+            (u) => u.displayName.trim().toLowerCase() === name.trim().toLowerCase()
+          )?.uid
+      )
+      .filter((id): id is string => Boolean(id));
+    const targetProj = projects.find((p) => p.code === editingCode);
     const nextMembers = enforceProjectMembers([...formMembers, user.displayName], formOwner);
-    const nextMemberUids = Array.from(new Set([...formMemberUids, user.uid]));
+    const nextMemberUids = Array.from(
+      new Set([
+        ...formMemberUids,
+        ...resolvedExistingUids,
+        ...(targetProj?.ownerId ? [targetProj.ownerId] : []),
+        ...(currentAdminProfile?.uid ? [currentAdminProfile.uid] : []),
+        user.uid,
+      ].filter(Boolean))
+    );
     setFormMembers(nextMembers);
     setFormMemberUids(nextMemberUids);
 
     if (!isCreatingNew && editingCode) {
-      const targetProj = projects.find((p) => p.code === editingCode);
       if (targetProj) {
         const saveRes = saveProject({
           ...targetProj,
@@ -323,6 +384,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
           start_date: formStartDate || undefined,
           end_date: formEndDate || undefined,
           owner: formOwner || targetProj.owner || DEFAULT_OPERATOR_USER.name,
+          ownerId: targetProj.ownerId || currentAdminProfile?.uid,
           members: nextMembers,
           memberUids: nextMemberUids,
           modules: formModules,
@@ -333,8 +395,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
             await syncProjectToFirestore(saveRes.savedProject);
             await syncProjectMembershipChange(editingCode, nextMemberUids, prevMemberUids);
             setPrevMemberUids(nextMemberUids);
-          } catch (err) {
-            console.warn('Firestore project sync notice:', err);
+          } catch (err: any) {
+            console.error('Firestore project sync failed:', err);
+            setNotice({
+              type: 'error',
+              text: err?.message || t('Failed to sync member assignment to Firestore.', 'Firestore 멤버 권한 동기화에 실패했습니다.'),
+            });
+            return;
           }
           setProjects(saveRes.list);
           onProjectsChanged(editingCode);
@@ -384,19 +451,32 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     if (!isCreatingNew && editingCode) {
       const targetProj = projects.find((p) => p.code === editingCode);
       if (targetProj) {
+        const retainedUids = Array.from(
+          new Set([
+            ...nextMemberUids,
+            ...(targetProj.ownerId && targetProj.ownerId !== matchedUid ? [targetProj.ownerId] : []),
+            ...(currentAdminProfile?.uid && currentAdminProfile.uid !== matchedUid ? [currentAdminProfile.uid] : []),
+          ].filter(Boolean))
+        );
         const saveRes = saveProject({
           ...targetProj,
           owner: nextOwner,
           members: nextMembers,
-          memberUids: nextMemberUids,
+          memberUids: retainedUids,
         });
         if (saveRes.success && saveRes.savedProject) {
           try {
             await syncProjectToFirestore(saveRes.savedProject);
-            await syncProjectMembershipChange(editingCode, nextMemberUids, prevMemberUids);
-            setPrevMemberUids(nextMemberUids);
-          } catch (err) {
-            console.warn('Firestore project sync notice:', err);
+            await syncProjectMembershipChange(editingCode, retainedUids, prevMemberUids);
+            setPrevMemberUids(retainedUids);
+            setFormMemberUids(retainedUids);
+          } catch (err: any) {
+            console.error('Firestore project sync failed:', err);
+            setNotice({
+              type: 'error',
+              text: err?.message || t('Failed to sync member removal to Firestore.', 'Firestore 멤버 제외 동기화에 실패했습니다.'),
+            });
+            return;
           }
           setProjects(saveRes.list);
           onProjectsChanged(editingCode);
@@ -465,11 +545,22 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     }
 
     const enforcedMembers = enforceProjectMembers(formMembers, formOwner);
+    const resolvedMemberUids = enforcedMembers
+      .map(
+        (name) =>
+          approvedUsers.find(
+            (u) => u.displayName.trim().toLowerCase() === name.trim().toLowerCase()
+          )?.uid
+      )
+      .filter((id): id is string => Boolean(id));
+    const existingTarget = projects.find((p) => p.code === cleanCode);
     const nextMemberUids = Array.from(
       new Set([
         ...formMemberUids,
+        ...resolvedMemberUids,
+        ...(existingTarget?.ownerId ? [existingTarget.ownerId] : []),
         ...(currentAdminProfile?.uid ? [currentAdminProfile.uid] : []),
-      ])
+      ].filter(Boolean))
     );
 
     const res = saveProject({
@@ -481,7 +572,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       start_date: formStartDate || undefined,
       end_date: formEndDate || undefined,
       owner: formOwner || DEFAULT_OPERATOR_USER.name,
-      ownerId: currentAdminProfile?.uid,
+      ownerId: existingTarget?.ownerId || currentAdminProfile?.uid,
       members: enforcedMembers,
       memberUids: nextMemberUids,
       modules: formModules,
@@ -502,8 +593,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       await syncProjectToFirestore(res.savedProject);
       await syncProjectMembershipChange(res.savedProject.code, nextMemberUids, prevMemberUids);
       setPrevMemberUids(nextMemberUids);
-    } catch (err) {
-      console.warn('Firestore project sync notice:', err);
+    } catch (err: any) {
+      console.error('Firestore project sync failed:', err);
+      setNotice({
+        type: 'error',
+        text: err?.message || t('Failed to sync project settings to Firestore.', 'Firestore 프로젝트 동기화에 실패했습니다.'),
+      });
+      return;
     }
 
     setProjects(res.list);

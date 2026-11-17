@@ -104,6 +104,8 @@ export default function App() {
     setAllSavedSpecs(getSavedSpecList());
   }, [authActiveUser]);
 
+  const assignedProjectsKey = JSON.stringify(userProfile?.assignedProjects || []);
+
   // Subscribe to Firestore projects accessible to current user (Admin = all, User = COMM + assigned)
   useEffect(() => {
     if (!isFirebaseAuthenticated || !userProfile?.uid) {
@@ -111,12 +113,18 @@ export default function App() {
       setRemoteProjectsLoaded(false);
       return;
     }
-    const unsub = subscribeAccessibleProjects(userProfile.uid, isAdmin, (projs) => {
-      setRemoteProjects(projs);
-      setRemoteProjectsLoaded(true);
-    });
+    const assignedCodes = userProfile.assignedProjects || [];
+    const unsub = subscribeAccessibleProjects(
+      userProfile.uid,
+      isAdmin,
+      (projs) => {
+        setRemoteProjects(projs);
+        setRemoteProjectsLoaded(true);
+      },
+      assignedCodes
+    );
     return () => unsub();
-  }, [isFirebaseAuthenticated, userProfile?.uid, isAdmin]);
+  }, [isFirebaseAuthenticated, userProfile?.uid, isAdmin, assignedProjectsKey]);
 
   // Seed missing local system/team projects once when Admin connects so non-admin users can read COMM & assigned projects
   useEffect(() => {
@@ -1304,6 +1312,7 @@ export default function App() {
           <ProjectManagerModal
             isOpen={true}
             initialProjectCode={selectedProjectCode}
+            remoteProjects={remoteProjects}
             onClose={closeFullPageMode}
             onProjectsChanged={(nextSelected) => {
               setProjectRefreshKey((k) => k + 1);
@@ -1373,6 +1382,7 @@ export default function App() {
                 onOpenMeetingMinute={handleOpenMeetingMinuteFromSpec}
                 onCommentsChanged={() => setCommentRefreshKey((k) => k + 1)}
                 onNotify={(msg) => showWorkspaceToast(msg)}
+                remoteProjects={remoteProjects}
               />
             </div>
 
@@ -1471,6 +1481,7 @@ export default function App() {
               onOpenMeetingMinute={handleOpenMeetingMinuteFromSpec}
               onCommentsChanged={() => setCommentRefreshKey((k) => k + 1)}
               onNotify={(msg) => showWorkspaceToast(msg)}
+              remoteProjects={remoteProjects}
             />
           </div>
         )}
@@ -1561,8 +1572,17 @@ export default function App() {
         isOpen={copyingSpec !== null}
         sourceSpec={copyingSpec}
         defaultTargetProject={selectedProjectCode !== COMMON_PROJECT_CODE ? selectedProjectCode : TEMP_PROJECT_CODE}
+        remoteProjects={remoteProjects}
         onClose={() => setCopyingSpec(null)}
         onCopied={(newSpec) => {
+          if (isFirebaseAuthenticated) {
+            const projObj = accessibleProjects.find(
+              (p) => p.code === (newSpec.project_code || TEMP_PROJECT_CODE)
+            );
+            syncSpecToFirestore(newSpec, projObj).catch((err) => {
+              console.warn('Firestore copied spec sync skipped:', err);
+            });
+          }
           refreshAllSpecs();
           handleOpenProgramFromProject(newSpec);
           showWorkspaceToast(`Copied '${newSpec.program_id}' to [${newSpec.project_code}].`);

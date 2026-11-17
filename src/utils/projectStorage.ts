@@ -356,6 +356,10 @@ export function getAccessibleProjectsForUser(
   const cleanUser = userName.trim();
   const localAll = getProjects();
 
+  const assignedSet = new Set(
+    (options?.assignedProjects || []).map((c) => normalizeLegacyProjectCode(c)).filter(Boolean)
+  );
+
   // Merge remote Firestore projects with local projects when authenticated
   let sourceList: SapProject[] = localAll;
   if (options?.remoteProjects && options.remoteProjects.length > 0) {
@@ -367,6 +371,11 @@ export function getAccessibleProjectsForUser(
 
     if (options.isAdmin) {
       localAll.forEach((p) => mergedMap.set(p.code, p));
+    } else if (assignedSet.size > 0) {
+      // Fallback: include local project metadata if user is explicitly assigned to that code
+      localAll
+        .filter((p) => assignedSet.has(p.code))
+        .forEach((p) => mergedMap.set(p.code, p));
     }
 
     options.remoteProjects.forEach((rp) => {
@@ -383,9 +392,6 @@ export function getAccessibleProjectsForUser(
   }
 
   if (options) {
-    const assignedSet = new Set(
-      (options.assignedProjects || []).map((c) => normalizeLegacyProjectCode(c))
-    );
     const uid = (options.uid || '').trim();
     const isAdmin = Boolean(options.isAdmin);
 
