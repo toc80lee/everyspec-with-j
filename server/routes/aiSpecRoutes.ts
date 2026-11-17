@@ -5,6 +5,7 @@ import {
   SAP_AUDIO_GLOSSARY_HINT,
   formatCustomTablesContext,
   getGeminiClient,
+  isCredentialOrMissingKeyError,
 } from '../geminiClient';
 import {
   buildFullSpecFallback,
@@ -29,7 +30,8 @@ aiSpecRoutes.post('/api/transcribe-audio', async (req, res) => {
     }
 
     const base64Data = audioData.includes(',') ? audioData.split(',')[1] : audioData;
-    const resolvedMimeType = mimeType || 'audio/webm';
+    const rawMime = typeof mimeType === 'string' && mimeType.trim() ? mimeType.trim() : 'audio/webm';
+    const resolvedMimeType = rawMime.split(';')[0].trim() || 'audio/webm';
 
     const audioPart = {
       inlineData: {
@@ -56,6 +58,13 @@ aiSpecRoutes.post('/api/transcribe-audio', async (req, res) => {
     return res.json({ text: transcribedText });
   } catch (error: any) {
     console.error('Audio transcription error:', error);
+    if (isCredentialOrMissingKeyError(error)) {
+      return res.status(503).json({
+        code: 'MISSING_GEMINI_API_KEY',
+        error:
+          '음성 인식 API 키(GEMINI_API_KEY)가 설정되어 있지 않습니다. AI Studio의 Settings > Secrets 패널에서 GEMINI_API_KEY를 등록한 뒤 다시 시도해 주세요.',
+      });
+    }
     return res.status(500).json({
       error: error?.message || '음성 인식 중 오류가 발생했습니다.',
     });

@@ -20,8 +20,17 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: '오디오 데이터가 전달되지 않았습니다.' });
     }
 
+    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      return res.status(503).json({
+        code: 'MISSING_GEMINI_API_KEY',
+        error:
+          '음성 인식 API 키(GEMINI_API_KEY)가 설정되어 있지 않습니다. AI Studio의 Settings > Secrets 패널에서 GEMINI_API_KEY를 등록한 뒤 다시 시도해 주세요.',
+      });
+    }
+
     const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
+      apiKey,
       httpOptions: {
         headers: {
           'User-Agent': 'aistudio-build',
@@ -30,7 +39,8 @@ export default async function handler(req: any, res: any) {
     });
 
     const base64Data = audioData.includes(',') ? audioData.split(',')[1] : audioData;
-    const resolvedMimeType = mimeType || 'audio/webm';
+    const rawMime = typeof mimeType === 'string' && mimeType.trim() ? mimeType.trim() : 'audio/webm';
+    const resolvedMimeType = rawMime.split(';')[0].trim() || 'audio/webm';
 
     const audioPart = {
       inlineData: {
@@ -62,6 +72,18 @@ export default async function handler(req: any, res: any) {
     return res.status(200).json({ text: transcribedText });
   } catch (error: any) {
     console.error('Audio transcription error in Vercel function:', error);
+    const msg = String(error?.message || '').toLowerCase();
+    if (
+      msg.includes('default credentials') ||
+      msg.includes('access_token_scope_insufficient') ||
+      msg.includes('api key should be set')
+    ) {
+      return res.status(503).json({
+        code: 'MISSING_GEMINI_API_KEY',
+        error:
+          '음성 인식 API 키(GEMINI_API_KEY)가 설정되어 있지 않습니다. AI Studio의 Settings > Secrets 패널에서 GEMINI_API_KEY를 등록한 뒤 다시 시도해 주세요.',
+      });
+    }
     return res.status(500).json({
       error: error?.message || '음성 인식 중 오류가 발생했습니다.',
     });

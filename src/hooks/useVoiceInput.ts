@@ -18,6 +18,15 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
   const audioChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<any>(null);
   const speechRecognizedTextRef = useRef<string>('');
+  const latestTranscriptRef = useRef<string>('');
+
+  const isTouchMobileDevice = () => {
+    if (typeof navigator === 'undefined') return false;
+    return (
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    );
+  };
 
   useEffect(() => {
     const hasMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -46,7 +55,17 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
 
           if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || `Server error (${res.status})`);
+            const rawErr = String(errData.error || `Server error (${res.status})`);
+            if (
+              errData.code === 'MISSING_GEMINI_API_KEY' ||
+              rawErr.toLowerCase().includes('default credentials') ||
+              rawErr.toLowerCase().includes('access_token_scope_insufficient')
+            ) {
+              throw new Error(
+                '태블릿 등 모바일 환경에서는 서버 음성 변환(Gemini)이 사용됩니다. AI Studio의 Settings > Secrets 패널에서 GEMINI_API_KEY가 설정되어 있는지 확인해 주세요.'
+              );
+            }
+            throw new Error(rawErr);
           }
 
           const data = await res.json();
@@ -63,6 +82,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
   const startListening = useCallback(async () => {
     setErrorMessage(null);
     setTranscript('');
+    latestTranscriptRef.current = '';
     speechRecognizedTextRef.current = '';
     audioChunksRef.current = [];
 
@@ -86,7 +106,8 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     setIsListening(true);
 
     // 2. Start MediaRecorder with the active audio stream
-    if (stream) {
+    let mediaRecorderStarted = false;
+    if (stream && typeof MediaRecorder !== 'undefined') {
       try {
         const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
           ? 'audio/webm;codecs=opus'
@@ -106,16 +127,19 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         };
 
         recorder.start(250); // Slice data every 250ms
+        mediaRecorderStarted = true;
       } catch (recErr) {
         console.warn('MediaRecorder init error:', recErr);
       }
     }
 
-    // 3. Simultaneously attempt Web Speech API for real-time live preview (if supported)
+    // 3. On desktop browsers, simultaneously run Web Speech API for real-time live preview.
+    // On mobile/tablet touch devices, avoid opening SpeechRecognition alongside an active MediaRecorder
+    // stream because mobile OS audio drivers often deny or mute dual mic capture.
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    if (SpeechRecognition) {
+    if (SpeechRecognition && (!mediaRecorderStarted || !isTouchMobileDevice())) {
       try {
         const recognition = new SpeechRecognition();
         recognition.lang = lang;
@@ -136,6 +160,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
 
           const combined = (currentFinal || currentInterim).trim();
           if (combined) {
+            latestTranscriptRef.current = combined;
             setTranscript(combined);
           }
           if (currentFinal) {
@@ -187,7 +212,8 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
           }
 
           // If Web Speech API already gathered text, check if it's reliable
-          const liveText = speechRecognizedTextRef.current.trim() || transcript.trim();
+          const liveText =
+            speechRecognizedTextRef.current.trim() || latestTranscriptRef.current.trim();
 
           // Prepare Audio Blob
           const mimeType = recorder.mimeType || 'audio/webm';
@@ -196,12 +222,13 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
           let finalText = liveText;
 
           // If liveText is empty or short, transcribe using Gemini 3.5 Transcribe
-          if (!finalText && audioBlob.size > 1000) {
+          if (!finalText && audioBlob.size > 200) {
             const aiText = await sendAudioToGeminiTranscribe(audioBlob);
             finalText = aiText.trim();
           }
 
           if (finalText) {
+            latestTranscriptRef.current = finalText;
             setTranscript(finalText);
             if (onResult) {
               onResult(finalText);
@@ -212,7 +239,8 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         } catch (transcribeErr: any) {
           console.error('Audio processing failed:', transcribeErr);
           // If we had any partial liveText, fallback to that
-          const fallback = speechRecognizedTextRef.current.trim() || transcript.trim();
+          const fallback =
+            speechRecognizedTextRef.current.trim() || latestTranscriptRef.current.trim();
           if (fallback) {
             if (onResult) onResult(fallback);
           } else {
@@ -233,14 +261,19 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         setIsTranscribing(false);
       }
     } else {
+      if (recorder?.stream) {
+        recorder.stream.getTracks().forEach((track) => track.stop());
+      }
+      mediaRecorderRef.current = null;
       // Just Web Speech finished
-      const text = speechRecognizedTextRef.current.trim() || transcript.trim();
+      const text =
+        speechRecognizedTextRef.current.trim() || latestTranscriptRef.current.trim();
       if (text && onResult) {
         onResult(text);
       }
       setIsTranscribing(false);
     }
-  }, [transcript, onResult, onError]);
+  }, [onResult, onError]);
 
   const toggleListening = useCallback(() => {
     if (isListening) {
