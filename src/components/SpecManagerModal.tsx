@@ -24,19 +24,13 @@ import {
   SavedProgramSpecItem,
 } from '../utils/specStorage';
 import {
-  getCurrentUser,
-  setCurrentUser,
-  getRegisteredUsers,
-  USERS_UPDATED_EVENT,
-  CurrentUser,
-} from '../utils/authStorage';
-import {
   COMMON_PROJECT_CODE,
   TEMP_PROJECT_CODE,
   getAccessibleProjectsForUser,
   isReadOnlyCommonSpec,
   isSpecVisibleInProject,
 } from '../utils/projectStorage';
+import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface SpecManagerModalProps {
@@ -53,14 +47,10 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
   onSelectSpec,
 }) => {
   const { t } = useLanguage();
+  const { activeUser: currentUser, userProfile, isAdmin } = useAuth();
   const [specs, setSpecs] = useState<SavedProgramSpecItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // User Authentication State
-  const [currentUser, setCurrentUserState] = useState<CurrentUser>(getCurrentUser());
-  const [registeredUsers, setRegisteredUsers] = useState<CurrentUser[]>(() => getRegisteredUsers());
-  const [isUserSwitcherOpen, setIsUserSwitcherOpen] = useState(false);
 
   // Save with Change History Modal State
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
@@ -89,19 +79,8 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       refreshList();
-      setCurrentUserState(getCurrentUser());
-      setRegisteredUsers(getRegisteredUsers());
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    const syncUsers = () => {
-      setRegisteredUsers(getRegisteredUsers());
-      setCurrentUserState(getCurrentUser());
-    };
-    window.addEventListener(USERS_UPDATED_EVENT, syncUsers);
-    return () => window.removeEventListener(USERS_UPDATED_EVENT, syncUsers);
-  }, []);
 
   const refreshList = () => {
     const list = getSavedSpecList();
@@ -115,23 +94,20 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
     }, 4000);
   };
 
-  const handleSwitchUser = (user: CurrentUser) => {
-    setCurrentUser(user);
-    setCurrentUserState(user);
-    setIsUserSwitcherOpen(false);
-    showToast('success', t(`Signed in as '${user.name}'.`, `'${user.name}' 계정으로 전환되었습니다.`));
-  };
-
   if (!isOpen) return null;
 
-  const accessibleProjects = getAccessibleProjectsForUser(currentUser.name);
+  const accessibleProjects = getAccessibleProjectsForUser(currentUser.name, {
+    uid: userProfile?.uid,
+    isAdmin,
+    assignedProjects: userProfile?.assignedProjects || [],
+  });
   const accessibleCodes = new Set(accessibleProjects.map((p) => p.code));
 
   // Filtered spec list (enforces TEMP privacy & project membership visibility)
   const filteredSpecs = specs.filter((s) => {
     const projCode = s.project_code || TEMP_PROJECT_CODE;
     if (!accessibleCodes.has(projCode)) return false;
-    if (!isSpecVisibleInProject(s, projCode, currentUser.name)) return false;
+    if (!isSpecVisibleInProject(s, projCode, currentUser.name, currentUser.id)) return false;
 
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
@@ -184,7 +160,10 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
       copyingSource.program_id,
       newProgramIdInput,
       currentUser.name,
-      copyTargetProject
+      copyTargetProject,
+      undefined,
+      undefined,
+      currentUser.id
     );
     if (res.success && res.newSpec) {
       refreshList();
@@ -266,63 +245,20 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
             </div>
           </div>
 
-          {/* Current Logged-in User Profile & Switcher */}
+          {/* Authenticated User Profile Badge */}
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsUserSwitcherOpen(!isUserSwitcherOpen)}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs flex items-center gap-2 transition-colors cursor-pointer"
-                title={t('Switch user profile', '사용자 전환')}
-              >
-                <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px]">
-                  {currentUser.name.charAt(0)}
+            <div className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px]">
+                {currentUser.name.charAt(0)}
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-white text-[11px] leading-none">
+                  {currentUser.name}
                 </div>
-                <div className="text-left">
-                  <div className="font-bold text-white text-[11px] leading-none">
-                    {currentUser.name}
-                  </div>
-                  <div className="text-[9px] text-blue-300 leading-none mt-0.5">
-                    {currentUser.role}
-                  </div>
+                <div className="text-[9px] text-blue-300 leading-none mt-0.5">
+                  {currentUser.role}
                 </div>
-                <span className="text-[10px] text-slate-400">▼</span>
-              </button>
-
-              {/* User Switcher Dropdown */}
-              {isUserSwitcherOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 p-2 z-50 text-slate-800 font-sans">
-                  <div className="text-[11px] font-bold text-slate-500 px-2 py-1 border-b border-slate-100 flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{t('Switch Registered User', '등록된 사용자 전환')}</span>
-                  </div>
-                  <div className="py-1 space-y-0.5 max-h-56 overflow-y-auto">
-                    {registeredUsers.map((u) => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => handleSwitchUser(u)}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                          currentUser.name === u.name
-                            ? 'bg-blue-50 text-blue-900 font-bold border border-blue-200'
-                            : 'hover:bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        <div className="min-w-0 pr-2">
-                          <div className="font-semibold text-xs truncate">{u.name}</div>
-                          <div className="text-[10px] text-slate-500 truncate">{u.email || u.role}</div>
-                        </div>
-                        {currentUser.name === u.name && (
-                          <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="pt-2 border-t border-slate-100 px-2 text-[10px] text-slate-500">
-                    {t('Manage members in Project Settings & Members.', '멤버 추가/관리는 프로젝트 설정에서 할 수 있습니다.')}
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
 
             <button

@@ -10,10 +10,14 @@ import {
   Keyboard,
   PanelLeftOpen,
   PanelLeftClose,
+  ShieldCheck,
+  Globe,
+  Lock,
 } from 'lucide-react';
 import { MainWorkspaceMode } from './TopNav';
-import { ProgramSpec } from '../types/sap';
+import { ProgramSpec, SapProject } from '../types/sap';
 import { useLanguage } from '../contexts/LanguageContext';
+import { COMMON_PROJECT_CODE, TEMP_PROJECT_CODE } from '../utils/projectStorage';
 
 const SIDENAV_EXPANDED_KEY = 'everyspec_sidenav_expanded_v1';
 
@@ -22,6 +26,11 @@ interface SideNavProps {
   onSelectMode: (mode: MainWorkspaceMode) => void;
   onOpenProjectSettings: () => void;
   canAccessProjectSettings?: boolean;
+  isAdmin?: boolean;
+  onOpenAdmin?: () => void;
+  accessibleProjects?: SapProject[];
+  selectedProjectCode?: string;
+  onSelectProjectScope?: (code: string) => void;
   onOpenShortcuts: () => void;
   onOpenCommandPalette: () => void;
   currentSpec: ProgramSpec;
@@ -42,6 +51,11 @@ export const SideNav: React.FC<SideNavProps> = ({
   onSelectMode,
   onOpenProjectSettings,
   canAccessProjectSettings = false,
+  isAdmin = false,
+  onOpenAdmin,
+  accessibleProjects = [],
+  selectedProjectCode = COMMON_PROJECT_CODE,
+  onSelectProjectScope,
   onOpenShortcuts,
   onOpenCommandPalette,
   currentSpec,
@@ -73,6 +87,12 @@ export const SideNav: React.FC<SideNavProps> = ({
     currentMode === 'editor_only' ||
     currentMode === 'abap_code' ||
     currentMode === 'document';
+
+  const commonProject = accessibleProjects.find((p) => p.code === COMMON_PROJECT_CODE);
+  const teamProjects = accessibleProjects.filter(
+    (p) => p.visibility === 'project' && p.code !== COMMON_PROJECT_CODE && p.code !== TEMP_PROJECT_CODE
+  );
+  const tempProject = accessibleProjects.find((p) => p.code === TEMP_PROJECT_CODE);
 
   const primaryItems: NavItemConfig[] = [
     {
@@ -119,6 +139,18 @@ export const SideNav: React.FC<SideNavProps> = ({
           },
         ]
       : []),
+    ...(isAdmin && onOpenAdmin
+      ? [
+          {
+            id: 'admin_dashboard',
+            label: t('Admin Console', '관리자 콘솔'),
+            shortDesc: t('User approvals & RBAC matrix', '사용자 승인 및 권한 관리'),
+            icon: ShieldCheck,
+            isActive: currentMode === 'admin_dashboard',
+            onClick: onOpenAdmin,
+          },
+        ]
+      : []),
   ];
 
   const workspaceItem: NavItemConfig = {
@@ -156,7 +188,7 @@ export const SideNav: React.FC<SideNavProps> = ({
     <aside
       aria-label={t('Primary Sidebar Navigation', '기본 사이드바 탐색')}
       className={`no-print shrink-0 h-full bg-slate-900 border-r border-slate-800 text-slate-300 flex flex-col select-none z-30 ${
-        isExpanded ? 'w-52' : 'w-[60px]'
+        isExpanded ? 'w-56' : 'w-[60px]'
       }`}
     >
       {/* Brand Header */}
@@ -242,6 +274,120 @@ export const SideNav: React.FC<SideNavProps> = ({
           )}
           {renderTooltip(workspaceItem.label, workspaceItem.shortcut)}
         </button>
+
+        {/* 3-Scope Workspace Navigator (Common / Projects / Temp) */}
+        {onSelectProjectScope && (
+          <>
+            <div className={`h-px bg-slate-800 my-2 ${isExpanded ? 'mx-1' : 'mx-2'}`} />
+            <div className="flex flex-col gap-1">
+              {isExpanded && (
+                <div className="px-2.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  {t('Scopes', '데이터 범위')}
+                </div>
+              )}
+
+              {/* 1. Common (COMM) */}
+              {commonProject && (
+                <button
+                  type="button"
+                  onClick={() => onSelectProjectScope(COMMON_PROJECT_CODE)}
+                  aria-label={t('Common Standards (COMM)', '공통 영역 (COMM)')}
+                  className={`group relative h-8 flex items-center rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    isExpanded ? 'px-2.5 gap-2.5 justify-between' : 'w-10 mx-auto justify-center'
+                  } ${
+                    selectedProjectCode === COMMON_PROJECT_CODE &&
+                    (currentMode === 'overview' || currentMode === 'program_list')
+                      ? 'bg-slate-800 text-cyan-300 font-semibold border border-slate-700'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
+                    {isExpanded && (
+                      <span className="truncate">{t('Common', '공통 규격')}</span>
+                    )}
+                  </span>
+                  {isExpanded && (
+                    <span className="font-mono text-[10px] text-slate-500">COMM</span>
+                  )}
+                  {renderTooltip(t('Common (COMM)', '공통 영역 (COMM)'))}
+                </button>
+              )}
+
+              {/* 2. Assigned Projects */}
+              {isExpanded && (
+                <div className="px-2.5 pt-1 text-[10px] font-semibold text-slate-500">
+                  {t('Projects', '할당 프로젝트')}
+                </div>
+              )}
+              {teamProjects.length === 0 && isExpanded ? (
+                <div className="px-2.5 py-1 text-[11px] text-slate-500 italic">
+                  {t('No assigned projects', '할당된 프로젝트 없음')}
+                </div>
+              ) : (
+                teamProjects.slice(0, isExpanded ? 6 : 3).map((proj) => {
+                  const isProjActive =
+                    selectedProjectCode === proj.code &&
+                    (currentMode === 'overview' || currentMode === 'program_list');
+                  return (
+                    <button
+                      key={proj.code}
+                      type="button"
+                      onClick={() => onSelectProjectScope(proj.code)}
+                      aria-label={`${proj.code} · ${proj.name}`}
+                      className={`group relative h-8 flex items-center rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                        isExpanded ? 'px-2.5 gap-2.5 justify-between' : 'w-10 mx-auto justify-center'
+                      } ${
+                        isProjActive
+                          ? 'bg-slate-800 text-blue-300 font-semibold border border-slate-700'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <FolderKanban className="w-4 h-4 text-blue-400 shrink-0" />
+                        {isExpanded && <span className="truncate">{proj.name}</span>}
+                      </span>
+                      {isExpanded && (
+                        <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                          {proj.code}
+                        </span>
+                      )}
+                      {renderTooltip(`[${proj.code}] ${proj.name}`)}
+                    </button>
+                  );
+                })
+              )}
+
+              {/* 3. Personal Temp (TEMP) */}
+              {tempProject && (
+                <button
+                  type="button"
+                  onClick={() => onSelectProjectScope(TEMP_PROJECT_CODE)}
+                  aria-label={t('Personal Temp (TEMP)', '개인 임시 공간 (TEMP)')}
+                  className={`group relative h-8 flex items-center rounded-lg text-xs transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    isExpanded ? 'px-2.5 gap-2.5 justify-between' : 'w-10 mx-auto justify-center'
+                  } ${
+                    selectedProjectCode === TEMP_PROJECT_CODE &&
+                    (currentMode === 'overview' || currentMode === 'program_list')
+                      ? 'bg-slate-800 text-amber-300 font-semibold border border-slate-700'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                    {isExpanded && (
+                      <span className="truncate">{t('Temp (Private)', '개인 임시')}</span>
+                    )}
+                  </span>
+                  {isExpanded && (
+                    <span className="font-mono text-[10px] text-slate-500">TEMP</span>
+                  )}
+                  {renderTooltip(t('Personal Space (TEMP)', '개인 임시 공간 (TEMP)'))}
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </nav>
 
       {/* Bottom Utility Actions */}

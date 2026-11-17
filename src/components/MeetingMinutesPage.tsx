@@ -129,9 +129,9 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
   );
 
   const projectMinutes = useMemo(() => {
-    return getVisibleMinutesForProject(activeProjectCode, currentUser.name);
+    return getVisibleMinutesForProject(activeProjectCode, currentUser.name, currentUser.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProjectCode, currentUser.name, meetingRefreshKey]);
+  }, [activeProjectCode, currentUser.name, currentUser.id, meetingRefreshKey]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | MeetingMinuteStatus>('ALL');

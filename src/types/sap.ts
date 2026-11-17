@@ -14,6 +14,24 @@ export type SpecLifecycleStatus = 'draft' | 'in_review' | 'approved' | 'develope
 
 export type UserProjectRole = 'PM' | 'FUNC' | 'ABAP' | 'QA' | 'ADMIN';
 
+export type UserAccountRole = 'admin' | 'user';
+
+export type UserApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface UserProfileRecord {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string;
+  role: UserAccountRole;
+  status: UserApprovalStatus;
+  assignedProjects: string[];
+  projectRole: UserProjectRole;
+  department: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type AbapSyntaxMode = 'classic' | 'modern_740';
 
 export interface ProjectAbapStandards {
@@ -499,6 +517,7 @@ export interface ProjectMeetingMinute {
   created_at: string;
   updated_at: string;
   author: string;
+  author_id?: string;
   status: MeetingMinuteStatus;
   segments: MeetingTranscriptSegment[];
   raw_transcript: string;

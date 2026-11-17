@@ -8,7 +8,7 @@ import {
   getProjectAbapStandards,
 } from '../utils/projectStorage';
 import { copySpecInStorage } from '../utils/specStorage';
-import { getCurrentUser } from '../utils/authStorage';
+import { useAuth } from '../contexts/AuthContext';
 import { suggestCompliantIdsForProject } from '../utils/sapValidation';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -28,7 +28,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
   onCopied,
 }) => {
   const { t } = useLanguage();
-  const currentUser = getCurrentUser();
+  const { activeUser: currentUser, userProfile, isAdmin } = useAuth();
   const [projects, setProjects] = useState<SapProject[]>([]);
   const [targetProject, setTargetProject] = useState<string>(TEMP_PROJECT_CODE);
   const [newProgramId, setNewProgramId] = useState<string>('');
@@ -38,9 +38,11 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
 
   useEffect(() => {
     if (!isOpen || !sourceSpec) return;
-    const accessible = getAccessibleProjectsForUser(currentUser.name).filter(
-      (p) => p.code !== COMMON_PROJECT_CODE
-    );
+    const accessible = getAccessibleProjectsForUser(currentUser.name, {
+      uid: userProfile?.uid,
+      isAdmin,
+      assignedProjects: userProfile?.assignedProjects || [],
+    }).filter((p) => p.code !== COMMON_PROJECT_CODE);
     setProjects(accessible);
 
     const suggestedProj =
@@ -63,7 +65,7 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
     setNewTcode(compliant.tcode);
     setNewTitle(`${sourceSpec.title} (Copy)`);
     setErrorMsg(null);
-  }, [isOpen, sourceSpec, defaultTargetProject, currentUser.name]);
+  }, [isOpen, sourceSpec, defaultTargetProject, currentUser.name, userProfile?.uid, isAdmin, userProfile?.assignedProjects]);
 
   const targetStandards = getProjectAbapStandards(targetProject);
 
@@ -100,7 +102,8 @@ export const CopySpecModal: React.FC<CopySpecModalProps> = ({
       currentUser.name,
       targetProject,
       newTitle,
-      newTcode
+      newTcode,
+      currentUser.id
     );
 
     if (!res.success || !res.newSpec) {

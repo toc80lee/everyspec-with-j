@@ -417,6 +417,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       created_at: createdAt,
       updated_at: formatNowDateTime(),
       author: initialMinute?.author || currentUser.name,
+      author_id: initialMinute?.author_id || currentUser.id,
       status:
         overrides.status ||
         (generatedSpec
@@ -675,6 +676,7 @@ ${minutesMarkdown}`;
 
       const finalSpec: ProgramSpec = {
         ...baseSpec,
+        author_id: currentUser.id,
         source_meeting_id: minuteId,
         source_meeting_title: meetingTitle.trim() || t('Design Meeting Minutes', '설계 회의록'),
       };

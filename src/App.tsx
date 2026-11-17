@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ProgramSpec, ProjectMeetingMinute } from './types/sap';
+import { ProgramSpec, ProjectMeetingMinute, SapProject } from './types/sap';
 import { SAMPLE_SPECS } from './data/sampleSpecs';
 import { TopNav, MainWorkspaceMode, DualSplitLayout } from './components/TopNav';
 import { SideNav } from './components/SideNav';
@@ -12,6 +12,7 @@ import { PdfExportModal } from './components/PdfExportModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ProjectOverviewDashboard } from './components/ProjectOverviewDashboard';
 import { ProjectManagerModal } from './components/ProjectManagerModal';
+import { AdminDashboard } from './components/AdminDashboard';
 import { CopySpecModal } from './components/CopySpecModal';
 import { MeetingSpecWizardModal } from './components/MeetingSpecWizardModal';
 import { MeetingMinutesPage } from './components/MeetingMinutesPage';
@@ -27,21 +28,22 @@ import {
   loadSavedSapTheme,
   saveSapTheme,
 } from './data/sapGuiThemes';
-import {
-  CurrentUser,
-  DEFAULT_OPERATOR_USER,
-  getCurrentUser,
-  getRegisteredUsers,
-  isDefaultOperatorUser,
-} from './utils/authStorage';
+import { CurrentUser, getCurrentUser } from './utils/authStorage';
 import { useAuth } from './contexts/AuthContext';
 import { useLanguage } from './contexts/LanguageContext';
-import { syncSpecToFirestore, subscribeProjectSpecs } from './services/firestoreSync';
+import {
+  syncSpecToFirestore,
+  subscribeProjectSpecs,
+  subscribeAccessibleProjects,
+  subscribeProjectMeetings,
+  syncProjectToFirestore,
+} from './services/firestoreSync';
 import {
   COMMON_PROJECT_CODE,
   TEMP_PROJECT_CODE,
   getAccessibleProjectsForUser,
   getProjectAbapStandards,
+  getProjects,
   isCommonProtectedSample,
   isReadOnlyCommonSpec,
   isSpecVisibleInProject,
@@ -55,6 +57,7 @@ import {
 import {
   deleteMeetingMinute,
   getVisibleMinutesForProject,
+  upsertMeetingMinutesFromRemote,
 } from './utils/meetingStorage';
 import { getUnresolvedCommentCountsMap } from './utils/reviewCommentStorage';
 import { suggestCompliantIdsForProject } from './utils/sapValidation';
@@ -75,11 +78,20 @@ const DUAL_SPLIT_CYCLE: DualSplitLayout[] = [
 ];
 
 export default function App() {
-  const { activeUser: authActiveUser, isFirebaseAuthenticated, projectRole } = useAuth();
+  const {
+    activeUser: authActiveUser,
+    isFirebaseAuthenticated,
+    projectRole,
+    userProfile,
+    isAdmin,
+  } = useAuth();
   const { t } = useLanguage();
   const [currentUser, setCurrentUserState] = useState<CurrentUser>(() => authActiveUser || getCurrentUser());
-  const isAdminOperator = isDefaultOperatorUser(currentUser);
+  const isAdminOperator = isAdmin;
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
+  const [remoteProjects, setRemoteProjects] = useState<SapProject[]>([]);
+  const [remoteProjectsLoaded, setRemoteProjectsLoaded] = useState(false);
+  const seededProjectsRef = useRef(false);
   const [allSavedSpecs, setAllSavedSpecs] = useState<SavedProgramSpecItem[]>(() => getSavedSpecList());
   const [favoriteProgramIds, setFavoriteProgramIds] = useState<string[]>(() =>
     getFavoriteProgramIds(getCurrentUser().name)
@@ -92,9 +104,61 @@ export default function App() {
     setAllSavedSpecs(getSavedSpecList());
   }, [authActiveUser]);
 
+  // Subscribe to Firestore projects accessible to current user (Admin = all, User = COMM + assigned)
+  useEffect(() => {
+    if (!isFirebaseAuthenticated || !userProfile?.uid) {
+      setRemoteProjects([]);
+      setRemoteProjectsLoaded(false);
+      return;
+    }
+    const unsub = subscribeAccessibleProjects(userProfile.uid, isAdmin, (projs) => {
+      setRemoteProjects(projs);
+      setRemoteProjectsLoaded(true);
+    });
+    return () => unsub();
+  }, [isFirebaseAuthenticated, userProfile?.uid, isAdmin]);
+
+  // Seed missing local system/team projects once when Admin connects so non-admin users can read COMM & assigned projects
+  useEffect(() => {
+    if (
+      !isAdmin ||
+      !isFirebaseAuthenticated ||
+      !userProfile?.uid ||
+      !remoteProjectsLoaded ||
+      seededProjectsRef.current
+    ) {
+      return;
+    }
+    seededProjectsRef.current = true;
+    const remoteCodeSet = new Set(remoteProjects.map((p) => p.code.toUpperCase()));
+    const localList = getProjects();
+    localList.forEach((proj) => {
+      if (!remoteCodeSet.has(proj.code.toUpperCase())) {
+        syncProjectToFirestore({
+          ...proj,
+          ownerId: proj.ownerId || userProfile.uid,
+          memberUids: Array.from(new Set([...(proj.memberUids || []), userProfile.uid])),
+        }).catch((err) => console.warn(`Seed sync notice for ${proj.code}:`, err));
+      }
+    });
+  }, [isAdmin, isFirebaseAuthenticated, userProfile?.uid, remoteProjectsLoaded, remoteProjects]);
+
   const accessibleProjects = useMemo(
-    () => getAccessibleProjectsForUser(currentUser.name),
-    [currentUser.name, projectRefreshKey]
+    () =>
+      getAccessibleProjectsForUser(currentUser.name, {
+        uid: userProfile?.uid,
+        isAdmin,
+        assignedProjects: userProfile?.assignedProjects || [],
+        remoteProjects,
+      }),
+    [
+      currentUser.name,
+      userProfile?.uid,
+      isAdmin,
+      userProfile?.assignedProjects,
+      remoteProjects,
+      projectRefreshKey,
+    ]
   );
 
   const [selectedProjectCode, setSelectedProjectCode] = useState<string>(() => {
@@ -139,8 +203,13 @@ export default function App() {
   const [historyFuture, setHistoryFuture] = useState<ProgramSpec[]>([]);
   const lastEditTimestampRef = useRef<number>(0);
 
-  // Default entry screen is now Project Overview Dashboard
-  const [workspaceMode, setWorkspaceMode] = useState<MainWorkspaceMode>('overview');
+  // Default entry screen is Project Overview Dashboard (or /admin for admins)
+  const [workspaceMode, setWorkspaceMode] = useState<MainWorkspaceMode>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/admin') {
+      return 'admin_dashboard';
+    }
+    return 'overview';
+  });
   const returnFromPageModeRef = useRef<MainWorkspaceMode>('overview');
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isPdfExportModalOpen, setIsPdfExportModalOpen] = useState(false);
@@ -170,16 +239,16 @@ export default function App() {
     () =>
       allSavedSpecs.filter((item) =>
         accessibleProjects.some((p) =>
-          isSpecVisibleInProject(item, p.code, currentUser.name)
+          isSpecVisibleInProject(item, p.code, currentUser.name, currentUser.id)
         )
       ),
-    [allSavedSpecs, accessibleProjects, currentUser.name]
+    [allSavedSpecs, accessibleProjects, currentUser.name, currentUser.id]
   );
 
   const accessibleCommandMinutes = useMemo(() => {
     const byId = new Map<string, ProjectMeetingMinute>();
     accessibleProjects.forEach((p) => {
-      getVisibleMinutesForProject(p.code, currentUser.name).forEach((m) => {
+      getVisibleMinutesForProject(p.code, currentUser.name, currentUser.id).forEach((m) => {
         if (!byId.has(m.id)) {
           byId.set(m.id, m);
         }
@@ -188,14 +257,25 @@ export default function App() {
     return Array.from(byId.values()).sort((a, b) =>
       String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
     );
-  }, [accessibleProjects, currentUser.name, meetingRefreshKey]);
+  }, [accessibleProjects, currentUser.name, currentUser.id, meetingRefreshKey]);
 
-  const openFullPageMode = (target: 'meeting_wizard' | 'project_settings' | 'shortcuts') => {
-    if (target === 'project_settings' && !isAdminOperator) {
+  const syncBrowserPathForMode = (mode: MainWorkspaceMode) => {
+    if (typeof window === 'undefined') return;
+    if (mode === 'admin_dashboard' && window.location.pathname !== '/admin') {
+      window.history.pushState(null, '', '/admin');
+    } else if (mode !== 'admin_dashboard' && window.location.pathname === '/admin') {
+      window.history.pushState(null, '', '/');
+    }
+  };
+
+  const openFullPageMode = (
+    target: 'meeting_wizard' | 'project_settings' | 'admin_dashboard' | 'shortcuts'
+  ) => {
+    if ((target === 'project_settings' || target === 'admin_dashboard') && !isAdminOperator) {
       showWorkspaceToast(
         t(
-          'Project Settings is restricted to administrator Josh Lee.',
-          '프로젝트 설정은 관리자(Josh Lee)만 접근할 수 있습니다.'
+          'This section is restricted to system administrators.',
+          '이 메뉴는 시스템 관리자만 접근할 수 있습니다.'
         )
       );
       return;
@@ -203,21 +283,43 @@ export default function App() {
     if (
       workspaceMode !== 'meeting_wizard' &&
       workspaceMode !== 'project_settings' &&
+      workspaceMode !== 'admin_dashboard' &&
       workspaceMode !== 'shortcuts'
     ) {
       returnFromPageModeRef.current = workspaceMode;
     }
+    syncBrowserPathForMode(target);
     setWorkspaceMode(target);
   };
 
   useEffect(() => {
-    if (workspaceMode === 'project_settings' && !isAdminOperator) {
+    if ((workspaceMode === 'project_settings' || workspaceMode === 'admin_dashboard') && !isAdminOperator) {
       setWorkspaceMode('overview');
+      if (typeof window !== 'undefined' && window.location.pathname === '/admin') {
+        window.history.replaceState(null, '', '/');
+      }
     }
   }, [workspaceMode, isAdminOperator]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePopState = () => {
+      if (window.location.pathname === '/admin' && isAdminOperator) {
+        setWorkspaceMode('admin_dashboard');
+      } else if (workspaceMode === 'admin_dashboard') {
+        setWorkspaceMode('overview');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isAdminOperator, workspaceMode]);
+
   const closeFullPageMode = () => {
-    const back = returnFromPageModeRef.current || 'overview';
+    const back =
+      returnFromPageModeRef.current && returnFromPageModeRef.current !== 'admin_dashboard'
+        ? returnFromPageModeRef.current
+        : 'overview';
+    syncBrowserPathForMode(back);
     setWorkspaceMode(back);
   };
   const [workspaceToast, setWorkspaceToast] = useState<{
@@ -250,7 +352,7 @@ export default function App() {
       return;
     }
 
-    const unsubscribe = subscribeProjectSpecs(selectedProjectCode, (remoteSpecs) => {
+    const unsubscribeSpecs = subscribeProjectSpecs(selectedProjectCode, (remoteSpecs) => {
       if (!remoteSpecs || remoteSpecs.length === 0) return;
       remoteSpecs.forEach((remote) => {
         if (!isCommonProtectedSample(remote)) {
@@ -269,7 +371,16 @@ export default function App() {
       });
     });
 
-    return () => unsubscribe();
+    const unsubscribeMeetings = subscribeProjectMeetings(selectedProjectCode, (remoteMinutes) => {
+      if (!remoteMinutes || remoteMinutes.length === 0) return;
+      upsertMeetingMinutesFromRemote(remoteMinutes);
+      setMeetingRefreshKey((k) => k + 1);
+    });
+
+    return () => {
+      unsubscribeSpecs();
+      unsubscribeMeetings();
+    };
   }, [isFirebaseAuthenticated, selectedProjectCode]);
 
   const formatNowHms = () => {
@@ -278,14 +389,19 @@ export default function App() {
   };
 
   const applySpecChange = (updated: ProgramSpec, forceNewHistoryStep = false) => {
+    const stampedSpec: ProgramSpec =
+      !isCommonProtectedSample(updated) && !updated.author_id && currentUser.id
+        ? { ...updated, author_id: currentUser.id }
+        : updated;
+
     const now = Date.now();
     const isRapidContinuousEdit =
       !forceNewHistoryStep &&
       now - lastEditTimestampRef.current < 700 &&
-      updated.id === currentSpec.id &&
-      updated.selection_params.length === currentSpec.selection_params.length &&
-      updated.field_catalog.length === currentSpec.field_catalog.length &&
-      updated.sample_type === currentSpec.sample_type;
+      stampedSpec.id === currentSpec.id &&
+      stampedSpec.selection_params.length === currentSpec.selection_params.length &&
+      stampedSpec.field_catalog.length === currentSpec.field_catalog.length &&
+      stampedSpec.sample_type === currentSpec.sample_type;
 
     lastEditTimestampRef.current = now;
 
@@ -293,18 +409,18 @@ export default function App() {
       setHistoryPast((prev) => [...prev.slice(-29), currentSpec]);
     }
     setHistoryFuture([]);
-    setCurrentSpec(updated);
+    setCurrentSpec(stampedSpec);
 
-    if (!isCommonProtectedSample(updated)) {
-      upsertWorkingSpecQuietly(updated);
+    if (!isCommonProtectedSample(stampedSpec)) {
+      upsertWorkingSpecQuietly(stampedSpec);
       refreshAllSpecs();
       setLastSavedAt(formatNowHms());
       setHasUnsavedChanges(!forceNewHistoryStep);
       if (isFirebaseAuthenticated) {
         const projObj = accessibleProjects.find(
-          (p) => p.code === (updated.project_code || TEMP_PROJECT_CODE)
+          (p) => p.code === (stampedSpec.project_code || TEMP_PROJECT_CODE)
         );
-        syncSpecToFirestore(updated, projObj).catch((err) => {
+        syncSpecToFirestore(stampedSpec, projObj).catch((err) => {
           console.warn('Firestore spec sync skipped:', err);
         });
       }
@@ -328,6 +444,7 @@ export default function App() {
         refreshAllSpecs();
       }
       setHasUnsavedChanges(false);
+      syncBrowserPathForMode(nav.mode);
       setWorkspaceMode(nav.mode);
     } else if (nav.type === 'spec') {
       setHistoryPast([]);
@@ -338,10 +455,12 @@ export default function App() {
       if (nav.spec.project_code) {
         handleSelectProject(nav.spec.project_code);
       }
+      syncBrowserPathForMode('split');
       setWorkspaceMode('split');
     } else if (nav.type === 'minute') {
       setHasUnsavedChanges(false);
       setSelectedMinuteDetailId(nav.minuteId);
+      syncBrowserPathForMode('meeting_minutes');
       setWorkspaceMode('meeting_minutes');
     }
   };
@@ -393,7 +512,8 @@ export default function App() {
       (mode === 'overview' ||
         mode === 'program_list' ||
         mode === 'meeting_minutes' ||
-        mode === 'user_guide');
+        mode === 'user_guide' ||
+        mode === 'admin_dashboard');
     if (isLeavingEditor && hasUnsavedChanges && !isCommonProtectedSample(currentSpec)) {
       setPendingNavigation({ type: 'mode', mode });
       return;
@@ -401,6 +521,7 @@ export default function App() {
     if (mode === 'overview' || mode === 'program_list') {
       refreshAllSpecs();
     }
+    syncBrowserPathForMode(mode);
     setWorkspaceMode(mode);
   };
 
@@ -679,11 +800,7 @@ export default function App() {
 
   // Create new blank specification (assigned to current non-COMMON project or TEMP)
   const handleNewSpec = (explicitProjectCode?: string) => {
-    const activeUser = getCurrentUser();
-    const registeredUsers = getRegisteredUsers();
-    const registeredAuthor = registeredUsers.some((u) => u.name === activeUser.name)
-      ? activeUser.name
-      : DEFAULT_OPERATOR_USER.name;
+    const registeredAuthor = currentUser.name;
 
     const targetProject =
       explicitProjectCode && explicitProjectCode !== COMMON_PROJECT_CODE
@@ -721,6 +838,7 @@ export default function App() {
       title: 'New ALV Grid Report Program',
       module: 'SD',
       author: registeredAuthor,
+      author_id: currentUser.id,
       created_date: new Date().toISOString().split('T')[0],
       target_sap_release: 'SAP S/4HANA 2023',
       program_type: 'REPORT',
@@ -988,6 +1106,14 @@ export default function App() {
         currentMode={workspaceMode}
         onSelectMode={handleNavigateModeSafely}
         canAccessProjectSettings={isAdminOperator}
+        isAdmin={isAdminOperator}
+        onOpenAdmin={() => openFullPageMode('admin_dashboard')}
+        accessibleProjects={accessibleProjects}
+        selectedProjectCode={selectedProjectCode}
+        onSelectProjectScope={(code) => {
+          handleSelectProject(code);
+          handleNavigateModeSafely('program_list');
+        }}
         onOpenProjectSettings={() => {
           if (workspaceMode !== 'project_settings') {
             openFullPageMode('project_settings');
@@ -1037,6 +1163,13 @@ export default function App() {
               openFullPageMode('project_settings');
             }
           }}
+          onOpenAdmin={() => {
+            if (workspaceMode === 'admin_dashboard') {
+              closeFullPageMode();
+            } else {
+              openFullPageMode('admin_dashboard');
+            }
+          }}
           selectedProjectCode={selectedProjectCode}
           isCurrentSpecFavorite={favoriteProgramIds.includes((currentSpec.program_id || '').toUpperCase())}
           onToggleCurrentSpecFavorite={() => handleToggleFavorite(currentSpec.program_id)}
@@ -1044,13 +1177,6 @@ export default function App() {
           lastSavedAt={lastSavedAt}
           hasUnsavedChanges={hasUnsavedChanges}
           onQuickSnapshotSave={() => void handleQuickSnapshotSave()}
-          onUserChanged={(u) => {
-            setCurrentUserState(u);
-            setFavoriteProgramIds(getFavoriteProgramIds(u.name));
-            setProjectRefreshKey((k) => k + 1);
-            refreshAllSpecs();
-            showWorkspaceToast(t(`Switched user: ${u.name}`, `사용자 전환: ${u.name}`));
-          }}
         />
 
         {/* Main Workspace Viewport */}
@@ -1062,6 +1188,7 @@ export default function App() {
             workspaceMode === 'meeting_wizard' ||
             workspaceMode === 'user_guide' ||
             workspaceMode === 'project_settings' ||
+            workspaceMode === 'admin_dashboard' ||
             workspaceMode === 'shortcuts'
               ? 'p-0 bg-slate-50'
               : 'p-3 bg-slate-950'
@@ -1185,6 +1312,18 @@ export default function App() {
                 handleSelectProject(nextSelected);
               }
             }}
+          />
+        )}
+
+        {workspaceMode === 'admin_dashboard' && isAdminOperator && (
+          <AdminDashboard
+            projects={accessibleProjects}
+            onClose={closeFullPageMode}
+            onProjectsOrMembersUpdated={() => {
+              setProjectRefreshKey((k) => k + 1);
+              refreshAllSpecs();
+            }}
+            onNotify={(msg) => showWorkspaceToast(msg)}
           />
         )}
 

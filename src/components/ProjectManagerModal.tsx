@@ -12,8 +12,16 @@ import {
   AlertCircle,
   Code2,
   Mail,
+  Search,
+  ShieldCheck,
 } from 'lucide-react';
-import { AbapSyntaxMode, ProjectAbapStandards, SapModule, SapProject } from '../types/sap';
+import {
+  AbapSyntaxMode,
+  ProjectAbapStandards,
+  SapModule,
+  SapProject,
+  UserProfileRecord,
+} from '../types/sap';
 import {
   COMMON_PROJECT_CODE,
   TEMP_PROJECT_CODE,
@@ -25,15 +33,15 @@ import {
 } from '../utils/projectStorage';
 import { reassignSpecsProjectToTemp } from '../utils/specStorage';
 import {
-  CurrentUser,
   DEFAULT_OPERATOR_USER,
-  USERS_UPDATED_EVENT,
-  ensureRegisteredUser,
-  getRegisteredUsers,
   isDefaultOperatorUser,
-  pruneUnassignedRegisteredUsers,
 } from '../utils/authStorage';
 import { syncProjectToFirestore } from '../services/firestoreSync';
+import {
+  subscribeAllUsersForAdmin,
+  syncProjectMembershipChange,
+} from '../services/userManagementService';
+import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { PageHeader } from './PageHeader';
 
@@ -72,7 +80,9 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   initialProjectCode,
 }) => {
   const { lang, t } = useLanguage();
-  const [registeredUsers, setRegisteredUsers] = useState<CurrentUser[]>(() => getRegisteredUsers());
+  const { isAdmin, userProfile: currentAdminProfile } = useAuth();
+  const [approvedUsers, setApprovedUsers] = useState<UserProfileRecord[]>([]);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [projects, setProjects] = useState<SapProject[]>([]);
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
@@ -85,12 +95,9 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   const [formEndDate, setFormEndDate] = useState('2026-12-31');
   const [formOwner, setFormOwner] = useState(DEFAULT_OPERATOR_USER.name);
   const [formMembers, setFormMembers] = useState<string[]>([DEFAULT_OPERATOR_USER.name]);
+  const [formMemberUids, setFormMemberUids] = useState<string[]>([]);
+  const [prevMemberUids, setPrevMemberUids] = useState<string[]>([]);
   const [formModules, setFormModules] = useState<SapModule[]>(['SD', 'MM', 'FI', 'CO']);
-
-  // New project member inputs
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserRole, setNewUserRole] = useState(ROLE_OPTIONS[0].value);
 
   const [abapStandards, setAbapStandards] = useState<ProjectAbapStandards>({
     common_top_include: 'zcommtop',
@@ -106,6 +113,8 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
   const loadIntoForm = (proj: SapProject) => {
     const safeOwner = !proj.owner || proj.owner === 'SYSTEM' ? DEFAULT_OPERATOR_USER.name : proj.owner;
+    const isSys = proj.code === COMMON_PROJECT_CODE || proj.code === TEMP_PROJECT_CODE;
+    const nextUids = Array.isArray(proj.memberUids) ? proj.memberUids.filter(Boolean) : [];
     setIsCreatingNew(false);
     setEditingCode(proj.code);
     setFormCode(proj.code);
@@ -116,10 +125,12 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setFormEndDate(proj.end_date || '');
     setFormOwner(safeOwner);
     setFormMembers(
-      proj.code === COMMON_PROJECT_CODE || proj.code === TEMP_PROJECT_CODE
+      isSys
         ? [DEFAULT_OPERATOR_USER.name]
         : enforceProjectMembers(proj.members || [], safeOwner)
     );
+    setFormMemberUids(nextUids);
+    setPrevMemberUids(nextUids);
     setFormModules(proj.modules || ALL_MODULES);
     setAbapStandards({
       common_top_include: proj.abap_standards?.common_top_include || 'zcommtop',
@@ -136,7 +147,6 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setRegisteredUsers(getRegisteredUsers());
     const list = getProjects();
     setProjects(list);
     const target =
@@ -149,56 +159,115 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   }, [isOpen, initialProjectCode]);
 
   useEffect(() => {
-    const handleUsersUpdated = () => {
-      setRegisteredUsers(getRegisteredUsers());
-    };
-    window.addEventListener(USERS_UPDATED_EVENT, handleUsersUpdated);
-    return () => window.removeEventListener(USERS_UPDATED_EVENT, handleUsersUpdated);
-  }, []);
+    if (!isOpen || !isAdmin) return;
+    const unsub = subscribeAllUsersForAdmin(
+      (allUsers) => {
+        setApprovedUsers(allUsers.filter((u) => u.status === 'approved'));
+      },
+      (err) => {
+        console.warn('Approved user directory sync warning:', err);
+      }
+    );
+    return () => unsub();
+  }, [isOpen, isAdmin]);
 
   const isSystemProject =
     !isCreatingNew && (editingCode === COMMON_PROJECT_CODE || editingCode === TEMP_PROJECT_CODE);
 
   const memberCardEntries = useMemo(() => {
-    const userByNameLower = new Map<string, CurrentUser>();
-    registeredUsers.forEach((u) => {
-      userByNameLower.set(u.name.trim().toLowerCase(), u);
+    const userByUid = new Map<string, UserProfileRecord>();
+    const userByNameLower = new Map<string, UserProfileRecord>();
+    approvedUsers.forEach((u) => {
+      userByUid.set(u.uid, u);
+      userByNameLower.set(u.displayName.trim().toLowerCase(), u);
     });
 
     const sourceNames = isSystemProject
       ? [DEFAULT_OPERATOR_USER.name]
       : enforceProjectMembers(formMembers, formOwner);
 
-    return sourceNames.map((name) => {
-      const matched = userByNameLower.get(name.trim().toLowerCase());
-      const isDefaultOp = isDefaultOperatorUser(matched || name);
-      if (isDefaultOp) {
-        return {
-          name: DEFAULT_OPERATOR_USER.name,
-          email: DEFAULT_OPERATOR_USER.email,
-          role: DEFAULT_OPERATOR_USER.role,
-          isDefaultOp: true,
-        };
-      }
-      return {
-        name: matched?.name || name,
-        email: matched?.email || '',
-        role: matched?.role || 'SAP Consultant / Developer',
-        isDefaultOp: false,
-      };
-    });
-  }, [registeredUsers, formMembers, formOwner, isSystemProject]);
+    const seenKeys = new Set<string>();
+    const entries: {
+      uid?: string;
+      name: string;
+      email: string;
+      role: string;
+      photoURL?: string;
+      isDefaultOp: boolean;
+    }[] = [];
 
-  const suggestedExistingUsers = useMemo(() => {
-    const currentLower = new Set(formMembers.map((m) => m.trim().toLowerCase()));
-    return registeredUsers.filter(
-      (u) => !isDefaultOperatorUser(u) && !currentLower.has(u.name.trim().toLowerCase())
-    );
-  }, [registeredUsers, formMembers]);
+    sourceNames.forEach((name) => {
+      const matched = userByNameLower.get(name.trim().toLowerCase());
+      const isDefaultOp = isDefaultOperatorUser(matched?.email || name);
+      if (isDefaultOp) {
+        const key = 'default-josh';
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          entries.push({
+            uid: matched?.uid || (isDefaultOperatorUser(currentAdminProfile?.email) ? currentAdminProfile?.uid : undefined),
+            name: DEFAULT_OPERATOR_USER.name,
+            email: matched?.email || DEFAULT_OPERATOR_USER.email,
+            role: DEFAULT_OPERATOR_USER.role,
+            photoURL: matched?.photoURL,
+            isDefaultOp: true,
+          });
+        }
+        return;
+      }
+      const key = matched?.uid || name.trim().toLowerCase();
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        entries.push({
+          uid: matched?.uid,
+          name: matched?.displayName || name,
+          email: matched?.email || '',
+          role: matched?.projectRole || 'SAP Consultant / Developer',
+          photoURL: matched?.photoURL,
+          isDefaultOp: false,
+        });
+      }
+    });
+
+    formMemberUids.forEach((uid) => {
+      const u = userByUid.get(uid);
+      if (!u || seenKeys.has(u.uid)) return;
+      if (isDefaultOperatorUser(u.email || u.displayName)) return;
+      seenKeys.add(u.uid);
+      entries.push({
+        uid: u.uid,
+        name: u.displayName,
+        email: u.email,
+        role: u.projectRole || 'SAP Consultant / Developer',
+        photoURL: u.photoURL,
+        isDefaultOp: false,
+      });
+    });
+
+    return entries;
+  }, [approvedUsers, formMembers, formMemberUids, formOwner, isSystemProject, currentAdminProfile]);
+
+  const eligibleApprovedUsers = useMemo(() => {
+    const memberUidSet = new Set(formMemberUids);
+    const memberNameLower = new Set(formMembers.map((m) => m.trim().toLowerCase()));
+    const q = memberSearchQuery.trim().toLowerCase();
+
+    return approvedUsers.filter((u) => {
+      if (isDefaultOperatorUser(u.email || u.displayName)) return false;
+      if (memberUidSet.has(u.uid)) return false;
+      if (memberNameLower.has(u.displayName.trim().toLowerCase())) return false;
+      if (!q) return true;
+      return (
+        u.displayName.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.uid.toLowerCase().includes(q)
+      );
+    });
+  }, [approvedUsers, formMemberUids, formMembers, memberSearchQuery]);
 
   if (!isOpen) return null;
 
   const startNewProject = () => {
+    const initialUids = currentAdminProfile?.uid ? [currentAdminProfile.uid] : [];
     setIsCreatingNew(true);
     setEditingCode(null);
     setFormCode('');
@@ -209,6 +278,8 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setFormEndDate('2026-12-31');
     setFormOwner(DEFAULT_OPERATOR_USER.name);
     setFormMembers([DEFAULT_OPERATOR_USER.name]);
+    setFormMemberUids(initialUids);
+    setPrevMemberUids([]);
     setFormModules(['SD', 'MM', 'FI', 'CO']);
     setAbapStandards({
       common_top_include: 'zcommtop',
@@ -223,68 +294,23 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setNotice(null);
   };
 
-  const syncPrunedDirectory = (projectList: SapProject[], extraNames: string[] = []) => {
-    const activeNames = new Set<string>(extraNames);
-    projectList.forEach((proj) => {
-      (proj.members || []).forEach((m) => activeNames.add(m));
-      if (proj.owner) activeNames.add(proj.owner);
-    });
-    const nextUsers = pruneUnassignedRegisteredUsers(activeNames);
-    setRegisteredUsers(nextUsers);
-  };
-
-  const handleAddUser = () => {
+  const handleAddApprovedUser = async (user: UserProfileRecord) => {
     if (isSystemProject) return;
-
-    const trimmedName = newUserName.trim();
-    if (!trimmedName) {
-      setNotice({
-        type: 'error',
-        text: t('Please enter a user name.', '사용자 이름을 입력해 주세요.'),
-      });
-      return;
-    }
-
-    if (isDefaultOperatorUser(trimmedName)) {
+    if (user.status !== 'approved') {
       setNotice({
         type: 'error',
         text: t(
-          'Josh Lee is already included in every project.',
-          'Josh Lee는 모든 프로젝트에 기본으로 포함되어 있습니다.'
+          'Only approved users can be assigned to a project.',
+          '관리자 승인을 완료한(approved) 사용자만 프로젝트 멤버로 추가할 수 있습니다.'
         ),
       });
       return;
     }
 
-    if (formMembers.some((m) => m.trim().toLowerCase() === trimmedName.toLowerCase())) {
-      setNotice({
-        type: 'error',
-        text: t(
-          `'${trimmedName}' is already a member of this project.`,
-          `'${trimmedName}'님은 이미 현재 프로젝트의 멤버입니다.`
-        ),
-      });
-      return;
-    }
-
-    const res = ensureRegisteredUser({
-      name: trimmedName,
-      email: newUserEmail.trim(),
-      role: newUserRole,
-    });
-    if (!res.success || !res.user) {
-      setNotice({
-        type: 'error',
-        text: res.message || t('Failed to add member.', '멤버 추가에 실패했습니다.'),
-      });
-      return;
-    }
-
-    const nextMembers = enforceProjectMembers([...formMembers, res.user.name], formOwner);
-    setRegisteredUsers(res.users);
+    const nextMembers = enforceProjectMembers([...formMembers, user.displayName], formOwner);
+    const nextMemberUids = Array.from(new Set([...formMemberUids, user.uid]));
     setFormMembers(nextMembers);
-    setNewUserName('');
-    setNewUserEmail('');
+    setFormMemberUids(nextMemberUids);
 
     if (!isCreatingNew && editingCode) {
       const targetProj = projects.find((p) => p.code === editingCode);
@@ -298,20 +324,25 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
           end_date: formEndDate || undefined,
           owner: formOwner || targetProj.owner || DEFAULT_OPERATOR_USER.name,
           members: nextMembers,
+          memberUids: nextMemberUids,
           modules: formModules,
           abap_standards: abapStandards,
         });
         if (saveRes.success && saveRes.savedProject) {
-          syncProjectToFirestore(saveRes.savedProject).catch((err) =>
-            console.warn('Firestore project sync notice:', err)
-          );
+          try {
+            await syncProjectToFirestore(saveRes.savedProject);
+            await syncProjectMembershipChange(editingCode, nextMemberUids, prevMemberUids);
+            setPrevMemberUids(nextMemberUids);
+          } catch (err) {
+            console.warn('Firestore project sync notice:', err);
+          }
           setProjects(saveRes.list);
           onProjectsChanged(editingCode);
           setNotice({
             type: 'success',
             text: t(
-              `Added '${res.user.name}' to project [${editingCode}].`,
-              `'${res.user.name}'님을 프로젝트 [${editingCode}] 멤버로 추가했습니다.`
+              `Added '${user.displayName}' to project [${editingCode}] and synced access permissions.`,
+              `'${user.displayName}'님을 프로젝트 [${editingCode}] 멤버로 추가하고 접근 권한을 동기화했습니다.`
             ),
           });
           return;
@@ -322,13 +353,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setNotice({
       type: 'success',
       text: t(
-        `Added '${res.user.name}' to this project draft. Click Save to create the project.`,
-        `'${res.user.name}'님을 새 프로젝트 멤버로 추가했습니다. 저장 시 반영됩니다.`
+        `Added '${user.displayName}' to this project draft. Click Save to create the project.`,
+        `'${user.displayName}'님을 새 프로젝트 멤버로 추가했습니다. 저장 시 반영됩니다.`
       ),
     });
   };
 
-  const handleRemoveMember = (memberName: string) => {
+  const handleRemoveMember = async (memberName: string, memberUid?: string) => {
     if (isSystemProject || isDefaultOperatorUser(memberName)) return;
 
     const nextOwner =
@@ -339,9 +370,16 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       formMembers.filter((m) => m.trim().toLowerCase() !== memberName.trim().toLowerCase()),
       nextOwner
     );
+    const matchedUid =
+      memberUid ||
+      approvedUsers.find((u) => u.displayName.trim().toLowerCase() === memberName.trim().toLowerCase())?.uid;
+    const nextMemberUids = matchedUid
+      ? formMemberUids.filter((id) => id !== matchedUid)
+      : formMemberUids;
 
     setFormOwner(nextOwner);
     setFormMembers(nextMembers);
+    setFormMemberUids(nextMemberUids);
 
     if (!isCreatingNew && editingCode) {
       const targetProj = projects.find((p) => p.code === editingCode);
@@ -350,19 +388,23 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
           ...targetProj,
           owner: nextOwner,
           members: nextMembers,
+          memberUids: nextMemberUids,
         });
         if (saveRes.success && saveRes.savedProject) {
-          syncProjectToFirestore(saveRes.savedProject).catch((err) =>
-            console.warn('Firestore project sync notice:', err)
-          );
+          try {
+            await syncProjectToFirestore(saveRes.savedProject);
+            await syncProjectMembershipChange(editingCode, nextMemberUids, prevMemberUids);
+            setPrevMemberUids(nextMemberUids);
+          } catch (err) {
+            console.warn('Firestore project sync notice:', err);
+          }
           setProjects(saveRes.list);
-          syncPrunedDirectory(saveRes.list);
           onProjectsChanged(editingCode);
           setNotice({
             type: 'success',
             text: t(
-              `Removed '${memberName}' from project [${editingCode}].`,
-              `'${memberName}'님을 프로젝트 [${editingCode}]에서 제외했습니다.`
+              `Removed '${memberName}' from project [${editingCode}] and revoked project access.`,
+              `'${memberName}'님을 프로젝트 [${editingCode}]에서 제외하고 접근 권한을 회수했습니다.`
             ),
           });
           return;
@@ -370,7 +412,6 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       }
     }
 
-    syncPrunedDirectory(projects, nextMembers);
     setNotice({
       type: 'success',
       text: t(
@@ -387,7 +428,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     );
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSystemProject) return;
 
@@ -424,6 +465,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     }
 
     const enforcedMembers = enforceProjectMembers(formMembers, formOwner);
+    const nextMemberUids = Array.from(
+      new Set([
+        ...formMemberUids,
+        ...(currentAdminProfile?.uid ? [currentAdminProfile.uid] : []),
+      ])
+    );
+
     const res = saveProject({
       code: cleanCode,
       name: formName,
@@ -433,7 +481,9 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       start_date: formStartDate || undefined,
       end_date: formEndDate || undefined,
       owner: formOwner || DEFAULT_OPERATOR_USER.name,
+      ownerId: currentAdminProfile?.uid,
       members: enforcedMembers,
+      memberUids: nextMemberUids,
       modules: formModules,
       abap_standards: abapStandards,
       is_system: false,
@@ -448,11 +498,15 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       return;
     }
 
-    syncProjectToFirestore(res.savedProject).catch((err) =>
-      console.warn('Firestore project sync notice:', err)
-    );
+    try {
+      await syncProjectToFirestore(res.savedProject);
+      await syncProjectMembershipChange(res.savedProject.code, nextMemberUids, prevMemberUids);
+      setPrevMemberUids(nextMemberUids);
+    } catch (err) {
+      console.warn('Firestore project sync notice:', err);
+    }
+
     setProjects(res.list);
-    syncPrunedDirectory(res.list);
     loadIntoForm(res.savedProject);
     setNotice({
       type: 'success',
@@ -477,7 +531,6 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     }
     reassignSpecsProjectToTemp(deletedCode);
     setProjects(res.list);
-    syncPrunedDirectory(res.list);
     const fallback = res.list.find((p) => !p.is_system) || res.list[0];
     if (fallback) loadIntoForm(fallback);
     setNotice({
@@ -763,82 +816,88 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                 </span>
               </div>
 
-              {/* Add Member directly to this project only */}
+              {/* Add Approved-Only Member Picker */}
               {!isSystemProject && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
-                  <div className="text-[11px] font-semibold text-slate-600">
-                    {t(
-                      `Add Member to ${editingCode || 'This Project'}`,
-                      `${editingCode || '현재 프로젝트'}에 멤버 추가`
-                    )}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>
+                        {t(
+                          `Assign Approved Users to ${editingCode || 'This Project'}`,
+                          `${editingCode || '현재 프로젝트'}에 승인 완료 사용자 배정`
+                        )}
+                      </span>
+                    </div>
+                    <div className="relative sm:w-64">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={memberSearchQuery}
+                        onChange={(e) => setMemberSearchQuery(e.target.value)}
+                        placeholder={t(
+                          'Search approved users by name or email...',
+                          '이름 또는 이메일로 승인된 사용자 검색...'
+                        )}
+                        aria-label={t('Search approved users', '승인된 사용자 검색')}
+                        className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                    <input
-                      type="text"
-                      list="project-member-suggestions"
-                      value={newUserName}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setNewUserName(val);
-                        const matched = suggestedExistingUsers.find(
-                          (u) => u.name.toLowerCase() === val.trim().toLowerCase()
-                        );
-                        if (matched) {
-                          if (!newUserEmail && matched.email) setNewUserEmail(matched.email);
-                          if (matched.role) setNewUserRole(matched.role);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddUser();
-                        }
-                      }}
-                      placeholder={t('Full name *', '이름 *')}
-                      aria-label={t('New member name', '새 멤버 이름')}
-                      className="sm:col-span-4 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-blue-500"
-                    />
-                    <datalist id="project-member-suggestions">
-                      {suggestedExistingUsers.map((u) => (
-                        <option key={u.id} value={u.name} />
+
+                  {eligibleApprovedUsers.length === 0 ? (
+                    <div className="px-3 py-2.5 bg-white border border-dashed border-slate-200 rounded-lg text-[11px] text-slate-500">
+                      {t(
+                        'Only approved users can be added. Approve pending users in the Admin Dashboard (/admin) first.',
+                        '승인 완료(approved) 상태인 사용자만 추가할 수 있습니다. Admin 대시보드(/admin)에서 먼저 승인을 완료하세요.'
+                      )}
+                    </div>
+                  ) : (
+                    <div className="max-h-44 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {eligibleApprovedUsers.map((user) => (
+                        <div
+                          key={user.uid}
+                          className="px-2.5 py-2 bg-white border border-slate-200 hover:border-blue-300 rounded-lg flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {user.photoURL ? (
+                              <img
+                                src={user.photoURL}
+                                alt={user.displayName}
+                                className="w-6 h-6 rounded-full object-cover border border-slate-200 shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                {user.displayName.charAt(0)}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-slate-900 truncate">
+                                  {user.displayName}
+                                </span>
+                                <span className="text-[9px] font-mono font-bold px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 uppercase shrink-0">
+                                  {user.role}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 truncate">
+                                {user.email || user.uid}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleAddApprovedUser(user)}
+                            className="px-2.5 py-1 bg-slate-900 hover:bg-blue-600 text-white rounded-md text-[11px] font-semibold flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                          >
+                            <UserPlus className="w-3 h-3" />
+                            <span>{t('Add', '추가')}</span>
+                          </button>
+                        </div>
                       ))}
-                    </datalist>
-                    <input
-                      type="email"
-                      value={newUserEmail}
-                      onChange={(e) => setNewUserEmail(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddUser();
-                        }
-                      }}
-                      placeholder={t('Email (optional)', '이메일 (선택)')}
-                      aria-label={t('New member email', '새 멤버 이메일')}
-                      className="sm:col-span-4 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-blue-500"
-                    />
-                    <select
-                      value={newUserRole}
-                      onChange={(e) => setNewUserRole(e.target.value)}
-                      aria-label={t('New member role', '새 멤버 역할')}
-                      className="sm:col-span-3 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-blue-500"
-                    >
-                      {ROLE_OPTIONS.map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {lang === 'ko' ? r.ko : r.value}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleAddUser}
-                      title={t('Add Member to Project', '프로젝트 멤버 추가')}
-                      aria-label={t('Add Member to Project', '프로젝트 멤버 추가')}
-                      className="sm:col-span-1 h-8 bg-slate-900 hover:bg-slate-800 text-white rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                    </button>
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -846,7 +905,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {memberCardEntries.map((member) => (
                   <div
-                    key={member.name}
+                    key={member.uid || member.name}
                     className="px-3 py-2.5 rounded-lg border bg-blue-50/70 border-blue-300 text-blue-950 text-xs flex items-center justify-between gap-2"
                   >
                     <div className="flex-1 min-w-0 flex items-start gap-2.5">
@@ -884,7 +943,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                     {!isSystemProject && !member.isDefaultOp && (
                       <button
                         type="button"
-                        onClick={() => handleRemoveMember(member.name)}
+                        onClick={() => void handleRemoveMember(member.name, member.uid)}
                         title={t(`Remove ${member.name} from project`, `${member.name} 멤버 제외`)}
                         aria-label={t(
                           `Remove ${member.name} from project`,

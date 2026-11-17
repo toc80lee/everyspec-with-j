@@ -356,7 +356,8 @@ export const copySpecInStorage = (
   authorName?: string,
   targetProjectCode?: string,
   overrideTitle?: string,
-  overrideTcode?: string
+  overrideTcode?: string,
+  authorId?: string
 ): { success: boolean; message?: string; newSpec?: ProgramSpec } => {
   const cleanSourceId = sourceProgramId.trim().toUpperCase();
   const cleanNewId = newProgramId.trim().toUpperCase();
@@ -433,6 +434,7 @@ export const copySpecInStorage = (
     tcode: defaultTcode,
     title: overrideTitle?.trim() || `${sourceItem.spec.title} (Copy)`,
     author,
+    author_id: authorId || undefined,
     created_date: new Date().toISOString().split('T')[0],
     is_system: false,
     change_history: initialHistory,

@@ -342,10 +342,70 @@ export function getProjects(): SapProject[] {
   return fallback;
 }
 
-export function getAccessibleProjectsForUser(userName: string): SapProject[] {
+export interface ProjectAccessFilterOptions {
+  uid?: string;
+  isAdmin?: boolean;
+  assignedProjects?: string[];
+  remoteProjects?: SapProject[];
+}
+
+export function getAccessibleProjectsForUser(
+  userName: string,
+  options?: ProjectAccessFilterOptions
+): SapProject[] {
   const cleanUser = userName.trim();
-  const all = getProjects();
-  return all.filter(
+  const localAll = getProjects();
+
+  // Merge remote Firestore projects with local projects when authenticated
+  let sourceList: SapProject[] = localAll;
+  if (options?.remoteProjects && options.remoteProjects.length > 0) {
+    const mergedMap = new Map<string, SapProject>();
+    // Always ensure COMM and TEMP system containers exist
+    localAll
+      .filter((p) => p.code === COMMON_PROJECT_CODE || p.code === TEMP_PROJECT_CODE)
+      .forEach((p) => mergedMap.set(p.code, p));
+
+    if (options.isAdmin) {
+      localAll.forEach((p) => mergedMap.set(p.code, p));
+    }
+
+    options.remoteProjects.forEach((rp) => {
+      const code = normalizeLegacyProjectCode(rp.code);
+      if (!code) return;
+      mergedMap.set(code, {
+        ...rp,
+        code,
+        members: enforceProjectMembers(rp.members, rp.owner),
+      });
+    });
+
+    sourceList = Array.from(mergedMap.values());
+  }
+
+  if (options) {
+    const assignedSet = new Set(
+      (options.assignedProjects || []).map((c) => normalizeLegacyProjectCode(c))
+    );
+    const uid = (options.uid || '').trim();
+    const isAdmin = Boolean(options.isAdmin);
+
+    const filtered = sourceList.filter((p) => {
+      if (p.visibility === 'common' || p.visibility === 'temp') return true;
+      if (isAdmin) return true;
+      if (assignedSet.has(p.code)) return true;
+      if (uid && Array.isArray(p.memberUids) && p.memberUids.includes(uid)) return true;
+      if (uid && p.ownerId && p.ownerId === uid) return true;
+      return false;
+    });
+
+    return [
+      ...filtered.filter((p) => p.code === COMMON_PROJECT_CODE),
+      ...filtered.filter((p) => p.code !== COMMON_PROJECT_CODE && p.code !== TEMP_PROJECT_CODE),
+      ...filtered.filter((p) => p.code === TEMP_PROJECT_CODE),
+    ];
+  }
+
+  return sourceList.filter(
     (p) =>
       p.visibility === 'common' ||
       p.visibility === 'temp' ||
@@ -541,13 +601,20 @@ export function isReadOnlyCommonSpec(
 
 /**
  * Visibility filter:
- * - TEMP project specs are strictly private to their author (author === currentUserName).
+ * - TEMP project specs are strictly private to their creator (author_id === currentUserId when available, otherwise author === currentUserName).
  * - COMM and team projects show all specs assigned to that project code.
  */
 export function isSpecVisibleInProject(
-  item: { project_code?: string; author?: string; program_id?: string },
+  item: {
+    project_code?: string;
+    author?: string;
+    author_id?: string;
+    program_id?: string;
+    spec?: { author_id?: string };
+  },
   projectCode: string,
-  currentUserName: string
+  currentUserName: string,
+  currentUserId?: string
 ): boolean {
   const itemProject = normalizeLegacyProjectCode(
     item.project_code ||
@@ -560,6 +627,11 @@ export function isSpecVisibleInProject(
   if (itemProject !== targetProject) return false;
 
   if (targetProject === TEMP_PROJECT_CODE) {
+    const itemAuthorId = (item.author_id || item.spec?.author_id || '').trim();
+    const cleanUid = (currentUserId || '').trim();
+    if (cleanUid && itemAuthorId) {
+      return itemAuthorId === cleanUid;
+    }
     return (item.author || '').trim() === currentUserName.trim();
   }
 

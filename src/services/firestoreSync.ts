@@ -68,9 +68,15 @@ export async function syncProjectToFirestore(project: SapProject): Promise<void>
 
   try {
     const existingSnap = await getDoc(ref);
-    const memberUids = Array.from(
-      new Set([...(project.memberUids || []), project.ownerId || user.uid, user.uid].filter(Boolean))
-    ).slice(0, 50);
+    const baseMemberUids = Array.isArray(project.memberUids)
+      ? project.memberUids.filter(Boolean)
+      : existingSnap.exists() && Array.isArray(existingSnap.data()?.memberUids)
+      ? (existingSnap.data().memberUids as string[])
+      : [];
+    const ownerUid = existingSnap.exists()
+      ? existingSnap.data().ownerId || user.uid
+      : project.ownerId || user.uid;
+    const memberUids = Array.from(new Set([...baseMemberUids, ownerUid].filter(Boolean))).slice(0, 50);
 
     const payload: Record<string, any> = {
       code: projectId,
@@ -105,6 +111,86 @@ export async function syncProjectToFirestore(project: SapProject): Promise<void>
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, path);
   }
+}
+
+function mapDocToSapProject(data: Record<string, any>): SapProject {
+  return {
+    code: data.code,
+    name: data.name || data.code,
+    description: data.description || '',
+    visibility: data.visibility || 'project',
+    target_sap_release: data.target_sap_release || 'SAP S/4HANA 2023',
+    start_date: data.start_date || '',
+    end_date: data.end_date || '',
+    owner: data.ownerName || 'Josh Lee',
+    ownerId: data.ownerId,
+    members: Array.isArray(data.memberNames) ? data.memberNames : [data.ownerName || 'Josh Lee'],
+    memberUids: Array.isArray(data.memberUids) ? data.memberUids : [],
+    modules: Array.isArray(data.modules) ? data.modules : ['SD'],
+    abap_standards: data.abap_standards,
+    is_system: Boolean(data.is_system),
+    created_date: data.created_date || '2026-10-01',
+  };
+}
+
+export function subscribeAccessibleProjects(
+  uid: string,
+  isAdmin: boolean,
+  onProjects: (projects: SapProject[]) => void
+): Unsubscribe {
+  const user = auth.currentUser;
+  if (!user) return () => {};
+
+  if (isAdmin) {
+    return onSnapshot(
+      collection(db, 'projects'),
+      (snap) => {
+        const list = snap.docs.map((d) => mapDocToSapProject(d.data() || {}));
+        onProjects(list);
+      },
+      (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'projects');
+      }
+    );
+  }
+
+  let commonProjects: SapProject[] = [];
+  let assignedProjects: SapProject[] = [];
+
+  const emitMerged = () => {
+    const map = new Map<string, SapProject>();
+    [...commonProjects, ...assignedProjects].forEach((p) => {
+      if (p.code) map.set(p.code, p);
+    });
+    onProjects(Array.from(map.values()));
+  };
+
+  const unsubCommon = onSnapshot(
+    query(collection(db, 'projects'), where('visibility', '==', 'common')),
+    (snap) => {
+      commonProjects = snap.docs.map((d) => mapDocToSapProject(d.data() || {}));
+      emitMerged();
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'projects');
+    }
+  );
+
+  const unsubAssigned = onSnapshot(
+    query(collection(db, 'projects'), where('memberUids', 'array-contains', uid)),
+    (snap) => {
+      assignedProjects = snap.docs.map((d) => mapDocToSapProject(d.data() || {}));
+      emitMerged();
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'projects');
+    }
+  );
+
+  return () => {
+    unsubCommon();
+    unsubAssigned();
+  };
 }
 
 export async function syncSpecToFirestore(
@@ -398,9 +484,48 @@ export function subscribeProjectSpecs(
         if (data?.specData) {
           list.push({
             ...(data.specData as ProgramSpec),
+            author_id: data.authorId || data.specData.author_id,
             status: data.status || data.specData.status || 'draft',
             approved_by: data.approvedBy || data.specData.approved_by,
             approved_at: data.approvedAt || data.specData.approved_at,
+          });
+        }
+      });
+      onData(list);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, colPath);
+    }
+  );
+}
+
+export function subscribeProjectMeetings(
+  projectCode: string,
+  onData: (minutes: ProjectMeetingMinute[]) => void
+): Unsubscribe {
+  const user = auth.currentUser;
+  if (!user) return () => {};
+
+  const cleanProj = sanitizeProjectCode(projectCode);
+  const colPath = `projects/${cleanProj}/meetings`;
+  const q =
+    cleanProj === TEMP_PROJECT_CODE
+      ? query(collection(db, colPath), where('authorId', '==', user.uid))
+      : cleanProj === COMMON_PROJECT_CODE
+      ? query(collection(db, colPath), where('projectVisibility', '==', 'common'))
+      : query(collection(db, colPath), where('projectMemberUids', 'array-contains', user.uid));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list: ProjectMeetingMinute[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data?.minuteData) {
+          list.push({
+            ...(data.minuteData as ProjectMeetingMinute),
+            author_id: data.authorId || data.minuteData.author_id,
+            status: data.status || data.minuteData.status || 'recording',
           });
         }
       });

@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { AuthGuard } from './components/AuthGuard.tsx';
 import { AuthProvider } from './contexts/AuthContext.tsx';
 import { LanguageProvider } from './contexts/LanguageContext.tsx';
 import './index.css';
@@ -7,7 +8,9 @@ import './index.css';
 createRoot(document.getElementById('root')!).render(
   <LanguageProvider>
     <AuthProvider>
-      <App />
+      <AuthGuard>
+        <App />
+      </AuthGuard>
     </AuthProvider>
   </LanguageProvider>
 );

@@ -83,4 +83,16 @@ describe('Firestore Security Rules Static & Dirty Dozen Contract', () => {
     expect(rulesContent).toContain('incoming().spec_id == existing().spec_id');
     expect(rulesContent).toContain('exists(/databases/$(database)/documents/projects/$(projectId)/specs/$(specId))');
   });
+
+  it('12. Enforces approval status gating, blocks self-approval/role escalation, isolates projects, and keeps TEMP strictly private', () => {
+    expect(rulesContent).toContain('function isApprovedUser()');
+    expect(rulesContent).toContain("getUserDoc(request.auth.uid).status == 'approved'");
+    expect(rulesContent).toContain("incoming().role == 'user'");
+    expect(rulesContent).toContain("incoming().status == 'pending'");
+    expect(rulesContent).toContain('incoming().status == existing().status');
+    expect(rulesContent).toContain('incoming().assignedProjects == existing().assignedProjects');
+    expect(rulesContent).toContain('function isAssignedToProject(projectId)');
+    expect(rulesContent).toMatch(/getProject\(projectId\)\.visibility == 'temp' && existing\(\)\.authorId == request\.auth\.uid/);
+    expect(rulesContent).toMatch(/existing\(\)\.projectVisibility == 'temp' && existing\(\)\.authorId == request\.auth\.uid/);
+  });
 });

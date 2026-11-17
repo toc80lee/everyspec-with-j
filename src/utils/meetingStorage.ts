@@ -31,24 +31,49 @@ export function getMeetingMinutesList(): ProjectMeetingMinute[] {
 
 /**
  * Retrieve meeting minutes visible within a project.
- * Enforces TEMP per-user isolation (author === currentUserName).
+ * Enforces TEMP per-user isolation (author_id === currentUserId or author === currentUserName).
  */
 export function getVisibleMinutesForProject(
   projectCode: string,
-  currentUserName: string
+  currentUserName: string,
+  currentUserId?: string
 ): ProjectMeetingMinute[] {
   const targetCode = normalizeLegacyProjectCode(projectCode || COMMON_PROJECT_CODE);
   const cleanUser = (currentUserName || '').trim();
+  const cleanUid = (currentUserId || '').trim();
   const all = getMeetingMinutesList();
 
   return all.filter((m) => {
     const itemProj = normalizeLegacyProjectCode(m.project_code || TEMP_PROJECT_CODE);
     if (itemProj !== targetCode) return false;
     if (targetCode === TEMP_PROJECT_CODE) {
+      if (cleanUid && m.author_id) {
+        return m.author_id === cleanUid;
+      }
       return (m.author || '').trim() === cleanUser;
     }
     return true;
   });
+}
+
+export function upsertMeetingMinutesFromRemote(remoteMinutes: ProjectMeetingMinute[]): ProjectMeetingMinute[] {
+  const current = getMeetingMinutesList();
+  const map = new Map<string, ProjectMeetingMinute>();
+  current.forEach((m) => map.set(m.id, m));
+  remoteMinutes.forEach((m) => {
+    if (m && m.id) {
+      map.set(m.id, m);
+    }
+  });
+  const merged = Array.from(map.values()).sort((a, b) =>
+    String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
+  );
+  try {
+    localStorage.setItem(MEETING_STORAGE_KEY, JSON.stringify(merged));
+  } catch {
+    // ignore
+  }
+  return merged;
 }
 
 export function saveMeetingMinute(record: ProjectMeetingMinute): ProjectMeetingMinute[] {

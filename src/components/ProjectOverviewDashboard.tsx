@@ -8,6 +8,7 @@ import {
   FileCode,
   FileSpreadsheet,
   FolderKanban,
+  Globe,
   Info,
   LayoutDashboard,
   List,
@@ -220,9 +221,9 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
   const projectSpecs = useMemo(() => {
     if (!activeProject) return [];
     return allSpecs.filter((item) =>
-      isSpecVisibleInProject(item, activeProject.code, currentUser.name)
+      isSpecVisibleInProject(item, activeProject.code, currentUser.name, currentUser.id)
     );
-  }, [allSpecs, activeProject, currentUser.name]);
+  }, [allSpecs, activeProject, currentUser.name, currentUser.id]);
 
   const projectStatsMap = useMemo(() => {
     const map: Record<
@@ -231,7 +232,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
     > = {};
     accessibleProjects.forEach((p) => {
       const visible = allSpecs.filter((item) =>
-        isSpecVisibleInProject(item, p.code, currentUser.name)
+        isSpecVisibleInProject(item, p.code, currentUser.name, currentUser.id)
       );
       let latestUpdated: string | null = null;
       let myCount = 0;
@@ -247,7 +248,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
       map[p.code] = { count: visible.length, latestUpdated, myCount };
     });
     return map;
-  }, [accessibleProjects, allSpecs, currentUser.name]);
+  }, [accessibleProjects, allSpecs, currentUser.name, currentUser.id]);
 
   const lifecycleCounts = useMemo(() => {
     const counts: Record<SpecLifecycleStatus, number> = {
@@ -307,7 +308,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
       const upperId = item.program_id.toUpperCase();
       if (!favoriteIdSet.has(upperId)) return;
       const isVisible = accessibleProjects.some((p) =>
-        isSpecVisibleInProject(item, p.code, currentUser.name)
+        isSpecVisibleInProject(item, p.code, currentUser.name, currentUser.id)
       );
       if (isVisible) {
         byId.set(upperId, item);
@@ -316,16 +317,16 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
     return favoriteProgramIds
       .map((id) => byId.get(id.toUpperCase()))
       .filter((item): item is SavedProgramSpecItem => Boolean(item));
-  }, [allSpecs, favoriteProgramIds, favoriteIdSet, accessibleProjects, currentUser.name]);
+  }, [allSpecs, favoriteProgramIds, favoriteIdSet, accessibleProjects, currentUser.name, currentUser.id]);
 
   const displayedFavoriteSpecs = useMemo(() => {
     if (favoriteOverviewScope === 'PROJECT' && activeProject) {
       return accessibleFavoriteSpecs.filter((item) =>
-        isSpecVisibleInProject(item, activeProject.code, currentUser.name)
+        isSpecVisibleInProject(item, activeProject.code, currentUser.name, currentUser.id)
       );
     }
     return accessibleFavoriteSpecs;
-  }, [accessibleFavoriteSpecs, favoriteOverviewScope, activeProject, currentUser.name]);
+  }, [accessibleFavoriteSpecs, favoriteOverviewScope, activeProject, currentUser.name, currentUser.id]);
 
   const filteredListSpecs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -632,47 +633,86 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-6 py-5 space-y-5">
 
-        {/* Compact 1-Line Project Selector Tabs */}
+        {/* Compact 1-Line Scope-Grouped Project Selector Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {accessibleProjects.map((proj) => {
+          {accessibleProjects.map((proj, idx) => {
             const isSelected = proj.code === activeProject.code;
             const stats = projectStatsMap[proj.code] || {
               count: 0,
               latestUpdated: null,
               myCount: 0,
             };
+            const prevProj = idx > 0 ? accessibleProjects[idx - 1] : null;
+            const showDivider = prevProj && prevProj.visibility !== proj.visibility;
+            const ScopeIcon =
+              proj.code === COMMON_PROJECT_CODE
+                ? Globe
+                : proj.code === TEMP_PROJECT_CODE
+                ? Lock
+                : FolderKanban;
+            const iconColorClass = isSelected
+              ? proj.code === COMMON_PROJECT_CODE
+                ? 'text-cyan-300'
+                : proj.code === TEMP_PROJECT_CODE
+                ? 'text-amber-300'
+                : 'text-blue-300'
+              : proj.code === COMMON_PROJECT_CODE
+              ? 'text-cyan-600'
+              : proj.code === TEMP_PROJECT_CODE
+              ? 'text-amber-600'
+              : 'text-blue-600';
+            const scopeTag =
+              proj.code === COMMON_PROJECT_CODE
+                ? t('COMMON', '공통')
+                : proj.code === TEMP_PROJECT_CODE
+                ? t('PRIVATE', '개인')
+                : null;
+
             return (
-              <button
-                key={proj.code}
-                type="button"
-                onClick={() => {
-                  onSelectProject(proj.code);
-                  setSelectedModuleFilter('ALL');
-                  setLifecycleFilter('ALL');
-                  setSelectedProgramIds(new Set());
-                }}
-                title={t(
-                  `${proj.name} · Updated ${stats.latestUpdated || '-'} · Mine ${stats.myCount}`,
-                  `${proj.name} · 최근 수정 ${stats.latestUpdated || '-'} · 내 사양서 ${stats.myCount}건`
+              <React.Fragment key={proj.code}>
+                {showDivider && (
+                  <span className="h-5 w-px bg-slate-200 mx-1 shrink-0" aria-hidden="true" />
                 )}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-                  isSelected
-                    ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
-                    : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
-                }`}
-              >
-                <FolderKanban
-                  className={`w-3.5 h-3.5 ${isSelected ? 'text-blue-300' : 'text-blue-600'}`}
-                />
-                <span className="font-mono">{proj.code}</span>
-                <span
-                  className={`font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded ${
-                    isSelected ? 'bg-slate-800 text-blue-300' : 'bg-slate-100 text-slate-600'
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectProject(proj.code);
+                    setSelectedModuleFilter('ALL');
+                    setLifecycleFilter('ALL');
+                    setSelectedProgramIds(new Set());
+                  }}
+                  title={t(
+                    `${proj.name} · Updated ${stats.latestUpdated || '-'} · Mine ${stats.myCount}`,
+                    `${proj.name} · 최근 수정 ${stats.latestUpdated || '-'} · 내 사양서 ${stats.myCount}건`
+                  )}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                    isSelected
+                      ? 'bg-slate-900 border-slate-900 text-white shadow-2xs'
+                      : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
                   }`}
                 >
-                  {stats.count}
-                </span>
-              </button>
+                  <ScopeIcon className={`w-3.5 h-3.5 ${iconColorClass}`} />
+                  <span className="font-mono">{proj.code}</span>
+                  {scopeTag && (
+                    <span
+                      className={`text-[9px] font-bold px-1 py-0.2 rounded ${
+                        isSelected
+                          ? 'bg-slate-800 text-slate-300'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {scopeTag}
+                    </span>
+                  )}
+                  <span
+                    className={`font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded ${
+                      isSelected ? 'bg-slate-800 text-blue-300' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {stats.count}
+                  </span>
+                </button>
+              </React.Fragment>
             );
           })}
         </div>

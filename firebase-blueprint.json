@@ -2,7 +2,7 @@
   "entities": {
     "UserProfilePublic": {
       "title": "UserProfilePublic",
-      "description": "Non-PII public profile displayed in project member rosters and spec authorship.",
+      "description": "User authorization and workspace profile (no PII email; email resides in /users/{uid}/private/info).",
       "type": "object",
       "properties": {
         "uid": {
@@ -16,7 +16,23 @@
           "minLength": 1,
           "maxLength": 80
         },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
         "role": {
+          "type": "string",
+          "enum": ["admin", "user"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"]
+        },
+        "assignedProjects": {
+          "type": "array",
+          "description": "Bounded list of assigned project codes (max 50)."
+        },
+        "projectRole": {
           "type": "string",
           "enum": ["PM", "FUNC", "ABAP", "QA", "ADMIN"]
         },
@@ -24,12 +40,16 @@
           "type": "string",
           "maxLength": 80
         },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time"
         }
       },
-      "required": ["uid", "displayName", "role", "updatedAt"]
+      "required": ["uid", "displayName", "role", "status", "assignedProjects", "createdAt", "updatedAt"]
     },
     "UserProfilePrivate": {
       "title": "UserProfilePrivate",

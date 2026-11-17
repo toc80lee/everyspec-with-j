@@ -1,37 +1,39 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import {
   auth,
   db,
-  handleFirestoreError,
-  OperationType,
   signInWithGoogle,
   signOutFirebase,
 } from '../lib/firebase';
-import { UserProjectRole } from '../types/sap';
+import { UserProfileRecord, UserProjectRole } from '../types/sap';
+import { CurrentUser, getCurrentUser, setCurrentUser } from '../utils/authStorage';
 import {
-  CurrentUser,
-  getCurrentUser,
-  setCurrentUser,
-} from '../utils/authStorage';
+  BOOTSTRAPPED_ADMIN_EMAILS,
+  ensureUserProfileOnSignIn,
+  isBootstrappedAdminEmail,
+  sanitizeFirebaseId,
+  subscribeCurrentUserProfile,
+} from '../services/userManagementService';
 
 export const BOOTSTRAPPED_ADMIN_EMAIL = 'toc80.lee@gmail.com';
-export const BOOTSTRAPPED_ADMIN_EMAILS = [
-  'toc80.lee@gmail.com',
-  'toc50.park@gmail.com',
-];
+export { BOOTSTRAPPED_ADMIN_EMAILS };
 
 interface AuthContextValue {
   firebaseUser: User | null;
   authReady: boolean;
+  profileLoading: boolean;
   isFirebaseAuthenticated: boolean;
+  userProfile: UserProfileRecord | null;
+  isAdmin: boolean;
+  isApproved: boolean;
   activeUser: CurrentUser;
   projectRole: UserProjectRole;
   setProjectRole: (role: UserProjectRole) => void;
-  switchPresetUser: (u: CurrentUser) => void;
   loginWithGoogle: () => Promise<User | null>;
   logoutGoogle: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   authError: string | null;
 }
 
@@ -39,13 +41,12 @@ const ROLE_STORAGE_KEY = 'sap_spec_user_project_role_v1';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function sanitizeId(raw: string): string {
-  return (raw || 'user').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
-}
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfileRecord | null>(null);
+  const [hasAdminDoc, setHasAdminDoc] = useState(false);
   const [activeUser, setActiveUser] = useState<CurrentUser>(() => getCurrentUser());
   const [projectRole, setProjectRoleState] = useState<UserProjectRole>(() => {
     try {
@@ -54,11 +55,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // ignore
     }
-    return 'PM';
+    return 'FUNC';
   });
   const [authError, setAuthError] = useState<string | null>(null);
 
+  const isAdmin = Boolean(
+    firebaseUser?.emailVerified &&
+      (isBootstrappedAdminEmail(firebaseUser.email) ||
+        userProfile?.role === 'admin' ||
+        hasAdminDoc)
+  );
+
+  const isApproved = Boolean(
+    firebaseUser?.emailVerified &&
+      (isAdmin || userProfile?.status === 'approved')
+  );
+
   const setProjectRole = (role: UserProjectRole) => {
+    if (role === 'ADMIN' && !isAdmin) {
+      return;
+    }
     setProjectRoleState(role);
     try {
       localStorage.setItem(ROLE_STORAGE_KEY, role);
@@ -67,106 +83,136 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const syncLegacyActiveUser = useCallback(
+    (user: User, profile: UserProfileRecord | null) => {
+      const uid = sanitizeFirebaseId(user.uid);
+      const displayName = (
+        profile?.displayName ||
+        user.displayName ||
+        user.email?.split('@')[0] ||
+        'SAP User'
+      ).slice(0, 80);
+      const adminFlag =
+        Boolean(user.emailVerified && isBootstrappedAdminEmail(user.email)) ||
+        profile?.role === 'admin';
+
+      const syncedUser: CurrentUser = {
+        id: uid,
+        name: displayName,
+        role: adminFlag
+          ? 'Platform Admin / Architect'
+          : profile?.projectRole || projectRole,
+        department: profile?.department || 'SAP ERP Project Workspace',
+        email: user.email || profile?.email || '',
+      };
+      setCurrentUser(syncedUser);
+      setActiveUser(syncedUser);
+
+      if (adminFlag) {
+        setProjectRoleState('ADMIN');
+      } else if (projectRole === 'ADMIN') {
+        setProjectRoleState(profile?.projectRole && profile.projectRole !== 'ADMIN' ? profile.projectRole : 'FUNC');
+      }
+    },
+    [projectRole]
+  );
+
   useEffect(() => {
+    let unsubProfile: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       setFirebaseUser(user);
       setAuthReady(true);
 
-      if (user) {
-        const uid = sanitizeId(user.uid);
-        const displayName = (user.displayName || user.email?.split('@')[0] || 'SAP User').slice(0, 80);
-        const isBootAdmin =
-          Boolean(user.email && BOOTSTRAPPED_ADMIN_EMAILS.includes(user.email.toLowerCase())) &&
-          user.emailVerified;
+      if (!user) {
+        setUserProfile(null);
+        setHasAdminDoc(false);
+        setProfileLoading(false);
+        return;
+      }
 
-        const syncedUser: CurrentUser = {
-          id: uid,
-          name: displayName,
-          role: isBootAdmin ? 'Platform Admin / Architect' : projectRole,
-          department: 'SAP ERP Project Workspace',
-          email: user.email || '',
-        };
-        setCurrentUser(syncedUser);
-        setActiveUser(syncedUser);
+      setProfileLoading(true);
+      const uid = sanitizeFirebaseId(user.uid);
 
-        if (isBootAdmin) {
-          setProjectRoleState('ADMIN');
-        }
+      try {
+        const ensured = await ensureUserProfileOnSignIn(user, projectRole);
+        setUserProfile(ensured);
+        syncLegacyActiveUser(user, ensured);
 
         if (user.emailVerified) {
-          // Ensure public profile (no PII) and private PII doc exist per split-collection rule
-          const publicPath = `users/${uid}`;
           try {
-            const publicRef = doc(db, 'users', uid);
-            await setDoc(
-              publicRef,
-              {
-                uid,
-                displayName,
-                role: ['PM', 'FUNC', 'ABAP', 'QA'].includes(projectRole) ? projectRole : 'PM',
-                department: 'SAP ERP Team',
-                updatedAt: serverTimestamp(),
-              },
-              { merge: true }
-            );
-          } catch (err) {
-            console.warn('Public profile sync skipped:', err);
+            const adminSnap = await getDoc(doc(db, 'admins', uid));
+            setHasAdminDoc(adminSnap.exists());
+          } catch {
+            setHasAdminDoc(false);
           }
 
-          if (user.email) {
-            const privatePath = `users/${uid}/private/info`;
-            try {
-              const privateRef = doc(db, 'users', uid, 'private', 'info');
-              const existingPriv = await getDoc(privateRef);
-              if (!existingPriv.exists()) {
-                await setDoc(privateRef, {
-                  uid,
-                  email: user.email.slice(0, 200),
-                  createdAt: serverTimestamp(),
-                  updatedAt: serverTimestamp(),
-                });
-              } else {
-                await setDoc(
-                  privateRef,
-                  {
-                    uid,
-                    email: user.email.slice(0, 200),
-                    updatedAt: serverTimestamp(),
-                  },
-                  { merge: true }
-                );
+          unsubProfile = subscribeCurrentUserProfile(
+            uid,
+            user.email || '',
+            (liveProfile) => {
+              if (liveProfile) {
+                setUserProfile(liveProfile);
+                syncLegacyActiveUser(user, liveProfile);
               }
-            } catch (err) {
-              handleFirestoreError(err, OperationType.WRITE, privatePath);
+              setProfileLoading(false);
+            },
+            (err) => {
+              console.warn('User profile listener warning:', err);
+              setProfileLoading(false);
             }
-          }
-
-          // Bootstrap admin document if signed-in user matches bootstrapped admin email
-          if (isBootAdmin && user.email) {
-            try {
-              const adminRef = doc(db, 'admins', uid);
-              const existingAdmin = await getDoc(adminRef);
-              if (!existingAdmin.exists()) {
-                await setDoc(adminRef, {
-                  uid,
-                  email: user.email.slice(0, 200),
-                  createdAt: serverTimestamp(),
-                });
-              }
-            } catch (err) {
-              console.warn('Admin bootstrap notice:', err);
-            }
-          }
+          );
+        } else {
+          setProfileLoading(false);
         }
+      } catch (err: any) {
+        console.error('Failed to initialize user profile:', err);
+        setAuthError(err?.message || 'Failed to load user profile.');
+        setProfileLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubProfile) unsubProfile();
+    };
   }, []);
 
-  const switchPresetUser = (u: CurrentUser) => {
-    setCurrentUser(u);
-    setActiveUser(u);
+  const refreshProfile = async (): Promise<void> => {
+    if (!firebaseUser) return;
+    setProfileLoading(true);
+    try {
+      const uid = sanitizeFirebaseId(firebaseUser.uid);
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists()) {
+        const d = snap.data() || {};
+        const refreshed: UserProfileRecord = {
+          uid: d.uid || uid,
+          email: firebaseUser.email || '',
+          displayName: d.displayName || firebaseUser.displayName || 'SAP User',
+          photoURL: d.photoURL || firebaseUser.photoURL || '',
+          role: d.role === 'admin' ? 'admin' : 'user',
+          status:
+            d.status === 'approved' || d.status === 'rejected' || d.status === 'pending'
+              ? d.status
+              : 'pending',
+          assignedProjects: Array.isArray(d.assignedProjects) ? d.assignedProjects : [],
+          projectRole: d.projectRole || (d.role === 'admin' ? 'ADMIN' : 'FUNC'),
+          department: d.department || 'SAP Project Team',
+        };
+        setUserProfile(refreshed);
+        syncLegacyActiveUser(firebaseUser, refreshed);
+      }
+    } catch (err: any) {
+      setAuthError(err?.message || 'Failed to refresh profile status.');
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
   const loginWithGoogle = async (): Promise<User | null> => {
@@ -175,8 +221,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const user = await signInWithGoogle();
       return user;
     } catch (err: any) {
-      const msg = err?.message || 'Google sign-in failed.';
-      setAuthError(msg);
+      const code = err?.code || '';
+      if (code === 'auth/popup-closed-by-user') {
+        setAuthError('로그인이 취소되었습니다. Google 계정을 선택해 다시 로그인해 주세요.');
+      } else {
+        setAuthError(err?.message || 'Google sign-in failed.');
+      }
       return null;
     }
   };
@@ -185,6 +235,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthError(null);
     try {
       await signOutFirebase();
+      setUserProfile(null);
+      setHasAdminDoc(false);
     } catch (err: any) {
       setAuthError(err?.message || 'Sign-out failed.');
     }
@@ -195,13 +247,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         firebaseUser,
         authReady,
+        profileLoading,
         isFirebaseAuthenticated: Boolean(firebaseUser && firebaseUser.emailVerified),
+        userProfile,
+        isAdmin,
+        isApproved,
         activeUser,
         projectRole,
         setProjectRole,
-        switchPresetUser,
         loginWithGoogle,
         logoutGoogle,
+        refreshProfile,
         authError,
       }}
     >

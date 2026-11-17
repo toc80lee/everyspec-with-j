@@ -19,12 +19,6 @@ import {
   Plus,
 } from 'lucide-react';
 import { ProgramSpec, UserProjectRole } from '../types/sap';
-import {
-  CurrentUser,
-  USERS_UPDATED_EVENT,
-  getRegisteredUsers,
-  isDefaultOperatorUser,
-} from '../utils/authStorage';
 import { SapGuiTheme, SAP_GUI_THEMES } from '../data/sapGuiThemes';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -37,6 +31,7 @@ export type MainWorkspaceMode =
   | 'meeting_wizard'
   | 'user_guide'
   | 'project_settings'
+  | 'admin_dashboard'
   | 'shortcuts'
   | 'split'
   | 'mockup_only'
@@ -61,7 +56,7 @@ interface TopNavProps {
   onCycleSplitLayout?: () => void;
   onOpenShortcuts?: () => void;
   onOpenProjectManager?: () => void;
-  onUserChanged?: (user: CurrentUser) => void;
+  onOpenAdmin?: () => void;
   selectedProjectCode?: string;
   isCurrentSpecFavorite?: boolean;
   onToggleCurrentSpecFavorite?: () => void;
@@ -75,33 +70,34 @@ export const TopNav: React.FC<TopNavProps> = ({
   currentMode,
   onSelectMode,
   currentSpec,
-  onSelectTemplate,
+  onSelectTemplate: _onSelectTemplate,
   onNewSpec,
-  onTriggerPrint,
-  onOpenTemplates,
-  onExportPdf,
-  onGenerateMockData,
+  onTriggerPrint: _onTriggerPrint,
+  onOpenTemplates: _onOpenTemplates,
+  onExportPdf: _onExportPdf,
+  onGenerateMockData: _onGenerateMockData,
   currentTheme = 'blue_crystal',
   onSelectTheme,
   splitLayout = 'left-right',
   onCycleSplitLayout,
   onOpenShortcuts,
-  onOpenProjectManager,
-  onUserChanged,
+  onOpenProjectManager: _onOpenProjectManager,
+  onOpenAdmin,
   selectedProjectCode,
   isCurrentSpecFavorite = false,
   onToggleCurrentSpecFavorite,
-  onOpenCommandPalette,
+  onOpenCommandPalette: _onOpenCommandPalette,
   lastSavedAt,
   hasUnsavedChanges = false,
   onQuickSnapshotSave,
 }) => {
   const {
     activeUser,
+    userProfile,
+    isAdmin,
     isFirebaseAuthenticated,
     projectRole,
     setProjectRole,
-    switchPresetUser,
     loginWithGoogle,
     logoutGoogle,
     authError,
@@ -114,24 +110,12 @@ export const TopNav: React.FC<TopNavProps> = ({
     currentMode === 'meeting_wizard' ||
     currentMode === 'user_guide' ||
     currentMode === 'project_settings' ||
+    currentMode === 'admin_dashboard' ||
     currentMode === 'shortcuts';
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
-  const [registeredUsers, setRegisteredUsers] = useState<CurrentUser[]>(() => getRegisteredUsers());
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const syncUsers = () => setRegisteredUsers(getRegisteredUsers());
-    window.addEventListener(USERS_UPDATED_EVENT, syncUsers);
-    return () => window.removeEventListener(USERS_UPDATED_EVENT, syncUsers);
-  }, []);
-
-  useEffect(() => {
-    if (isUserMenuOpen) {
-      setRegisteredUsers(getRegisteredUsers());
-    }
-  }, [isUserMenuOpen]);
 
   useEffect(() => {
     if (!isUserMenuOpen && !isThemeMenuOpen) return;
@@ -164,6 +148,7 @@ export const TopNav: React.FC<TopNavProps> = ({
     meeting_wizard: t('AI Spec Wizard', 'AI 사양서 생성'),
     user_guide: t('User Guide', '사용 가이드'),
     project_settings: t('Project Settings', '프로젝트 설정'),
+    admin_dashboard: t('Admin Console', '관리자 콘솔'),
     shortcuts: t('Keyboard Shortcuts', '단축키 안내'),
     split: t('Split Workspace', '분할 작업실'),
     mockup_only: t('GUI Simulator', 'GUI 시뮬레이터'),
@@ -171,6 +156,10 @@ export const TopNav: React.FC<TopNavProps> = ({
     abap_code: t('ABAP Code', 'ABAP 코드'),
     document: t('Print View', '인쇄 미리보기'),
   };
+
+  const availableProjectRoles: UserProjectRole[] = isAdmin
+    ? ['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN']
+    : ['PM', 'FUNC', 'ABAP', 'QA'];
 
   const renderTopTooltip = (label: string, shortcut?: string, alignRight = false) => (
     <span
@@ -436,17 +425,83 @@ export const TopNav: React.FC<TopNavProps> = ({
             type="button"
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
             aria-label={t(`Account & Settings (${activeUser.name})`, `계정 및 설정 (${activeUser.name})`)}
-            className="group relative w-8 h-8 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            className="group relative w-8 h-8 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg flex items-center justify-center transition-colors cursor-pointer shrink-0 overflow-hidden"
           >
-            <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px]">
-              {activeUser.name.charAt(0)}
-            </div>
+            {userProfile?.photoURL ? (
+              <img
+                src={userProfile.photoURL}
+                alt={activeUser.name}
+                className="w-6 h-6 rounded-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px]">
+                {activeUser.name.charAt(0)}
+              </div>
+            )}
             {!isUserMenuOpen &&
-              renderTopTooltip(`${activeUser.name} · ${projectRole}`, undefined, true)}
+              renderTopTooltip(
+                `${activeUser.name} · ${isAdmin ? 'ADMIN' : projectRole}`,
+                undefined,
+                true
+              )}
           </button>
 
           {isUserMenuOpen && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 p-2.5 z-50 text-slate-800 space-y-2.5">
+              {/* Authenticated Google Profile Header */}
+              <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                {userProfile?.photoURL ? (
+                  <img
+                    src={userProfile.photoURL}
+                    alt={activeUser.name}
+                    className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm shrink-0">
+                    {activeUser.name.charAt(0)}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-900 truncate">
+                      {activeUser.name}
+                    </span>
+                    <span
+                      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+                        isAdmin
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
+                      {isAdmin ? 'ADMIN' : 'USER'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 truncate">
+                    {activeUser.email || userProfile?.email}
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Console Quick Entry */}
+              {isAdmin && onOpenAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    onOpenAdmin();
+                  }}
+                  className="w-full px-2.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{t('Admin Console (/admin)', '관리자 콘솔 (/admin)')}</span>
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-400">/admin</span>
+                </button>
+              )}
+
               {/* Language Setting inside Account & Settings */}
               <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-2">
                 <span className="text-[11px] font-bold text-slate-700">
@@ -474,51 +529,13 @@ export const TopNav: React.FC<TopNavProps> = ({
                 </div>
               </div>
 
-              {/* Google Cloud Auth Section */}
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className={`w-3.5 h-3.5 ${isFirebaseAuthenticated ? 'text-emerald-600' : 'text-slate-400'}`} />
-                    {t('Cloud Sync', '클라우드 동기화')}
-                  </span>
-                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isFirebaseAuthenticated ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
-                    {isFirebaseAuthenticated ? t('SYNC ON', '동기화 중') : t('LOCAL', '로컬')}
-                  </span>
-                </div>
-                {isFirebaseAuthenticated ? (
-                  <div className="flex items-center justify-between gap-2 text-[11px]">
-                    <span className="truncate text-slate-600 font-mono">{activeUser.email || activeUser.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => logoutGoogle()}
-                      className="flex items-center gap-1 px-2 py-1 rounded bg-white hover:bg-rose-50 text-rose-700 border border-slate-200 font-semibold shrink-0 cursor-pointer"
-                    >
-                      <LogOut className="w-3 h-3" />
-                      {t('Sign Out', '로그아웃')}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => loginWithGoogle()}
-                    className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    {t('Sign in with Google', 'Google 로그인')}
-                  </button>
-                )}
-                {authError && (
-                  <div className="text-[10px] text-rose-600">{authError}</div>
-                )}
-              </div>
-
               {/* Project RBAC Role Selector */}
               <div>
                 <div className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1">
                   {t('Project Role (Approval)', '프로젝트 역할 (승인 권한)')}
                 </div>
-                <div className="grid grid-cols-5 gap-1">
-                  {(['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN'] as UserProjectRole[]).map((role) => (
+                <div className={`grid ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} gap-1`}>
+                  {availableProjectRoles.map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -593,44 +610,33 @@ export const TopNav: React.FC<TopNavProps> = ({
                 </div>
               )}
 
-              {/* Registered Users Switcher */}
-              <div>
-                <div className="text-[10px] font-bold text-slate-500 uppercase px-1 py-1 border-t border-slate-100">
-                  {t('Switch User Profile', '사용자 프로필 전환')}
-                </div>
-                <div className="space-y-0.5 max-h-56 overflow-y-auto">
-                  {registeredUsers.map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => {
-                        switchPresetUser(u);
-                        setIsUserMenuOpen(false);
-                        onUserChanged?.(u);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                        activeUser.name === u.name
-                          ? 'bg-blue-50 text-blue-900 font-bold border border-blue-200'
-                          : 'hover:bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      <div className="min-w-0 pr-2">
-                        <div className="font-semibold text-xs flex items-center gap-1.5">
-                          <span className="truncate">{u.name}</span>
-                          {isDefaultOperatorUser(u) && (
-                            <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-slate-900 text-white shrink-0">
-                              {t('Default', '기본 관리자')}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-slate-500 truncate">{u.email || u.role}</div>
-                      </div>
-                      {activeUser.name === u.name && (
-                        <span className="text-blue-600 font-bold text-xs shrink-0">✓</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+              {/* Google Cloud Auth / Sign Out */}
+              <div className="border-t border-slate-100 pt-2 space-y-1.5">
+                {isFirebaseAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      void logoutGoogle();
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>{t('Sign Out', '로그아웃')}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void loginWithGoogle()}
+                    className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>{t('Sign in with Google', 'Google 로그인')}</span>
+                  </button>
+                )}
+                {authError && (
+                  <div className="text-[10px] text-rose-600">{authError}</div>
+                )}
               </div>
             </div>
           )}
