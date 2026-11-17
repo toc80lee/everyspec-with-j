@@ -163,7 +163,7 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
           {authError && (
             <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-800/80 text-rose-200 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-              <span>{authError}</span>
+              <span className="min-w-0 break-words leading-relaxed">{authError}</span>
             </div>
           )}
 

@@ -222,8 +222,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return user;
     } catch (err: any) {
       const code = err?.code || '';
-      if (code === 'auth/popup-closed-by-user') {
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
         setAuthError('로그인이 취소되었습니다. Google 계정을 선택해 다시 로그인해 주세요.');
+      } else if (code === 'auth/popup-blocked') {
+        setAuthError(
+          '브라우저에서 로그인 팝업이 차단되었습니다. 팝업 차단을 해제한 뒤 다시 시도해 주세요.'
+        );
+      } else if (code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : '';
+        setAuthError(
+          `현재 도메인(${host || 'unknown'})이 Firebase 인증 승인 도메인에 등록되지 않았습니다. Firebase Console > Authentication > Settings > 승인된 도메인에 해당 도메인을 추가한 뒤 새로고침해 주세요.`
+        );
       } else {
         setAuthError(err?.message || 'Google sign-in failed.');
       }
