@@ -21,6 +21,7 @@ import {
   UserProjectRole,
 } from '../types/sap';
 import { COMMON_PROJECT_CODE, TEMP_PROJECT_CODE } from '../utils/projectStorage';
+import { isValidProjectRole, normalizeProjectRole } from '../utils/projectRoles';
 
 export const BOOTSTRAPPED_ADMIN_EMAILS = [
   'toc80.lee@gmail.com',
@@ -55,7 +56,7 @@ function mapDocToUserProfile(uid: string, data: Record<string, any>, fallbackEma
     data.status === 'approved' || data.status === 'rejected' || data.status === 'pending'
       ? data.status
       : 'pending';
-  const rawProjectRole: UserProjectRole = ['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN'].includes(data.projectRole)
+  const rawProjectRole: UserProjectRole = isValidProjectRole(data.projectRole)
     ? data.projectRole
     : rawRole === 'admin'
     ? 'ADMIN'
@@ -313,13 +314,35 @@ export function subscribeAllUsersForAdmin(
 
 export async function updateUserApprovalStatus(
   targetUid: string,
-  status: UserApprovalStatus
+  status: UserApprovalStatus,
+  projectRole?: UserProjectRole
 ): Promise<void> {
   const cleanUid = sanitizeFirebaseId(targetUid);
   const path = `users/${cleanUid}`;
   try {
-    await updateDoc(doc(db, 'users', cleanUid), {
+    const patch: Record<string, any> = {
       status,
+      updatedAt: serverTimestamp(),
+    };
+    if (projectRole && isValidProjectRole(projectRole)) {
+      patch.projectRole = projectRole;
+    }
+    await updateDoc(doc(db, 'users', cleanUid), patch);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, path);
+  }
+}
+
+export async function updateUserProjectRole(
+  targetUid: string,
+  projectRole: UserProjectRole
+): Promise<void> {
+  const cleanUid = sanitizeFirebaseId(targetUid);
+  const path = `users/${cleanUid}`;
+  const safeRole = normalizeProjectRole(projectRole, 'FUNC');
+  try {
+    await updateDoc(doc(db, 'users', cleanUid), {
+      projectRole: safeRole,
       updatedAt: serverTimestamp(),
     });
   } catch (err) {
@@ -448,6 +471,15 @@ export async function updateUserAssignedProjects(
         const nextNames = shouldInclude
           ? Array.from(new Set([...(proj.members || ['Josh Lee']), targetUser.displayName])).slice(0, 50)
           : proj.members || ['Josh Lee'];
+        const nextMemberRoles: Record<string, UserProjectRole> = { ...(proj.memberRoles || {}) };
+        if (shouldInclude) {
+          nextMemberRoles[cleanUid] = normalizeProjectRole(
+            nextMemberRoles[cleanUid] || targetUser.projectRole,
+            'FUNC'
+          );
+        } else {
+          delete nextMemberRoles[cleanUid];
+        }
         await setDoc(projRef, {
           code,
           name: (proj.name || code).slice(0, 120),
@@ -460,6 +492,7 @@ export async function updateUserAssignedProjects(
           ownerName: (proj.owner || 'Josh Lee').slice(0, 80),
           memberUids: nextUids,
           memberNames: nextNames,
+          memberRoles: nextMemberRoles,
           modules: (proj.modules && proj.modules.length > 0 ? proj.modules : ['SD']).slice(0, 10),
           is_system: false,
           created_date: (proj.created_date || new Date().toISOString().split('T')[0]).slice(0, 30),
@@ -473,6 +506,8 @@ export async function updateUserAssignedProjects(
       const data = snap.data() || {};
       const existingUids: string[] = Array.isArray(data.memberUids) ? data.memberUids : [];
       const existingNames: string[] = Array.isArray(data.memberNames) ? data.memberNames : proj.members || [];
+      const existingRoles: Record<string, UserProjectRole> =
+        data.memberRoles && typeof data.memberRoles === 'object' ? { ...data.memberRoles } : {};
 
       let nextUids = existingUids.filter((id) => id !== cleanUid);
       let nextNames = existingNames.filter(
@@ -482,11 +517,17 @@ export async function updateUserAssignedProjects(
       if (shouldInclude) {
         nextUids = Array.from(new Set([...nextUids, cleanUid])).slice(0, 50);
         nextNames = Array.from(new Set([...nextNames, targetUser.displayName])).slice(0, 50);
+        if (!existingRoles[cleanUid]) {
+          existingRoles[cleanUid] = normalizeProjectRole(targetUser.projectRole, 'FUNC');
+        }
+      } else {
+        delete existingRoles[cleanUid];
       }
 
       await updateDoc(projRef, {
         memberUids: nextUids,
         memberNames: nextNames,
+        memberRoles: existingRoles,
         updatedAt: serverTimestamp(),
       });
 

@@ -95,4 +95,10 @@ describe('Firestore Security Rules Static & Dirty Dozen Contract', () => {
     expect(rulesContent).toMatch(/getProject\(projectId\)\.visibility == 'temp' && existing\(\)\.authorId == request\.auth\.uid/);
     expect(rulesContent).toMatch(/existing\(\)\.projectVisibility == 'temp' && existing\(\)\.authorId == request\.auth\.uid/);
   });
+
+  it('13. Supports PI project role and bounded project memberRoles map', () => {
+    expect(rulesContent).toContain("'PI'");
+    expect(rulesContent).toContain('memberRoles');
+    expect(rulesContent).toContain('data.memberRoles is map && data.memberRoles.size() <= 50');
+  });
 });

@@ -131,7 +131,7 @@ service cloud.firestore {
         data.role in ['admin', 'user'] &&
         data.status in ['pending', 'approved', 'rejected'] &&
         isStringList(data.assignedProjects, 50) &&
-        (!('projectRole' in data) || data.projectRole in ['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN']) &&
+        (!('projectRole' in data) || data.projectRole in ['PM', 'FUNC', 'ABAP', 'QA', 'PI', 'ADMIN']) &&
         (!('department' in data) || isValidString(data.department, 0, 80)) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
@@ -164,7 +164,7 @@ service cloud.firestore {
         data.keys().hasOnly([
           'code', 'name', 'description', 'visibility', 'target_sap_release',
           'start_date', 'end_date',
-          'ownerId', 'ownerName', 'memberUids', 'memberNames', 'modules',
+          'ownerId', 'ownerName', 'memberUids', 'memberNames', 'memberRoles', 'modules',
           'abap_standards', 'is_system', 'created_date', 'createdAt', 'updatedAt'
         ]) &&
         data.code == projectId &&
@@ -180,6 +180,7 @@ service cloud.firestore {
         isValidString(data.ownerName, 1, 80) &&
         isStringList(data.memberUids, 50) &&
         (!('memberNames' in data) || isStringList(data.memberNames, 50)) &&
+        (!('memberRoles' in data) || (data.memberRoles is map && data.memberRoles.size() <= 50)) &&
         isStringList(data.modules, 10) &&
         (!('abap_standards' in data) || data.abap_standards is map) &&
         (!('is_system' in data) || data.is_system is bool) &&
@@ -262,7 +263,7 @@ service cloud.firestore {
         data.section in ['general', 'selection', 'field_catalog', 'data_logic', 'governance'] &&
         isValidId(data.authorId) &&
         isValidString(data.authorName, 1, 80) &&
-        data.authorRole in ['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN'] &&
+        data.authorRole in ['PM', 'FUNC', 'ABAP', 'QA', 'PI', 'ADMIN'] &&
         isValidString(data.body, 1, 1500) &&
         data.resolved is bool &&
         (!('resolvedBy' in data) || isValidString(data.resolvedBy, 0, 80)) &&

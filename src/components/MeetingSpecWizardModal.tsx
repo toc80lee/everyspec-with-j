@@ -44,6 +44,7 @@ import {
 } from '../utils/aiLogicGenerator';
 import { SAMPLE_SPECS } from '../data/sampleSpecs';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { PageHeader } from './PageHeader';
 
 const SAP_MODULES: SapModule[] = ['SD', 'MM', 'FI', 'CO', 'PP', 'HR', 'QM', 'PM', 'BC', 'CM'];
@@ -154,6 +155,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
   onSpecFinalized,
 }) => {
   const { lang, t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const nonCommonProjects = useMemo(
     () => accessibleProjects.filter((p) => p.code !== COMMON_PROJECT_CODE),
     [accessibleProjects]
@@ -1077,9 +1079,16 @@ ${minutesMarkdown}`;
                         </div>
                         <button
                           type="button"
-                          onClick={() =>
-                            setSegments((prev) => prev.filter((item) => item.id !== seg.id))
-                          }
+                          onClick={async () => {
+                            const preview = seg.text.trim();
+                            const confirmed = await confirmDelete({
+                              title: t('Delete Recording Segment', '녹취 항목 삭제'),
+                              message: t('Are you sure you want to delete this segment?', '삭제하시겠습니까?'),
+                              targetName: preview.length > 80 ? `${preview.slice(0, 80)}...` : preview,
+                            });
+                            if (!confirmed) return;
+                            setSegments((prev) => prev.filter((item) => item.id !== seg.id));
+                          }}
                           className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
                           title={t('Delete segment', '항목 삭제')}
                           aria-label={t('Delete segment', '항목 삭제')}

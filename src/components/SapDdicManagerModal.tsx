@@ -34,6 +34,7 @@ import {
   deleteCustomDdicTableFromFirestore,
 } from '../services/firestoreSync';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface SapDdicManagerModalProps {
   isOpen: boolean;
@@ -49,6 +50,7 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
   initialTabname,
 }) => {
   const { lang, t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const [activeTab, setActiveTab] = useState<'tables' | 'fields'>('tables');
   const [tables, setTables] = useState<SapDD02LTable[]>(() => getDD02LTables());
   const [fields, setFields] = useState<SapDD03LField[]>(() => getDD03LFields());
@@ -164,17 +166,26 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
   };
 
   // Delete table
-  const handleDeleteTable = (tabname: string) => {
-    if (window.confirm(t(`Delete table '${tabname}' and all its DD03L fields?`, `테이블 '${tabname}' 및 모든 DD03L 필드를 삭제하시겠습니까?`))) {
-      const { tables: upTables, fields: upFields } = deleteDD02LTable(tabname);
-      setTables(upTables);
-      setFields(upFields);
-      if (selectedTabname.toUpperCase() === tabname.toUpperCase()) {
-        setSelectedTabname(upTables[0]?.tabname || '');
-      }
-      deleteCustomDdicTableFromFirestore(tabname).catch(() => {});
-      notifyChange();
+  const handleDeleteTable = async (tabname: string) => {
+    const confirmed = await confirmDelete({
+      title: t('Delete DDIC Table', 'DDIC 테이블 삭제'),
+      message: t('Are you sure you want to delete this table?', '삭제하시겠습니까?'),
+      targetName: tabname,
+      description: t(
+        'The table and all its DD03L fields will be deleted.',
+        '해당 테이블 및 모든 DD03L 필드가 삭제됩니다.'
+      ),
+    });
+    if (!confirmed) return;
+
+    const { tables: upTables, fields: upFields } = deleteDD02LTable(tabname);
+    setTables(upTables);
+    setFields(upFields);
+    if (selectedTabname.toUpperCase() === tabname.toUpperCase()) {
+      setSelectedTabname(upTables[0]?.tabname || '');
     }
+    deleteCustomDdicTableFromFirestore(tabname).catch(() => {});
+    notifyChange();
   };
 
   // Open add field
@@ -231,28 +242,43 @@ export const SapDdicManagerModal: React.FC<SapDdicManagerModalProps> = ({
   };
 
   // Delete field
-  const handleDeleteField = (id: string, name: string) => {
-    if (window.confirm(t(`Delete field '${name}'?`, `필드 '${name}'을(를) 삭제하시겠습니까?`))) {
-      const saved = deleteDD03LField(id);
-      setFields(saved);
-      const parentTable = tables.find((t) => t.tabname.toUpperCase() === selectedTabname.toUpperCase());
-      if (parentTable?.is_custom) {
-        const updatedFields = saved.filter((f) => f.tabname.toUpperCase() === selectedTabname.toUpperCase());
-        syncCustomDdicTableToFirestore(parentTable, updatedFields).catch(() => {});
-      }
-      notifyChange();
+  const handleDeleteField = async (id: string, name: string) => {
+    const confirmed = await confirmDelete({
+      title: t('Delete DDIC Field', 'DDIC 필드 삭제'),
+      message: t('Are you sure you want to delete this field?', '삭제하시겠습니까?'),
+      targetName: `${selectedTabname}-${name}`,
+    });
+    if (!confirmed) return;
+
+    const saved = deleteDD03LField(id);
+    setFields(saved);
+    const parentTable = tables.find((t) => t.tabname.toUpperCase() === selectedTabname.toUpperCase());
+    if (parentTable?.is_custom) {
+      const updatedFields = saved.filter((f) => f.tabname.toUpperCase() === selectedTabname.toUpperCase());
+      syncCustomDdicTableToFirestore(parentTable, updatedFields).catch(() => {});
     }
+    notifyChange();
   };
 
   // Reset to SAP Standard
-  const handleResetStandard = () => {
-    if (window.confirm(t('Reset SAP standard DD02L tables and DD03L fields to defaults? Custom changes will be lost.', 'SAP 표준 DD02L 테이블 및 DD03L 필드를 기본값으로 초기화할까요? 사용자 정의 변경 사항은 사라집니다.'))) {
-      const res = resetDdicToStandard();
-      setTables(res.tables);
-      setFields(res.fields);
-      setSelectedTabname(res.tables[0]?.tabname || 'VBAK');
-      notifyChange();
-    }
+  const handleResetStandard = async () => {
+    const confirmed = await confirmDelete({
+      title: t('Reset DDIC to SAP Standard', 'DDIC 표준 초기화'),
+      message: t(
+        'Reset SAP standard DD02L tables and DD03L fields to defaults?',
+        'SAP 표준 DD02L 테이블 및 DD03L 필드를 기본값으로 초기화하시겠습니까?'
+      ),
+      description: t('Custom changes will be lost.', '사용자 정의 변경 사항은 사라집니다.'),
+      confirmLabel: t('Reset', '초기화'),
+      tone: 'warning',
+    });
+    if (!confirmed) return;
+
+    const res = resetDdicToStandard();
+    setTables(res.tables);
+    setFields(res.fields);
+    setSelectedTabname(res.tables[0]?.tabname || 'VBAK');
+    notifyChange();
   };
 
   if (!isOpen) return null;

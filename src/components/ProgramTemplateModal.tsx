@@ -34,6 +34,7 @@ import {
   importTemplateFromJson,
 } from '../utils/templateStorage';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface ProgramTemplateModalProps {
   isOpen: boolean;
@@ -49,12 +50,12 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
   onSelectTemplate,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const [activeTab, setActiveTab] = useState<'predefined' | 'saved' | 'save_current'>('predefined');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [savedTemplates, setSavedTemplates] = useState<SavedUserTemplate[]>([]);
   const [previewTemplate, setPreviewTemplate] = useState<PredefinedTemplate | SavedUserTemplate | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
   // Form state for saving current spec as new template
@@ -134,16 +135,22 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
     }, 1200);
   };
 
-  // Handle Delete Template (2-click inline confirmation)
-  const handleDeleteSavedTemplate = (id: string) => {
-    if (confirmDeleteId !== id) {
-      setConfirmDeleteId(id);
-      return;
-    }
-    const updated = deleteUserTemplate(id);
+  // Handle Delete Template
+  const handleDeleteSavedTemplate = async (tmpl: SavedUserTemplate) => {
+    const confirmed = await confirmDelete({
+      title: t('Delete Template', '템플릿 삭제'),
+      message: t('Are you sure you want to delete this template?', '삭제하시겠습니까?'),
+      targetName: tmpl.name,
+      description: t(
+        'This saved user template will be permanently removed.',
+        '저장된 사용자 템플릿이 영구적으로 삭제됩니다.'
+      ),
+    });
+    if (!confirmed) return;
+
+    const updated = deleteUserTemplate(tmpl.id);
     setSavedTemplates(updated);
-    setConfirmDeleteId(null);
-    if (previewTemplate?.id === id) {
+    if (previewTemplate?.id === tmpl.id) {
       setPreviewTemplate(null);
     }
   };
@@ -566,24 +573,15 @@ export const ProgramTemplateModal: React.FC<ProgramTemplateModalProps> = ({
                             <Download className="w-3.5 h-3.5" />
                           </button>
 
-                          {confirmDeleteId === tmpl.id ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSavedTemplate(tmpl.id)}
-                              className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded hover:bg-rose-700 cursor-pointer"
-                            >
-                              {t('Confirm?', '삭제 확인')}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSavedTemplate(tmpl.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
-                              title={t('Delete template', '템플릿 삭제')}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteSavedTemplate(tmpl)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                            title={t('Delete template', '템플릿 삭제')}
+                            aria-label={t(`Delete template ${tmpl.name}`, `템플릿 ${tmpl.name} 삭제`)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
 
                         <button

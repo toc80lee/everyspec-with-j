@@ -14,14 +14,21 @@ import {
   X,
 } from 'lucide-react';
 import { PageHeader } from './PageHeader';
-import { SapProject, UserAccountRole, UserProfileRecord } from '../types/sap';
+import { SapProject, UserAccountRole, UserProfileRecord, UserProjectRole } from '../types/sap';
 import {
   isBootstrappedAdminEmail,
   subscribeAllUsersForAdmin,
   updateUserAccountRole,
   updateUserApprovalStatus,
   updateUserAssignedProjects,
+  updateUserProjectRole,
 } from '../services/userManagementService';
+import {
+  PROJECT_ASSIGNABLE_ROLES,
+  getProjectRoleLabel,
+  getProjectRoleOption,
+  normalizeProjectRole,
+} from '../utils/projectRoles';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -41,13 +48,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNotify,
 }) => {
   const { isAdmin, userProfile: currentAdminProfile } = useAuth();
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   const [allUsers, setAllUsers] = useState<UserProfileRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<AdminTab>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedRoleByUid, setSelectedRoleByUid] = useState<Record<string, UserProjectRole>>({});
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -111,18 +119,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return null;
   }
 
-  const handleStatusChange = async (user: UserProfileRecord, nextStatus: 'approved' | 'rejected') => {
+  const getPendingOrTargetRole = (user: UserProfileRecord): UserProjectRole => {
+    const chosen = selectedRoleByUid[user.uid];
+    if (chosen && chosen !== 'ADMIN') return chosen;
+    const normalized = normalizeProjectRole(user.projectRole, 'FUNC');
+    return normalized === 'ADMIN' ? 'FUNC' : normalized;
+  };
+
+  const handleStatusChange = async (
+    user: UserProfileRecord,
+    nextStatus: 'approved' | 'rejected',
+    assignedRole?: UserProjectRole
+  ) => {
     if (isBootstrappedAdminEmail(user.email) && nextStatus === 'rejected') {
       onNotify?.(t('System owner account cannot be rejected.', '시스템 기본 관리자 계정은 거절할 수 없습니다.'));
       return;
     }
     setBusyUid(user.uid);
     try {
-      await updateUserApprovalStatus(user.uid, nextStatus);
+      const effectiveRole = nextStatus === 'approved' ? assignedRole || getPendingOrTargetRole(user) : undefined;
+      await updateUserApprovalStatus(user.uid, nextStatus, effectiveRole);
       onNotify?.(
         nextStatus === 'approved'
-          ? t(`Approved user '${user.displayName}'.`, `'${user.displayName}'님의 가입을 승인했습니다.`)
+          ? t(
+              `Approved '${user.displayName}' as ${getProjectRoleLabel(effectiveRole, 'en', 'short')}.`,
+              `'${user.displayName}'님의 가입을 '${getProjectRoleLabel(effectiveRole, 'ko', 'short')}' 역할로 승인했습니다.`
+            )
           : t(`Rejected user '${user.displayName}'.`, `'${user.displayName}'님의 접근을 거절했습니다.`)
+      );
+    } finally {
+      setBusyUid(null);
+    }
+  };
+
+  const handleProjectRoleChange = async (user: UserProfileRecord, nextProjectRole: UserProjectRole) => {
+    setBusyUid(user.uid);
+    try {
+      await updateUserProjectRole(user.uid, nextProjectRole);
+      onNotify?.(
+        t(
+          `Updated '${user.displayName}' project role to ${getProjectRoleLabel(nextProjectRole, 'en', 'short')}.`,
+          `'${user.displayName}'님의 기본 역할을 '${getProjectRoleLabel(nextProjectRole, 'ko', 'short')}'(으)로 변경했습니다.`
+        )
       );
     } finally {
       setBusyUid(null);
@@ -415,6 +453,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             >
                               {u.role.toUpperCase()}
                             </span>
+                            {u.role !== 'admin' && (
+                              <span
+                                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                  getProjectRoleOption(normalizeProjectRole(u.projectRole, 'FUNC')).badgeClass
+                                }`}
+                              >
+                                {getProjectRoleLabel(u.projectRole, lang, 'short')}
+                              </span>
+                            )}
                             {isProtectedAdmin && (
                               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
                                 {t('Site Owner', '사이트 운영자')}
@@ -442,11 +489,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       {/* Actions & Project Assignment */}
                       <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
                         {activeTab === 'pending' && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              disabled={isBusy}
+                              value={getPendingOrTargetRole(u)}
+                              onChange={(e) =>
+                                setSelectedRoleByUid((prev) => ({
+                                  ...prev,
+                                  [u.uid]: e.target.value as UserProjectRole,
+                                }))
+                              }
+                              aria-label={t('Select role on approval', '승인 시 역할 선택')}
+                              className="h-8 px-2.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none cursor-pointer"
+                            >
+                              {PROJECT_ASSIGNABLE_ROLES.map((r) => (
+                                <option key={r.code} value={r.code}>
+                                  {lang === 'ko' ? r.labelKo : r.labelEn}
+                                </option>
+                              ))}
+                            </select>
                             <button
                               type="button"
                               disabled={isBusy}
-                              onClick={() => void handleStatusChange(u, 'approved')}
+                              onClick={() => void handleStatusChange(u, 'approved', getPendingOrTargetRole(u))}
                               className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
                             >
                               <Check className="w-3.5 h-3.5" />
@@ -506,7 +571,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                             {/* Role & Revoke Controls */}
                             {!isProtectedAdmin && (
-                              <div className="flex items-center gap-1.5 border-t sm:border-t-0 sm:border-l border-slate-200 pt-2 sm:pt-0 sm:pl-3">
+                              <div className="flex flex-wrap items-center gap-1.5 border-t sm:border-t-0 sm:border-l border-slate-200 pt-2 sm:pt-0 sm:pl-3">
+                                {u.role !== 'admin' && (
+                                  <select
+                                    disabled={isBusy}
+                                    value={
+                                      normalizeProjectRole(u.projectRole, 'FUNC') === 'ADMIN'
+                                        ? 'FUNC'
+                                        : normalizeProjectRole(u.projectRole, 'FUNC')
+                                    }
+                                    onChange={(e) =>
+                                      void handleProjectRoleChange(u, e.target.value as UserProjectRole)
+                                    }
+                                    aria-label={t('Default project role', '기본 역할 설정')}
+                                    className="h-7 px-2 bg-white border border-slate-300 rounded-md text-[11px] font-semibold text-slate-700 focus:border-blue-500 focus:outline-none cursor-pointer"
+                                  >
+                                    {PROJECT_ASSIGNABLE_ROLES.map((r) => (
+                                      <option key={r.code} value={r.code}>
+                                        {lang === 'ko' ? r.labelKo : r.labelEn}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
                                 <button
                                   type="button"
                                   disabled={isBusy}
@@ -531,15 +617,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         )}
 
                         {activeTab === 'rejected' && (
-                          <button
-                            type="button"
-                            disabled={isBusy}
-                            onClick={() => void handleStatusChange(u, 'approved')}
-                            className="h-8 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>{t('Re-approve', '재승인')}</span>
-                          </button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              disabled={isBusy}
+                              value={getPendingOrTargetRole(u)}
+                              onChange={(e) =>
+                                setSelectedRoleByUid((prev) => ({
+                                  ...prev,
+                                  [u.uid]: e.target.value as UserProjectRole,
+                                }))
+                              }
+                              aria-label={t('Select role on re-approval', '재승인 시 역할 선택')}
+                              className="h-8 px-2.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none cursor-pointer"
+                            >
+                              {PROJECT_ASSIGNABLE_ROLES.map((r) => (
+                                <option key={r.code} value={r.code}>
+                                  {lang === 'ko' ? r.labelKo : r.labelEn}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => void handleStatusChange(u, 'approved', getPendingOrTargetRole(u))}
+                              className="h-8 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{t('Re-approve', '재승인')}</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>

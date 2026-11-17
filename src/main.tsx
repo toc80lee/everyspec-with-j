@@ -2,15 +2,18 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { AuthGuard } from './components/AuthGuard.tsx';
 import { AuthProvider } from './contexts/AuthContext.tsx';
+import { ConfirmDialogProvider } from './contexts/ConfirmDialogContext.tsx';
 import { LanguageProvider } from './contexts/LanguageContext.tsx';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <LanguageProvider>
-    <AuthProvider>
-      <AuthGuard>
-        <App />
-      </AuthGuard>
-    </AuthProvider>
+    <ConfirmDialogProvider>
+      <AuthProvider>
+        <AuthGuard>
+          <App />
+        </AuthGuard>
+      </AuthProvider>
+    </ConfirmDialogProvider>
   </LanguageProvider>
 );

@@ -32,6 +32,7 @@ import {
 } from '../utils/spreadsheetClipboard';
 import { InspectableSelect } from './InspectableSelect';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface SelectionScreenEditorProps {
   spec: ProgramSpec;
@@ -105,6 +106,7 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
   isReadOnly = false,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBoxModal, setShowBoxModal] = useState(false);
   const [showRadioGroupModal, setShowRadioGroupModal] = useState(false);
@@ -771,8 +773,16 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
   // =========================================================================
   // Row CRUD Helpers
   // =========================================================================
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (isReadOnly) return;
+    const target = spec.selection_params.find((p) => p.id === id);
+    const confirmed = await confirmDelete({
+      title: t('Delete Selection Parameter', '조회 조건 삭제'),
+      message: t('Are you sure you want to delete this parameter?', '삭제하시겠습니까?'),
+      targetName: target ? `${target.name}${target.text ? ` · ${target.text}` : ''}` : undefined,
+    });
+    if (!confirmed) return;
+
     onChange(spec.selection_params.filter((p) => p.id !== id));
   };
 
@@ -1548,7 +1558,13 @@ export const SelectionScreenEditor: React.FC<SelectionScreenEditorProps> = ({
                       <button
                         type="button"
                         disabled={radioGroupForm.options.length <= 2}
-                        onClick={() => {
+                        onClick={async () => {
+                          const confirmed = await confirmDelete({
+                            title: t('Delete Radio Option', '라디오 옵션 삭제'),
+                            message: t('Are you sure you want to delete this radio option?', '삭제하시겠습니까?'),
+                            targetName: opt.name ? `${opt.name}${opt.text ? ` · ${opt.text}` : ''}` : opt.text,
+                          });
+                          if (!confirmed) return;
                           const filtered = radioGroupForm.options.filter((_, i) => i !== idx);
                           setRadioGroupForm({
                             ...radioGroupForm,

@@ -43,6 +43,7 @@ import {
   exportProjectWricefIndexXlsx,
 } from '../utils/officeExport';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 const SAP_MODULES: { code: SapModule; labelEn: string; labelKo: string }[] = [
   { code: 'SD', labelEn: 'Sales & Dist.', labelKo: '영업·출하' },
@@ -177,6 +178,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
   onNotify,
 }) => {
   const { lang, t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const [selectedModuleFilter, setSelectedModuleFilter] = useState<'ALL' | SapModule>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [sampleTypeFilter, setSampleTypeFilter] = useState<string>('ALL');
@@ -519,7 +521,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
     }
   };
 
-  const handleDeleteItem = (item: SavedProgramSpecItem) => {
+  const handleDeleteItem = async (item: SavedProgramSpecItem) => {
     if (isCommonProtectedSample(item.spec)) {
       onNotify?.(
         t(
@@ -529,6 +531,17 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
       );
       return;
     }
+    const confirmed = await confirmDelete({
+      title: t('Delete Program Spec', '프로그램 사양서 삭제'),
+      message: t('Are you sure you want to delete this program spec?', '삭제하시겠습니까?'),
+      targetName: `${item.program_id} · ${item.title}`,
+      description: t(
+        'This saved program specification will be permanently deleted.',
+        '저장된 프로그램 사양서가 영구적으로 삭제됩니다.'
+      ),
+    });
+    if (!confirmed) return;
+
     const res = deleteSpecFromStorage(item.program_id, currentUser.name);
     if (!res.success) {
       onNotify?.(res.message || t('Failed to delete spec.', '사양서 삭제에 실패했습니다.'));
@@ -1448,7 +1461,7 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
                                 {canDelete && (
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteItem(item)}
+                                    onClick={() => void handleDeleteItem(item)}
                                     className="p-1.5 text-rose-600 hover:bg-rose-50 border border-slate-200 rounded cursor-pointer"
                                     title={t('Delete spec', '사양서 삭제')}
                                     aria-label={t(

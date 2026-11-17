@@ -57,6 +57,7 @@ import {
 } from '../utils/sapSimulatorHelpers';
 import { isReadOnlyCommonSpec } from '../utils/projectStorage';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface SapGuiMockupProps {
   spec: ProgramSpec;
@@ -197,6 +198,7 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
   mockDataTrigger,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const isSpecReadOnly = Boolean(
     isReadOnly || isReadOnlyCommonSpec(spec) || spec.is_system === true
   );
@@ -1835,22 +1837,28 @@ export const SapGuiMockup: React.FC<SapGuiMockupProps> = ({
                   ))}
                 </select>
                 {activeVariantName && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const found = selectionVariants.find((v) => v.name === activeVariantName);
-                      if (!found) return;
-                      const next = deleteSelectionVariant(simSpec.program_id, found.id);
-                      setSelectionVariants(next);
-                      setActiveVariantName('');
-                      setStatusMessage({
-                        text: t(`Variant [${found.name}] deleted.`, `변형 [${found.name}]이 삭제되었습니다.`),
-                        type: 'S',
-                      });
-                    }}
-                    title={t('Delete Selected Variant', '선택한 변형 삭제')}
-                    className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
-                  >
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const found = selectionVariants.find((v) => v.name === activeVariantName);
+                        if (!found) return;
+                        const confirmed = await confirmDelete({
+                          title: t('Delete Selection Variant', '조회 변형 삭제'),
+                          message: t('Are you sure you want to delete this variant?', '삭제하시겠습니까?'),
+                          targetName: found.name,
+                        });
+                        if (!confirmed) return;
+                        const next = deleteSelectionVariant(simSpec.program_id, found.id);
+                        setSelectionVariants(next);
+                        setActiveVariantName('');
+                        setStatusMessage({
+                          text: t(`Variant [${found.name}] deleted.`, `변형 [${found.name}]이 삭제되었습니다.`),
+                          type: 'S',
+                        });
+                      }}
+                      title={t('Delete Selected Variant', '선택한 변형 삭제')}
+                      className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
+                    >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}

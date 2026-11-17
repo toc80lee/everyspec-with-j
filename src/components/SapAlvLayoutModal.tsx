@@ -20,6 +20,7 @@ import {
   saveAlvLayoutVariant,
 } from '../utils/sapSimulatorHelpers';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface SapAlvLayoutModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ export const SapAlvLayoutModal: React.FC<SapAlvLayoutModalProps> = ({
   onApplyConfig,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const [visibleFields, setVisibleFields] = useState<string[]>(currentConfig.visibleFields);
   const [subtotalField, setSubtotalField] = useState<string | null>(currentConfig.subtotalField);
   const [zebra, setZebra] = useState(currentConfig.zebra);
@@ -363,7 +365,15 @@ export const SapAlvLayoutModal: React.FC<SapAlvLayoutModalProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setVariants(deleteAlvLayoutVariant(programId, v.id))}
+                      onClick={async () => {
+                        const confirmed = await confirmDelete({
+                          title: t('Delete Layout Variant', '레이아웃 변형 삭제'),
+                          message: t('Are you sure you want to delete this variant?', '삭제하시겠습니까?'),
+                          targetName: v.name,
+                        });
+                        if (!confirmed) return;
+                        setVariants(deleteAlvLayoutVariant(programId, v.id));
+                      }}
                       className="px-1 py-0.5 text-slate-400 hover:text-red-600 border-l border-slate-300 cursor-pointer"
                       title={t('Delete variant', '변형 삭제')}
                     >

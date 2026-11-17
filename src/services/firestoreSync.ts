@@ -20,6 +20,7 @@ import {
   SapProject,
   SpecLifecycleStatus,
   SpecReviewComment,
+  UserProjectRole,
 } from '../types/sap';
 
 import {
@@ -27,6 +28,7 @@ import {
   TEMP_PROJECT_CODE,
   normalizeLegacyProjectCode,
 } from '../utils/projectStorage';
+import { isValidProjectRole } from '../utils/projectRoles';
 
 function sanitizeId(raw: string): string {
   const cleaned = (raw || 'DOC_01').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -78,6 +80,17 @@ export async function syncProjectToFirestore(project: SapProject): Promise<void>
       : project.ownerId || user.uid;
     const memberUids = Array.from(new Set([...baseMemberUids, ownerUid].filter(Boolean))).slice(0, 50);
 
+    const sanitizedMemberRoles: Record<string, UserProjectRole> = {};
+    if (project.memberRoles && typeof project.memberRoles === 'object') {
+      Object.entries(project.memberRoles)
+        .slice(0, 50)
+        .forEach(([k, v]) => {
+          if (k && isValidProjectRole(v)) {
+            sanitizedMemberRoles[k] = v;
+          }
+        });
+    }
+
     const payload: Record<string, any> = {
       code: projectId,
       name: (project.name || projectId).slice(0, 120),
@@ -92,6 +105,7 @@ export async function syncProjectToFirestore(project: SapProject): Promise<void>
       ownerName: (project.owner || user.displayName || 'Josh Lee').slice(0, 80),
       memberUids,
       memberNames: (project.members || []).slice(0, 50),
+      memberRoles: sanitizedMemberRoles,
       modules: (project.modules && project.modules.length > 0 ? project.modules : ['SD']).slice(0, 10),
       is_system: Boolean(project.is_system),
       created_date: (project.created_date || new Date().toISOString().split('T')[0]).slice(0, 30),
@@ -114,6 +128,15 @@ export async function syncProjectToFirestore(project: SapProject): Promise<void>
 }
 
 function mapDocToSapProject(data: Record<string, any>): SapProject {
+  const mappedRoles: Record<string, UserProjectRole> = {};
+  if (data.memberRoles && typeof data.memberRoles === 'object') {
+    Object.entries(data.memberRoles as Record<string, any>).forEach(([k, v]) => {
+      if (k && isValidProjectRole(v)) {
+        mappedRoles[k] = v;
+      }
+    });
+  }
+
   return {
     code: data.code,
     name: data.name || data.code,
@@ -126,6 +149,7 @@ function mapDocToSapProject(data: Record<string, any>): SapProject {
     ownerId: data.ownerId,
     members: Array.isArray(data.memberNames) ? data.memberNames : [data.ownerName || 'Josh Lee'],
     memberUids: Array.isArray(data.memberUids) ? data.memberUids : [],
+    memberRoles: mappedRoles,
     modules: Array.isArray(data.modules) ? data.modules : ['SD'],
     abap_standards: data.abap_standards,
     is_system: Boolean(data.is_system),

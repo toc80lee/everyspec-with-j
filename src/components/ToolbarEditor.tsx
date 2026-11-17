@@ -34,6 +34,7 @@ import {
 } from '../utils/spreadsheetClipboard';
 import { InspectableSelect } from './InspectableSelect';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface ToolbarEditorProps {
   spec: ProgramSpec;
@@ -47,6 +48,7 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
   isReadOnly = false,
 }) => {
   const { lang, t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const buttons = spec.toolbar_buttons && spec.toolbar_buttons.length > 0
     ? spec.toolbar_buttons
     : DEFAULT_ALV_TOOLBAR_BUTTONS;
@@ -113,13 +115,18 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
     setTimeout(() => setVariantToast(null), 3000);
   };
 
-  const handleDeleteVariant = (id: string) => {
+  const handleDeleteVariant = async (id: string) => {
     if (isReadOnly) return;
-    if (window.confirm(t(`Delete variant '${id}'?`, `변형 '${id}'을 삭제하시겠습니까?`))) {
-      const updated = deleteUserToolbarVariant(id);
-      setVariants(updated);
-      if (selectedVariantId === id) setSelectedVariantId('');
-    }
+    const confirmed = await confirmDelete({
+      title: t('Delete Toolbar Variant', '툴바 변형 삭제'),
+      message: t('Are you sure you want to delete this variant?', '삭제하시겠습니까?'),
+      targetName: id,
+    });
+    if (!confirmed) return;
+
+    const updated = deleteUserToolbarVariant(id);
+    setVariants(updated);
+    if (selectedVariantId === id) setSelectedVariantId('');
   };
 
   // Cell range selection state
@@ -364,16 +371,18 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
   };
 
   // Reset to default 16 standard buttons
-  const handleResetDefaults = () => {
+  const handleResetDefaults = async () => {
     if (isReadOnly) return;
-    if (
-      window.confirm(
-        t(
-          'Reset standard toolbar to SAP standard 16 buttons (&EXPORT follows &PRINT)?',
-          '표준 툴바를 SAP 표준 16개 버튼(&PRINT 다음에 &EXPORT 배치)으로 초기화하시겠습니까?'
-        )
-      )
-    ) {
+    const confirmed = await confirmDelete({
+      title: t('Reset Standard Toolbar', '표준 툴바 초기화'),
+      message: t(
+        'Reset standard toolbar to SAP standard 16 buttons (&EXPORT follows &PRINT)?',
+        '표준 툴바를 SAP 표준 16개 버튼(&PRINT 다음에 &EXPORT 배치)으로 초기화하시겠습니까?'
+      ),
+      confirmLabel: t('Reset', '초기화'),
+      tone: 'warning',
+    });
+    if (confirmed) {
       onChange([...DEFAULT_ALV_TOOLBAR_BUTTONS, ...customButtons]);
     }
   };
@@ -394,8 +403,15 @@ export const ToolbarEditor: React.FC<ToolbarEditorProps> = ({
   };
 
   // Delete custom button
-  const handleDeleteCustom = (id: string) => {
+  const handleDeleteCustom = async (id: string) => {
     if (isReadOnly) return;
+    const target = buttons.find((b) => b.id === id);
+    const confirmed = await confirmDelete({
+      title: t('Delete Custom Button', '사용자 버튼 삭제'),
+      message: t('Are you sure you want to delete this custom button?', '삭제하시겠습니까?'),
+      targetName: target ? `${target.function} · ${target.text}` : undefined,
+    });
+    if (!confirmed) return;
     onChange(buttons.filter((b) => b.id !== id));
   };
 

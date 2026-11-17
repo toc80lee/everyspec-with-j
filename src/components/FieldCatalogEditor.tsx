@@ -45,6 +45,7 @@ import {
 } from '../utils/spreadsheetClipboard';
 import { InspectableSelect } from './InspectableSelect';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface FieldCatalogEditorProps {
   spec: ProgramSpec;
@@ -62,6 +63,7 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
   isReadOnly = false,
 }) => {
   const { lang, t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const [showSearchHelp, setShowSearchHelp] = useState(false);
   const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
   const [tableCopied, setTableCopied] = useState(false);
@@ -535,10 +537,17 @@ export const FieldCatalogEditor: React.FC<FieldCatalogEditorProps> = ({
   };
 
   // Delete field
-  const handleDeleteField = (index: number) => {
+  const handleDeleteField = async (index: number) => {
     if (isReadOnly) return;
     const current = spec.field_catalog[index];
     if (current && current.fieldname === 'ZICON') return;
+    const confirmed = await confirmDelete({
+      title: t('Delete Field Catalog Row', '필드 카탈로그 항목 삭제'),
+      message: t('Are you sure you want to delete this field?', '삭제하시겠습니까?'),
+      targetName: current ? `${current.fieldname}${current.coltext ? ` (${current.coltext})` : ''}` : undefined,
+    });
+    if (!confirmed) return;
+
     const nextCatalog = spec.field_catalog
       .filter((_, i) => i !== index)
       .map((f, i) => ({ ...f, col_pos: i + 1 }));

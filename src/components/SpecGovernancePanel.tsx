@@ -19,6 +19,7 @@ import {
 import { COMMON_PROJECT_CODE, getProjectAbapStandards } from '../utils/projectStorage';
 import { InspectableSelect } from './InspectableSelect';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import {
   AlertCircle,
   AlertTriangle,
@@ -49,6 +50,7 @@ export const SpecGovernancePanel: React.FC<SpecGovernancePanelProps> = ({
   onChange,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const [expandedDiagId, setExpandedDiagId] = useState<string | null>(null);
   const projectStandards = useMemo(
     () => getProjectAbapStandards(spec.project_code),
@@ -113,7 +115,14 @@ export const SpecGovernancePanel: React.FC<SpecGovernancePanelProps> = ({
     });
   };
 
-  const handleDeleteAuth = (id: string) => {
+  const handleDeleteAuth = async (id: string) => {
+    const target = authChecks.find((a) => a.id === id);
+    const confirmed = await confirmDelete({
+      title: t('Delete Authority Check', '권한 점검 항목 삭제'),
+      message: t('Are you sure you want to delete this authority check?', '삭제하시겠습니까?'),
+      targetName: target ? `${target.object} (${target.fields || target.description})` : undefined,
+    });
+    if (!confirmed) return;
     onChange({ ...spec, authority_checks: authChecks.filter((a) => a.id !== id) });
   };
 
@@ -139,7 +148,14 @@ export const SpecGovernancePanel: React.FC<SpecGovernancePanelProps> = ({
     });
   };
 
-  const handleDeleteMessage = (id: string) => {
+  const handleDeleteMessage = async (id: string) => {
+    const target = sapMessages.find((m) => m.id === id);
+    const confirmed = await confirmDelete({
+      title: t('Delete SE91 Message', 'SE91 메시지 삭제'),
+      message: t('Are you sure you want to delete this message definition?', '삭제하시겠습니까?'),
+      targetName: target ? `${target.msg_class} ${target.msg_no} (${target.msg_type}) · ${target.text}` : undefined,
+    });
+    if (!confirmed) return;
     onChange({ ...spec, sap_messages: sapMessages.filter((m) => m.id !== id) });
   };
 

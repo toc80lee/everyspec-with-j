@@ -51,7 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [projectRole, setProjectRoleState] = useState<UserProjectRole>(() => {
     try {
       const saved = localStorage.getItem(ROLE_STORAGE_KEY) as UserProjectRole | null;
-      if (saved && ['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN'].includes(saved)) return saved;
+      if (saved && ['PM', 'FUNC', 'ABAP', 'QA', 'PI', 'ADMIN'].includes(saved)) return saved;
     } catch {
       // ignore
     }

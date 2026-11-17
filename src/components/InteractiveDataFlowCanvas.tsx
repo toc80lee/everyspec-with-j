@@ -39,6 +39,7 @@ import {
   autoLayoutFlowchart,
 } from '../utils/dataFlowGenerator';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface InteractiveDataFlowCanvasProps {
   spec: ProgramSpec;
@@ -54,6 +55,7 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
   readOnly = false,
 }) => {
   const { lang, t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   // Ensure we have nodes and edges
   const nodes: CanvasNode[] =
     config?.nodes && config.nodes.length > 0
@@ -148,15 +150,29 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
   );
 
   const handleDeleteNode = useCallback(
-    (nodeId: string) => {
+    async (nodeId: string): Promise<boolean> => {
+      const target = nodes.find((n) => n.id === nodeId);
+      const labelFirstLine = target?.label.split('\n')[0]?.trim() || nodeId;
+      const confirmed = await confirmDelete({
+        title: t('Delete Flow Node', '흐름 노드 삭제'),
+        message: t('Are you sure you want to delete this node?', '삭제하시겠습니까?'),
+        targetName: labelFirstLine,
+        description: t(
+          'Connected arrows attached to this node will also be removed.',
+          '이 노드에 연결된 화살표도 함께 삭제됩니다.'
+        ),
+      });
+      if (!confirmed) return false;
+
       const updatedNodes = nodes.filter((n) => n.id !== nodeId);
       const updatedEdges = edges.filter((e) => e.from !== nodeId && e.to !== nodeId);
       updateGraph(updatedNodes, updatedEdges);
       if (selectedNodeId === nodeId) setSelectedNodeId(null);
       setNotice(t('Node and connected arrows deleted.', '노드 및 연결된 화살표가 삭제되었습니다.'));
       setTimeout(() => setNotice(null), 3000);
+      return true;
     },
-    [nodes, edges, selectedNodeId, updateGraph, t]
+    [nodes, edges, selectedNodeId, updateGraph, t, confirmDelete]
   );
 
   const handleAutoFitNode = useCallback(
@@ -428,8 +444,16 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
   };
 
   // Delete selected node or edge
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = useCallback(async () => {
     if (selectedNodeId) {
+      const target = nodes.find((n) => n.id === selectedNodeId);
+      const confirmed = await confirmDelete({
+        title: t('Delete Flow Node', '흐름 노드 삭제'),
+        message: t('Are you sure you want to delete the selected node?', '삭제하시겠습니까?'),
+        targetName: target?.label.split('\n')[0]?.trim() || selectedNodeId,
+      });
+      if (!confirmed) return;
+
       const updatedNodes = nodes.filter((n) => n.id !== selectedNodeId);
       const updatedEdges = edges.filter(
         (e) => e.from !== selectedNodeId && e.to !== selectedNodeId
@@ -437,19 +461,34 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
       updateGraph(updatedNodes, updatedEdges);
       setSelectedNodeId(null);
     } else if (selectedEdgeId) {
+      const targetEdge = edges.find((e) => e.id === selectedEdgeId);
+      const confirmed = await confirmDelete({
+        title: t('Delete Connection Arrow', '연결 화살표 삭제'),
+        message: t('Are you sure you want to delete the selected arrow?', '삭제하시겠습니까?'),
+        targetName: targetEdge?.label?.trim() || undefined,
+      });
+      if (!confirmed) return;
+
       const updatedEdges = edges.filter((e) => e.id !== selectedEdgeId);
       updateGraph(nodes, updatedEdges);
       setSelectedEdgeId(null);
     }
-  };
+  }, [selectedNodeId, selectedEdgeId, nodes, edges, updateGraph, confirmDelete, t]);
 
   // Keyboard shortcut for Delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (editingNode || editingEdge) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const targetEl = e.target as HTMLElement | null;
+      const tag = targetEl?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || targetEl?.isContentEditable) {
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedNodeId || selectedEdgeId) {
-          handleDeleteSelected();
+          e.preventDefault();
+          void handleDeleteSelected();
         }
       }
     };
@@ -599,12 +638,20 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
 
   // Remove edge
   const handleRemoveEdge = useCallback(
-    (edgeId: string) => {
+    async (edgeId: string) => {
+      const targetEdge = edges.find((e) => e.id === edgeId);
+      const confirmed = await confirmDelete({
+        title: t('Delete Connection Arrow', '연결 화살표 삭제'),
+        message: t('Are you sure you want to delete this arrow?', '삭제하시겠습니까?'),
+        targetName: targetEdge?.label?.trim() || undefined,
+      });
+      if (!confirmed) return;
+
       const updatedEdges = edges.filter((e) => e.id !== edgeId);
       updateGraph(nodes, updatedEdges);
       if (selectedEdgeId === edgeId) setSelectedEdgeId(null);
     },
-    [nodes, edges, selectedEdgeId, updateGraph]
+    [nodes, edges, selectedEdgeId, updateGraph, confirmDelete, t]
   );
 
   // Move node order in Step List
@@ -687,8 +734,15 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
   };
 
   // Clear Canvas
-  const handleClearCanvas = () => {
-    if (confirm(t('Clear all nodes and arrows from the canvas?', '캔버스의 모든 노드와 화살표를 삭제하시겠습니까?'))) {
+  const handleClearCanvas = async () => {
+    const confirmed = await confirmDelete({
+      title: t('Clear Flowchart Canvas', '캔버스 전체 삭제'),
+      message: t(
+        'Clear all nodes and arrows from the canvas?',
+        '캔버스의 모든 노드와 화살표를 삭제하시겠습니까?'
+      ),
+    });
+    if (confirmed) {
       updateGraph([], []);
       setSelectedNodeId(null);
       setSelectedEdgeId(null);
@@ -1808,9 +1862,9 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
             <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => {
-                  handleDeleteNode(editingNode.id);
-                  setEditingNode(null);
+                onClick={async () => {
+                  const deleted = await handleDeleteNode(editingNode.id);
+                  if (deleted) setEditingNode(null);
                 }}
                 className="px-3 py-1.5 text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg flex items-center gap-1 cursor-pointer"
               >
@@ -1910,7 +1964,14 @@ export const InteractiveDataFlowCanvas: React.FC<InteractiveDataFlowCanvasProps>
             <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
+                  const confirmed = await confirmDelete({
+                    title: t('Delete Connection Arrow', '연결 화살표 삭제'),
+                    message: t('Are you sure you want to delete this arrow?', '삭제하시겠습니까?'),
+                    targetName: editingEdge.label?.trim() || undefined,
+                  });
+                  if (!confirmed) return;
+
                   const updatedEdges = edges.filter((e) => e.id !== editingEdge.id);
                   updateGraph(nodes, updatedEdges);
                   setEditingEdge(null);

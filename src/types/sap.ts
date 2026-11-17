@@ -12,7 +12,7 @@ export type SelectionKind = 'PARAMETER' | 'SELECT_OPTION' | 'RADIOBUTTON' | 'CHE
 
 export type SpecLifecycleStatus = 'draft' | 'in_review' | 'approved' | 'developed' | 'qa_passed';
 
-export type UserProjectRole = 'PM' | 'FUNC' | 'ABAP' | 'QA' | 'ADMIN';
+export type UserProjectRole = 'PM' | 'FUNC' | 'ABAP' | 'QA' | 'PI' | 'ADMIN';
 
 export type UserAccountRole = 'admin' | 'user';
 
@@ -381,6 +381,7 @@ export interface SapProject {
   ownerId?: string;
   members: string[];            // User names assigned to this project
   memberUids?: string[];        // Firebase UIDs assigned to this project
+  memberRoles?: Record<string, UserProjectRole>; // Per-member project role keyed by UID
   modules: SapModule[];         // Active modules in project
   abap_standards?: ProjectAbapStandards;
   is_system?: boolean;          // True for COMM & TEMP (protected from deletion)

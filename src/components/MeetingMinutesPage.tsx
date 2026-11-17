@@ -34,6 +34,7 @@ import { SavedProgramSpecItem } from '../utils/specStorage';
 import { MarkdownFieldEditor } from './MarkdownFieldEditor';
 import { requestAiMeetingMinutes } from '../utils/aiLogicGenerator';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { PageHeader } from './PageHeader';
 
 const STATUS_META: Record<
@@ -109,6 +110,7 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
   onNotify,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const nonCommonProjects = useMemo(
     () => accessibleProjects.filter((p) => p.code !== COMMON_PROJECT_CODE),
     [accessibleProjects]
@@ -648,7 +650,19 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                       {selectedMinute.author === currentUser.name && (
                         <button
                           type="button"
-                          onClick={() => onDeleteMinute(selectedMinute.id)}
+                          onClick={async () => {
+                            const confirmed = await confirmDelete({
+                              title: t('Delete Meeting Minutes', '회의록 삭제'),
+                              message: t('Are you sure you want to delete these meeting minutes?', '삭제하시겠습니까?'),
+                              targetName: selectedMinute.title,
+                              description: t(
+                                'The meeting minutes, transcript segments, and action items will be deleted.',
+                                '회의록과 녹취 세그먼트 및 실행 항목이 함께 삭제됩니다.'
+                              ),
+                            });
+                            if (!confirmed) return;
+                            onDeleteMinute(selectedMinute.id);
+                          }}
                           className="p-2 text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg cursor-pointer"
                           title={t('Delete minutes', '회의록 삭제')}
                           aria-label={t('Delete minutes', '회의록 삭제')}
@@ -885,9 +899,15 @@ export const MeetingMinutesPage: React.FC<MeetingMinutesPageProps> = ({
                                   )}
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      updateActionItems(actionItems.filter((i) => i.id !== act.id))
-                                    }
+                                    onClick={async () => {
+                                      const confirmed = await confirmDelete({
+                                        title: t('Delete Action Item', '실행 항목 삭제'),
+                                        message: t('Are you sure you want to delete this action item?', '삭제하시겠습니까?'),
+                                        targetName: act.text,
+                                      });
+                                      if (!confirmed) return;
+                                      updateActionItems(actionItems.filter((i) => i.id !== act.id));
+                                    }}
                                     className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
                                     title={t('Delete item', '항목 삭제')}
                                     aria-label={t('Delete item', '항목 삭제')}

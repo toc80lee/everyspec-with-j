@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check, X, Plus, Trash2 } from 'lucide-react';
 import { SelectionParameter } from '../types/sap';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface SapMultipleSelectionModalProps {
   param: SelectionParameter;
@@ -21,6 +22,7 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
   onApply,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const existingMulti = param.multi_values || [];
 
   const initialIncludeSingles = existingMulti
@@ -210,8 +212,17 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                   {singleItems.length > 2 && (
                     <button
                       type="button"
-                      onClick={() => setSingleItems(singleItems.filter((_, i) => i !== idx))}
+                      onClick={async () => {
+                        const confirmed = await confirmDelete({
+                          title: t('Delete Selection Row', '선택 행 삭제'),
+                          message: t('Are you sure you want to delete this row?', '삭제하시겠습니까?'),
+                          targetName: val.trim() ? val.trim() : t(`Row ${idx + 1}`, `${idx + 1}번 행`),
+                        });
+                        if (!confirmed) return;
+                        setSingleItems(singleItems.filter((_, i) => i !== idx));
+                      }}
                       className="text-slate-400 hover:text-red-600 cursor-pointer"
+                      title={t('Delete row', '행 삭제')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -263,8 +274,18 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                   {rangeItems.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => setRangeItems(rangeItems.filter((_, i) => i !== idx))}
+                      onClick={async () => {
+                        const label = [r.low.trim(), r.high.trim()].filter(Boolean).join(' ~ ');
+                        const confirmed = await confirmDelete({
+                          title: t('Delete Range Row', '범위 행 삭제'),
+                          message: t('Are you sure you want to delete this range?', '삭제하시겠습니까?'),
+                          targetName: label || t(`Range ${idx + 1}`, `구간 ${idx + 1}`),
+                        });
+                        if (!confirmed) return;
+                        setRangeItems(rangeItems.filter((_, i) => i !== idx));
+                      }}
                       className="text-slate-400 hover:text-red-600 cursor-pointer"
+                      title={t('Delete range', '구간 삭제')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -304,8 +325,17 @@ export const SapMultipleSelectionModal: React.FC<SapMultipleSelectionModalProps>
                     {excludeSingles.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => setExcludeSingles(excludeSingles.filter((_, i) => i !== idx))}
+                        onClick={async () => {
+                          const confirmed = await confirmDelete({
+                            title: t('Delete Exclude Value', '제외 값 삭제'),
+                            message: t('Are you sure you want to delete this exclude value?', '삭제하시겠습니까?'),
+                            targetName: val.trim() ? val.trim() : `E${idx + 1}`,
+                          });
+                          if (!confirmed) return;
+                          setExcludeSingles(excludeSingles.filter((_, i) => i !== idx));
+                        }}
                         className="text-slate-400 hover:text-red-600 cursor-pointer"
+                        title={t('Delete exclude value', '제외 값 삭제')}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

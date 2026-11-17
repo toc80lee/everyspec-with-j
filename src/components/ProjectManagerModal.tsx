@@ -21,6 +21,7 @@ import {
   SapModule,
   SapProject,
   UserProfileRecord,
+  UserProjectRole,
 } from '../types/sap';
 import {
   COMMON_PROJECT_CODE,
@@ -31,6 +32,12 @@ import {
   saveProject,
   deleteProject,
 } from '../utils/projectStorage';
+import {
+  PROJECT_ASSIGNABLE_ROLES,
+  getProjectRoleLabel,
+  getProjectRoleOption,
+  normalizeProjectRole,
+} from '../utils/projectRoles';
 import { reassignSpecsProjectToTemp } from '../utils/specStorage';
 import {
   DEFAULT_OPERATOR_USER,
@@ -42,6 +49,7 @@ import {
   syncProjectMembershipChange,
 } from '../services/userManagementService';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { PageHeader } from './PageHeader';
 
@@ -82,9 +90,11 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   remoteProjects = [],
 }) => {
   const { lang, t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const { isAdmin, userProfile: currentAdminProfile } = useAuth();
   const [approvedUsers, setApprovedUsers] = useState<UserProfileRecord[]>([]);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
+  const [pendingRoleByUid, setPendingRoleByUid] = useState<Record<string, UserProjectRole>>({});
   const [projects, setProjects] = useState<SapProject[]>([]);
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
@@ -98,6 +108,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   const [formOwner, setFormOwner] = useState(DEFAULT_OPERATOR_USER.name);
   const [formMembers, setFormMembers] = useState<string[]>([DEFAULT_OPERATOR_USER.name]);
   const [formMemberUids, setFormMemberUids] = useState<string[]>([]);
+  const [formMemberRoles, setFormMemberRoles] = useState<Record<string, UserProjectRole>>({});
   const [prevMemberUids, setPrevMemberUids] = useState<string[]>([]);
   const [formModules, setFormModules] = useState<SapModule[]>(['SD', 'MM', 'FI', 'CO']);
 
@@ -132,6 +143,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
         : enforceProjectMembers(proj.members || [], safeOwner)
     );
     setFormMemberUids(nextUids);
+    setFormMemberRoles(proj.memberRoles ? { ...proj.memberRoles } : {});
     setPrevMemberUids(nextUids);
     setFormModules(proj.modules || ALL_MODULES);
     setAbapStandards({
@@ -232,11 +244,20 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       : enforceProjectMembers(formMembers, formOwner);
 
     const seenKeys = new Set<string>();
+    const resolveMemberRole = (uid?: string, name?: string, userRecord?: UserProfileRecord): UserProjectRole => {
+      if (uid && formMemberRoles[uid]) return formMemberRoles[uid];
+      if (name && formMemberRoles[name.trim()]) return formMemberRoles[name.trim()];
+      if (userRecord?.projectRole && userRecord.projectRole !== 'ADMIN') {
+        return normalizeProjectRole(userRecord.projectRole, 'FUNC');
+      }
+      return 'FUNC';
+    };
+
     const entries: {
       uid?: string;
       name: string;
       email: string;
-      role: string;
+      role: UserProjectRole;
       photoURL?: string;
       isDefaultOp: boolean;
     }[] = [];
@@ -252,7 +273,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
             uid: matched?.uid || (isDefaultOperatorUser(currentAdminProfile?.email) ? currentAdminProfile?.uid : undefined),
             name: DEFAULT_OPERATOR_USER.name,
             email: matched?.email || DEFAULT_OPERATOR_USER.email,
-            role: DEFAULT_OPERATOR_USER.role,
+            role: 'ADMIN',
             photoURL: matched?.photoURL,
             isDefaultOp: true,
           });
@@ -266,7 +287,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
           uid: matched?.uid,
           name: matched?.displayName || name,
           email: matched?.email || '',
-          role: matched?.projectRole || 'SAP Consultant / Developer',
+          role: resolveMemberRole(matched?.uid, name, matched),
           photoURL: matched?.photoURL,
           isDefaultOp: false,
         });
@@ -282,14 +303,14 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
         uid: u.uid,
         name: u.displayName,
         email: u.email,
-        role: u.projectRole || 'SAP Consultant / Developer',
+        role: resolveMemberRole(u.uid, u.displayName, u),
         photoURL: u.photoURL,
         isDefaultOp: false,
       });
     });
 
     return entries;
-  }, [approvedUsers, formMembers, formMemberUids, formOwner, isSystemProject, currentAdminProfile]);
+  }, [approvedUsers, formMembers, formMemberUids, formMemberRoles, formOwner, isSystemProject, currentAdminProfile]);
 
   const eligibleApprovedUsers = useMemo(() => {
     const memberUidSet = new Set(formMemberUids);
@@ -324,6 +345,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setFormOwner(DEFAULT_OPERATOR_USER.name);
     setFormMembers([DEFAULT_OPERATOR_USER.name]);
     setFormMemberUids(initialUids);
+    setFormMemberRoles({});
     setPrevMemberUids([]);
     setFormModules(['SD', 'MM', 'FI', 'CO']);
     setAbapStandards({
@@ -339,7 +361,14 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setNotice(null);
   };
 
-  const handleAddApprovedUser = async (user: UserProfileRecord) => {
+  const getSelectedRoleForCandidate = (user: UserProfileRecord): UserProjectRole => {
+    const picked = pendingRoleByUid[user.uid];
+    if (picked && picked !== 'ADMIN') return picked;
+    const normalized = normalizeProjectRole(user.projectRole, 'FUNC');
+    return normalized === 'ADMIN' ? 'FUNC' : normalized;
+  };
+
+  const handleAddApprovedUser = async (user: UserProfileRecord, assignedRole?: UserProjectRole) => {
     if (isSystemProject) return;
     if (user.status !== 'approved') {
       setNotice({
@@ -352,6 +381,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       return;
     }
 
+    const chosenRole = assignedRole || getSelectedRoleForCandidate(user);
     const resolvedExistingUids = formMembers
       .map(
         (name) =>
@@ -371,8 +401,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
         user.uid,
       ].filter(Boolean))
     );
+    const nextMemberRoles: Record<string, UserProjectRole> = {
+      ...formMemberRoles,
+      [user.uid]: chosenRole,
+    };
     setFormMembers(nextMembers);
     setFormMemberUids(nextMemberUids);
+    setFormMemberRoles(nextMemberRoles);
 
     if (!isCreatingNew && editingCode) {
       if (targetProj) {
@@ -387,6 +422,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
           ownerId: targetProj.ownerId || currentAdminProfile?.uid,
           members: nextMembers,
           memberUids: nextMemberUids,
+          memberRoles: nextMemberRoles,
           modules: formModules,
           abap_standards: abapStandards,
         });
@@ -408,8 +444,8 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
           setNotice({
             type: 'success',
             text: t(
-              `Added '${user.displayName}' to project [${editingCode}] and synced access permissions.`,
-              `'${user.displayName}'님을 프로젝트 [${editingCode}] 멤버로 추가하고 접근 권한을 동기화했습니다.`
+              `Added '${user.displayName}' (${getProjectRoleLabel(chosenRole, 'en', 'short')}) to project [${editingCode}] and synced permissions.`,
+              `'${user.displayName}'님을 [${editingCode}] 프로젝트 멤버(${getProjectRoleLabel(chosenRole, 'ko', 'short')})로 추가하고 권한을 동기화했습니다.`
             ),
           });
           return;
@@ -420,14 +456,71 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     setNotice({
       type: 'success',
       text: t(
-        `Added '${user.displayName}' to this project draft. Click Save to create the project.`,
-        `'${user.displayName}'님을 새 프로젝트 멤버로 추가했습니다. 저장 시 반영됩니다.`
+        `Added '${user.displayName}' (${getProjectRoleLabel(chosenRole, 'en', 'short')}) to this project draft. Click Save to create the project.`,
+        `'${user.displayName}'님을 새 프로젝트 멤버(${getProjectRoleLabel(chosenRole, 'ko', 'short')})로 추가했습니다. 저장 시 반영됩니다.`
       ),
     });
   };
 
+  const handleChangeMemberRole = async (
+    memberUid: string | undefined,
+    memberName: string,
+    nextRole: UserProjectRole
+  ) => {
+    if (isSystemProject || isDefaultOperatorUser(memberName)) return;
+    const roleKey = memberUid || memberName.trim();
+    const nextMemberRoles: Record<string, UserProjectRole> = {
+      ...formMemberRoles,
+      [roleKey]: nextRole,
+    };
+    setFormMemberRoles(nextMemberRoles);
+
+    if (!isCreatingNew && editingCode) {
+      const targetProj = projects.find((p) => p.code === editingCode);
+      if (targetProj) {
+        const saveRes = saveProject({
+          ...targetProj,
+          members: enforceProjectMembers(formMembers, formOwner),
+          memberUids: formMemberUids,
+          memberRoles: nextMemberRoles,
+        });
+        if (saveRes.success && saveRes.savedProject) {
+          try {
+            await syncProjectToFirestore(saveRes.savedProject);
+            setProjects(saveRes.list);
+            onProjectsChanged(editingCode);
+            setNotice({
+              type: 'success',
+              text: t(
+                `Updated '${memberName}' role to ${getProjectRoleLabel(nextRole, 'en', 'short')} in [${editingCode}].`,
+                `'${memberName}'님의 프로젝트 역할을 '${getProjectRoleLabel(nextRole, 'ko', 'short')}'(으)로 저장했습니다.`
+              ),
+            });
+          } catch (err: any) {
+            console.error('Firestore role update failed:', err);
+            setNotice({
+              type: 'error',
+              text: err?.message || t('Failed to sync member role to Firestore.', 'Firestore 멤버 역할 동기화에 실패했습니다.'),
+            });
+          }
+        }
+      }
+    }
+  };
+
   const handleRemoveMember = async (memberName: string, memberUid?: string) => {
     if (isSystemProject || isDefaultOperatorUser(memberName)) return;
+
+    const confirmed = await confirmDelete({
+      title: t('Remove Project Member', '프로젝트 멤버 제외'),
+      message: t(
+        `Are you sure you want to remove '${memberName}' from this project?`,
+        `'${memberName}'님을 이 프로젝트에서 제외(삭제)하시겠습니까?`
+      ),
+      targetName: `${editingCode || 'PROJECT'} · ${memberName}`,
+      confirmLabel: t('Remove', '삭제'),
+    });
+    if (!confirmed) return;
 
     const nextOwner =
       formOwner.trim().toLowerCase() === memberName.trim().toLowerCase()
@@ -443,10 +536,14 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     const nextMemberUids = matchedUid
       ? formMemberUids.filter((id) => id !== matchedUid)
       : formMemberUids;
+    const nextMemberRoles = { ...formMemberRoles };
+    if (matchedUid) delete nextMemberRoles[matchedUid];
+    delete nextMemberRoles[memberName.trim()];
 
     setFormOwner(nextOwner);
     setFormMembers(nextMembers);
     setFormMemberUids(nextMemberUids);
+    setFormMemberRoles(nextMemberRoles);
 
     if (!isCreatingNew && editingCode) {
       const targetProj = projects.find((p) => p.code === editingCode);
@@ -463,6 +560,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
           owner: nextOwner,
           members: nextMembers,
           memberUids: retainedUids,
+          memberRoles: nextMemberRoles,
         });
         if (saveRes.success && saveRes.savedProject) {
           try {
@@ -575,6 +673,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
       ownerId: existingTarget?.ownerId || currentAdminProfile?.uid,
       members: enforcedMembers,
       memberUids: nextMemberUids,
+      memberRoles: formMemberRoles,
       modules: formModules,
       abap_standards: abapStandards,
       is_system: false,
@@ -614,9 +713,23 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
     onProjectsChanged(res.savedProject.code);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!editingCode || isSystemProject) return;
     const deletedCode = editingCode;
+    const confirmed = await confirmDelete({
+      title: t('Delete Project', '프로젝트 삭제'),
+      message: t(
+        `Are you sure you want to delete project [${deletedCode}]?`,
+        `프로젝트 [${deletedCode}]를 삭제하시겠습니까?`
+      ),
+      targetName: `${deletedCode} · ${formName || deletedCode}`,
+      description: t(
+        'Linked program specifications will be moved to TEMP.',
+        '연결된 프로그램 사양서는 개인 임시 공간(TEMP)으로 이동됩니다.'
+      ),
+    });
+    if (!confirmed) return;
+
     const res = deleteProject(deletedCode);
     if (!res.success) {
       setNotice({
@@ -640,8 +753,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
   };
 
   const roleLabel = (roleValue: string) => {
-    const found = ROLE_OPTIONS.find((r) => r.value === roleValue);
-    return found ? (lang === 'ko' ? found.ko : found.value) : roleValue;
+    return getProjectRoleLabel(roleValue, lang, 'full');
   };
 
   return (
@@ -949,13 +1061,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                       )}
                     </div>
                   ) : (
-                    <div className="max-h-44 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <div className="max-h-52 overflow-y-auto grid grid-cols-1 xl:grid-cols-2 gap-2">
                       {eligibleApprovedUsers.map((user) => (
                         <div
                           key={user.uid}
-                          className="px-2.5 py-2 bg-white border border-slate-200 hover:border-blue-300 rounded-lg flex items-center justify-between gap-2 text-xs"
+                          className="px-2.5 py-2 bg-white border border-slate-200 hover:border-blue-300 rounded-lg flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
                             {user.photoURL ? (
                               <img
                                 src={user.photoURL}
@@ -982,14 +1094,35 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                               </div>
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => void handleAddApprovedUser(user)}
-                            className="px-2.5 py-1 bg-slate-900 hover:bg-blue-600 text-white rounded-md text-[11px] font-semibold flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
-                          >
-                            <UserPlus className="w-3 h-3" />
-                            <span>{t('Add', '추가')}</span>
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <select
+                              value={getSelectedRoleForCandidate(user)}
+                              onChange={(e) =>
+                                setPendingRoleByUid((prev) => ({
+                                  ...prev,
+                                  [user.uid]: e.target.value as UserProjectRole,
+                                }))
+                              }
+                              aria-label={t(`Role for ${user.displayName}`, `${user.displayName} 역할 선택`)}
+                              className="h-7 px-2 bg-slate-50 border border-slate-300 rounded-md text-[11px] font-semibold text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none cursor-pointer"
+                            >
+                              {PROJECT_ASSIGNABLE_ROLES.map((r) => (
+                                <option key={r.code} value={r.code}>
+                                  {lang === 'ko' ? r.labelKo : r.labelEn}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleAddApprovedUser(user, getSelectedRoleForCandidate(user))
+                              }
+                              className="h-7 px-2.5 bg-slate-900 hover:bg-blue-600 text-white rounded-md text-[11px] font-semibold flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                            >
+                              <UserPlus className="w-3 h-3" />
+                              <span>{t('Add', '추가')}</span>
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -998,60 +1131,91 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
               )}
 
               {/* Scoped Member Cards (Only members belonging to the selected project) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {memberCardEntries.map((member) => (
-                  <div
-                    key={member.uid || member.name}
-                    className="px-3 py-2.5 rounded-lg border bg-blue-50/70 border-blue-300 text-blue-950 text-xs flex items-center justify-between gap-2"
-                  >
-                    <div className="flex-1 min-w-0 flex items-start gap-2.5">
-                      <div className="mt-0.5 w-4 h-4 rounded border bg-blue-600 border-blue-600 text-white flex items-center justify-center shrink-0">
-                        {member.isDefaultOp ? (
-                          <Lock className="w-2.5 h-2.5" />
-                        ) : (
-                          <Check className="w-3 h-3" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-slate-900 truncate">
-                            {member.name}
-                          </span>
-                          {member.isDefaultOp && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-900 text-white whitespace-nowrap">
-                              {t('Default · Always Included', '기본 관리자 · 항상 포함')}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1.5 truncate mt-0.5">
-                          {member.email ? (
-                            <>
-                              <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="truncate">{member.email}</span>
-                            </>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                {memberCardEntries.map((member) => {
+                  const roleMeta = getProjectRoleOption(member.role);
+                  return (
+                    <div
+                      key={member.uid || member.name}
+                      className="px-3 py-2.5 rounded-lg border bg-blue-50/70 border-blue-300 text-blue-950 text-xs flex items-center justify-between gap-2"
+                    >
+                      <div className="flex-1 min-w-0 flex items-start gap-2.5">
+                        <div className="mt-0.5 w-4 h-4 rounded border bg-blue-600 border-blue-600 text-white flex items-center justify-center shrink-0">
+                          {member.isDefaultOp ? (
+                            <Lock className="w-2.5 h-2.5" />
                           ) : (
-                            <span className="truncate">{roleLabel(member.role)}</span>
+                            <Check className="w-3 h-3" />
                           )}
                         </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-slate-900 truncate">
+                              {member.name}
+                            </span>
+                            {member.isDefaultOp ? (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-900 text-white whitespace-nowrap">
+                                {t('Default Admin · Always Included', '기본 관리자 · 항상 포함')}
+                              </span>
+                            ) : (
+                              <span
+                                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border whitespace-nowrap ${roleMeta.badgeClass}`}
+                              >
+                                {getProjectRoleLabel(member.role, lang, 'short')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1.5 truncate">
+                            {member.email ? (
+                              <>
+                                <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate">{member.email}</span>
+                              </>
+                            ) : (
+                              <span className="truncate">{roleLabel(member.role)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!isSystemProject && !member.isDefaultOp && (
+                          <select
+                            value={member.role === 'ADMIN' ? 'PM' : member.role}
+                            onChange={(e) =>
+                              void handleChangeMemberRole(
+                                member.uid,
+                                member.name,
+                                e.target.value as UserProjectRole
+                              )
+                            }
+                            aria-label={t(`Role for ${member.name}`, `${member.name} 프로젝트 역할`)}
+                            className="h-7 px-2 bg-white border border-blue-200 hover:border-blue-400 rounded-md text-[11px] font-semibold text-slate-800 focus:border-blue-500 focus:outline-none cursor-pointer"
+                          >
+                            {PROJECT_ASSIGNABLE_ROLES.map((r) => (
+                              <option key={r.code} value={r.code}>
+                                {lang === 'ko' ? r.labelKo : r.labelEn}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {!isSystemProject && !member.isDefaultOp && (
+                          <button
+                            type="button"
+                            onClick={() => void handleRemoveMember(member.name, member.uid)}
+                            title={t(`Remove ${member.name} from project`, `${member.name} 멤버 제외`)}
+                            aria-label={t(
+                              `Remove ${member.name} from project`,
+                              `${member.name} 멤버 제외`
+                            )}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
-
-                    {!isSystemProject && !member.isDefaultOp && (
-                      <button
-                        type="button"
-                        onClick={() => void handleRemoveMember(member.name, member.uid)}
-                        title={t(`Remove ${member.name} from project`, `${member.name} 멤버 제외`)}
-                        aria-label={t(
-                          `Remove ${member.name} from project`,
-                          `${member.name} 멤버 제외`
-                        )}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -1213,7 +1377,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                 {!isCreatingNew && !isSystemProject && (
                   <button
                     type="button"
-                    onClick={handleDelete}
+                    onClick={() => void handleDelete()}
                     title={t('Delete Project', '프로젝트 삭제')}
                     aria-label={t('Delete Project', '프로젝트 삭제')}
                     className="w-9 h-9 text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors"

@@ -158,8 +158,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   };
 
   const availableProjectRoles: UserProjectRole[] = isAdmin
-    ? ['PM', 'FUNC', 'ABAP', 'QA', 'ADMIN']
-    : ['PM', 'FUNC', 'ABAP', 'QA'];
+    ? ['PM', 'FUNC', 'ABAP', 'QA', 'PI', 'ADMIN']
+    : ['PM', 'FUNC', 'ABAP', 'QA', 'PI'];
 
   const renderTopTooltip = (label: string, shortcut?: string, alignRight = false) => (
     <span
@@ -534,7 +534,7 @@ export const TopNav: React.FC<TopNavProps> = ({
                 <div className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1">
                   {t('Project Role (Approval)', '프로젝트 역할 (승인 권한)')}
                 </div>
-                <div className={`grid ${isAdmin ? 'grid-cols-5' : 'grid-cols-4'} gap-1`}>
+                <div className={`grid ${isAdmin ? 'grid-cols-6' : 'grid-cols-5'} gap-1`}>
                   {availableProjectRoles.map((role) => (
                     <button
                       key={role}

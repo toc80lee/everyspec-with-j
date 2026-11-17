@@ -51,6 +51,7 @@ import { SpecReviewCommentsPanel } from './SpecReviewCommentsPanel';
 import { LegacyAbapImportModal } from './LegacyAbapImportModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { backfillMockRowsForFields } from '../utils/aiLogicGenerator';
 import { exportSpecificationDocx, exportSpecificationXlsx } from '../utils/officeExport';
 import {
@@ -188,6 +189,7 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
   }, []);
 
   const { activeUser, projectRole, userProfile, isAdmin } = useAuth();
+  const { confirmDelete } = useConfirmDialog();
   const accessibleProjects = useMemo(
     () =>
       getAccessibleProjectsForUser(activeUser.name, {
@@ -2068,10 +2070,18 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                               <button
                                 type="button"
                                 disabled={isEffectiveReadOnly}
-                                onClick={() => {
+                                onClick={async () => {
+                                  const confirmed = await confirmDelete({
+                                    title: t('Delete Test Case', '테스트 케이스 삭제'),
+                                    message: t('Are you sure you want to delete this test case?', '삭제하시겠습니까?'),
+                                    targetName: tc.scenario ? `#${idx + 1} · ${tc.scenario}` : tc.condition,
+                                  });
+                                  if (!confirmed) return;
                                   updateActiveTestCases(activeTestCases.filter((_, i) => i !== idx));
                                 }}
                                 className="p-1 text-slate-400 hover:text-red-600 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                title={t('Delete test case', '테스트 케이스 삭제')}
+                                aria-label={t('Delete test case', '테스트 케이스 삭제')}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>

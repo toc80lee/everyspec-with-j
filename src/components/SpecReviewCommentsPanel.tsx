@@ -15,6 +15,7 @@ import {
 } from '../types/sap';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 import { subscribeSpecReviewComments } from '../services/firestoreSync';
 import {
   addReviewComment,
@@ -70,6 +71,7 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
   onNotify,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const { isFirebaseAuthenticated } = useAuth();
   const projectCode = (spec.project_code || 'TEMP').toUpperCase();
 
@@ -170,8 +172,17 @@ export const SpecReviewCommentsPanel: React.FC<SpecReviewCommentsPanelProps> = (
     }
   };
 
-  const handleDelete = (commentId: string) => {
+  const handleDelete = async (commentId: string) => {
     if (isReadOnly) return;
+    const target = comments.find((c) => c.id === commentId);
+    const preview = (target?.body || '').trim();
+    const confirmed = await confirmDelete({
+      title: t('Delete Review Comment', '리뷰 코멘트 삭제'),
+      message: t('Are you sure you want to delete this comment?', '삭제하시겠습니까?'),
+      targetName: preview.length > 80 ? `${preview.slice(0, 80)}...` : preview || undefined,
+    });
+    if (!confirmed) return;
+
     deleteReviewComment(commentId);
     setComments(getReviewCommentsForSpec(projectCode, spec.id));
     onCommentsUpdated?.();

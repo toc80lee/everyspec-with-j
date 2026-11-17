@@ -32,6 +32,7 @@ import {
 } from '../utils/projectStorage';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
 
 interface SpecManagerModalProps {
   currentSpec: ProgramSpec;
@@ -49,6 +50,7 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
   onSelectSpec,
 }) => {
   const { t } = useLanguage();
+  const { confirmDelete } = useConfirmDialog();
   const { activeUser: currentUser, userProfile, isAdmin } = useAuth();
   const [specs, setSpecs] = useState<SavedProgramSpecItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,7 +68,6 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
 
   // History Detail Viewer Modal State
   const [historyViewingItem, setHistoryViewingItem] = useState<SavedProgramSpecItem | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const tableScrollRef = React.useRef<HTMLDivElement>(null);
 
   const scrollTable = (direction: 'left' | 'right') => {
@@ -187,7 +188,7 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
   };
 
   // Delete item with strict authorization
-  const handleDelete = (item: SavedProgramSpecItem, e: React.MouseEvent) => {
+  const handleDelete = async (item: SavedProgramSpecItem, e: React.MouseEvent) => {
     e.stopPropagation();
 
     if (item.is_system) {
@@ -206,13 +207,18 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
       return;
     }
 
-    if (confirmDeleteId !== item.program_id) {
-      setConfirmDeleteId(item.program_id);
-      return;
-    }
+    const confirmed = await confirmDelete({
+      title: t('Delete Program Spec', '프로그램 사양서 삭제'),
+      message: t('Are you sure you want to delete this program spec?', '삭제하시겠습니까?'),
+      targetName: `${item.program_id} · ${item.title}`,
+      description: t(
+        'This saved program specification will be permanently deleted.',
+        '저장된 프로그램 사양서가 영구적으로 삭제됩니다.'
+      ),
+    });
+    if (!confirmed) return;
 
     const res = deleteSpecFromStorage(item.program_id, currentUser.name);
-    setConfirmDeleteId(null);
     if (res.success) {
       setSpecs(res.list);
       showToast('success', t(`Deleted spec '${item.program_id}'.`, `'${item.program_id}' 사양서가 삭제되었습니다.`));
@@ -534,26 +540,15 @@ export const SpecManagerModal: React.FC<SpecManagerModalProps> = ({
                                 <Lock className="w-3.5 h-3.5 text-slate-400" />
                               </span>
                             ) : canDelete ? (
-                              confirmDeleteId === item.program_id ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleDelete(item, e)}
-                                  className="px-2 py-1 text-[10px] font-bold bg-rose-600 text-white rounded hover:bg-rose-700 cursor-pointer whitespace-nowrap"
-                                  title={t('Confirm Delete', '삭제 확인')}
-                                >
-                                  {t('Confirm?', '삭제 확인')}
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleDelete(item, e)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                                  title={t('Delete Spec', '사양 삭제')}
-                                  aria-label={t(`Delete ${item.program_id}`, `${item.program_id} 삭제`)}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )
+                              <button
+                                type="button"
+                                onClick={(e) => void handleDelete(item, e)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                title={t('Delete Spec', '사양 삭제')}
+                                aria-label={t(`Delete ${item.program_id}`, `${item.program_id} 삭제`)}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             ) : (
                               <span
                                 className="p-1 text-slate-300 cursor-not-allowed flex items-center"
