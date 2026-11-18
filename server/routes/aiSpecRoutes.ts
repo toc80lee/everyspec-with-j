@@ -2,15 +2,17 @@ import { Router } from 'express';
 import {
   GEMINI_TEXT_MODEL,
   GEMINI_TRANSCRIBE_MODEL,
+  GeminiTimeoutError,
   SAP_AUDIO_GLOSSARY_HINT,
   formatCustomTablesContext,
   getGeminiClient,
   isCredentialOrMissingKeyError,
-} from '../geminiClient';
+  withGeminiTimeout,
+} from '../geminiClient.ts';
 import {
   requireHeavyAiAuth,
   requireStandardAiAuth,
-} from '../middleware/authMiddleware';
+} from '../middleware/authMiddleware.ts';
 import {
   buildFullSpecFallback,
   extractSpecElementsFallback,
@@ -19,7 +21,11 @@ import {
   normalizeGeneratedFullSpec,
   normalizeSapDataTypeServer,
   parseLegacyAbapDeterministic,
-} from '../services/sapFallbackService';
+} from '../services/sapFallbackService.ts';
+import {
+  buildSapPromptReferenceBlock,
+  detectSapModuleWithScores,
+} from '../services/sapStandardCatalog.ts';
 
 export const aiSpecRoutes = Router();
 
@@ -49,22 +55,32 @@ aiSpecRoutes.post('/api/transcribe-audio', requireHeavyAiAuth, async (req, res) 
 
     const hintBlock = glossaryHint ? `${SAP_AUDIO_GLOSSARY_HINT}, ${glossaryHint}` : SAP_AUDIO_GLOSSARY_HINT;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_TRANSCRIBE_MODEL,
-      contents: {
-        parts: [
-          audioPart,
-          {
-            text: `사용자가 말한 음성을 한국어로 정확하게 받아적어주세요. SAP ERP 도메인 용어(${hintBlock})는 정확한 영문/약어(예: ALV, BSEG, ACDOCA, VA03, T-Code)로 표기하세요. 인사말이나 부연 설명 없이 받아적은 텍스트만 출력하세요.`,
-          },
-        ],
-      },
-    });
+    const response = await withGeminiTimeout(
+      ai.models.generateContent({
+        model: GEMINI_TRANSCRIBE_MODEL,
+        contents: {
+          parts: [
+            audioPart,
+            {
+              text: `사용자가 말한 음성을 한국어로 정확하게 받아적어주세요. SAP ERP 도메인 용어(${hintBlock})는 정확한 영문/약어(예: ALV, BSEG, ACDOCA, VA03, T-Code)로 표기하세요. 인사말이나 부연 설명 없이 받아적은 텍스트만 출력하세요.`,
+            },
+          ],
+        },
+      }),
+      25_000,
+      'Audio transcription AI'
+    );
 
     const transcribedText = response.text?.trim() || '';
     return res.json({ text: transcribedText });
   } catch (error: any) {
     console.error('Audio transcription error:', error);
+    if (error instanceof GeminiTimeoutError) {
+      return res.status(504).json({
+        code: 'AI_TIMEOUT',
+        error: '음성 인식 AI 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.',
+      });
+    }
     if (isCredentialOrMissingKeyError(error)) {
       return res.status(503).json({
         code: 'MISSING_GEMINI_API_KEY',
@@ -113,15 +129,25 @@ ${customContext}
 [업무 개요 및 개발 목적]
 ${business_purpose}`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_TEXT_MODEL,
-      contents: userPrompt,
-      config: { systemInstruction: systemPrompt },
-    });
+    const response = await withGeminiTimeout(
+      ai.models.generateContent({
+        model: GEMINI_TEXT_MODEL,
+        contents: userPrompt,
+        config: { systemInstruction: systemPrompt },
+      }),
+      20_000,
+      'Logic generation AI'
+    );
 
     return res.json({ logic: response.text || '' });
   } catch (error: any) {
     console.error('Logic generation error:', error);
+    if (error instanceof GeminiTimeoutError) {
+      return res.status(504).json({
+        code: 'AI_TIMEOUT',
+        error: '로직 제안 AI 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.',
+      });
+    }
     if (isCredentialOrMissingKeyError(error)) {
       return res.status(503).json({
         code: 'MISSING_GEMINI_API_KEY',
@@ -148,11 +174,15 @@ aiSpecRoutes.post('/api/fetch-sap-table-schema', requireStandardAiAuth, async (r
     const systemPrompt = `You are a senior SAP ABAP Data Dictionary (DDIC) architect.
 Return a valid JSON object: { "table": string, "name": string, "module": string, "description": string, "fields": [{ "field": string, "label": string, "datatype": "CHAR"|"NUMC"|"DATS"|"TIMS"|"CURR"|"DEC"|"UNIT"|"INT4", "length": number, "isKey": boolean, "description": string }] } with 8 to 20 essential fields.`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_TEXT_MODEL,
-      contents: `Provide the DDIC schema metadata for SAP table ${cleanTableName}.`,
-      config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
-    });
+    const response = await withGeminiTimeout(
+      ai.models.generateContent({
+        model: GEMINI_TEXT_MODEL,
+        contents: `Provide the DDIC schema metadata for SAP table ${cleanTableName}.`,
+        config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
+      }),
+      15_000,
+      'DDIC schema AI'
+    );
 
     let schemaData: any = null;
     try {
@@ -199,11 +229,15 @@ aiSpecRoutes.post('/api/generate-mock-data', requireStandardAiAuth, async (req, 
     }));
 
     const systemPrompt = `Generate ${rowTarget} realistic SAP ALV records as a JSON array matching exact fieldnames. ZICON/STATUS use '1'|'2'|'3', DATS uses 'YYYY.MM.DD', CURR uses numeric values.`;
-    const response = await ai.models.generateContent({
-      model: GEMINI_TEXT_MODEL,
-      contents: `Title: ${title}\nModule: ${module}\nPurpose: ${business_purpose}\nFields:\n${JSON.stringify(fieldDescriptions, null, 2)}`,
-      config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
-    });
+    const response = await withGeminiTimeout(
+      ai.models.generateContent({
+        model: GEMINI_TEXT_MODEL,
+        contents: `Title: ${title}\nModule: ${module}\nPurpose: ${business_purpose}\nFields:\n${JSON.stringify(fieldDescriptions, null, 2)}`,
+        config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
+      }),
+      18_000,
+      'Mock data AI'
+    );
 
     let parsedRows: any[] = [];
     try {
@@ -255,7 +289,29 @@ aiSpecRoutes.post('/api/suggest-markdown', requireStandardAiAuth, async (req, re
 
     const boundedTables = Array.isArray(customTables) ? customTables.slice(0, 15) : [];
     const customContext = formatCustomTablesContext(boundedTables);
-    const systemPrompt = `당신은 20년 경력의 SAP ERP ABAP 시니어 테크니컬 아키텍트입니다.
+    const isDataFlowNode = section === 'data_flow_node';
+    const systemPrompt = isDataFlowNode
+      ? `당신은 20년 경력의 SAP ERP ABAP 시니어 테크니컬 아키텍트입니다.
+현재 프로그램 정보, 선택화면, ALV 상·하단 컬럼, 그리고 선택된 흐름도 단계(nodeInfo)를 바탕으로 초·중급 개발자도 바로 코드를 구현할 수 있을 만큼 쉽고 구체적인 한국어 단계 상세 사양서(마크다운)를 작성하세요.
+
+반드시 아래 5개 소제목 구조를 정확히 지켜서 본문만 반환하세요 (표지/서론 생략):
+### [${nodeInfo?.id || 'A'}] ${nodeInfo?.label || sectionTitle || '단계 상세'}
+
+#### 1. 이 단계는 무엇을 하나요? (쉬운 업무 설명)
+- 비전공자·신규 개발자도 이해할 수 있는 쉬운 목적 설명
+
+#### 2. 입력 및 선행 조건 (Input & Pre-condition)
+- 이전 단계에서 넘어오는 데이터/키 값 및 선행 조건
+
+#### 3. 상세 처리 로직 (Step-by-Step ABAP Logic)
+1. 실제 ABAP 이벤트/구문/내부테이블(\`GT_*\`) 흐름 기준의 구체적 절차
+
+#### 4. 관련 SAP 테이블 · 필드 · T-Code
+- 화면 컨텍스트(selectionParams, headerFields, itemFields)와 등록된 커스텀 DDIC 테이블에 등장하는 실제 테이블·필드·T-Code만 정확히 인용
+
+#### 5. 예외 처리 및 QA 체크포인트
+- 빈 값, 권한 오류, 대용량 조회, 덤프 방지 등 개발 시 놓치기 쉬운 점검 포인트`
+      : `당신은 20년 경력의 SAP ERP ABAP 시니어 테크니컬 아키텍트입니다.
 현재 화면 구성과 등록된 커스텀 DDIC 테이블을 반영해 바로 적용 가능한 최적의 한국어 마크다운 본문만 반환하세요.`;
 
     const screenContextSummary = {
@@ -290,15 +346,25 @@ ${JSON.stringify(screenContextSummary, null, 2)}
 [기존 작성 내용]:
 ${currentValue ? String(currentValue).slice(0, 1200) : '(비어 있음)'}`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_TEXT_MODEL,
-      contents: userPrompt,
-      config: { systemInstruction: systemPrompt },
-    });
+    const response = await withGeminiTimeout(
+      ai.models.generateContent({
+        model: GEMINI_TEXT_MODEL,
+        contents: userPrompt,
+        config: { systemInstruction: systemPrompt },
+      }),
+      18_000,
+      'Markdown suggestion AI'
+    );
 
     return res.json({ markdown: (response.text || '').trim() });
   } catch (error: any) {
     console.error('Markdown suggestion error:', error);
+    if (error instanceof GeminiTimeoutError) {
+      return res.status(504).json({
+        code: 'AI_TIMEOUT',
+        error: 'AI 마크다운 제안 응답 시간이 초과되었습니다.',
+      });
+    }
     if (isCredentialOrMissingKeyError(error)) {
       return res.status(503).json({
         code: 'MISSING_GEMINI_API_KEY',
@@ -312,7 +378,6 @@ ${currentValue ? String(currentValue).slice(0, 1200) : '(비어 있음)'}`;
 // 6. AI Spec Copilot: Generate full ProgramSpec draft (injecting custom DDIC tables)
 aiSpecRoutes.post('/api/generate-full-spec', requireHeavyAiAuth, async (req, res) => {
   try {
-    const ai = getGeminiClient();
     const {
       requirementPrompt,
       module = 'AUTO',
@@ -332,23 +397,62 @@ aiSpecRoutes.post('/api/generate-full-spec', requireHeavyAiAuth, async (req, res
 
     const cleanSampleType = ['01', '02', '03', '04'].includes(String(sampleType)) ? String(sampleType) : '01';
     const explicitModule = module && module !== 'AUTO' ? String(module).toUpperCase() : '';
+    const moduleHint = explicitModule || detectSapModuleWithScores(requirementPrompt).module;
     const boundedTables = Array.isArray(customTables) ? customTables.slice(0, 15) : [];
     const customContext = formatCustomTablesContext(boundedTables);
+    const sapRefBlock = buildSapPromptReferenceBlock(moduleHint, cleanSampleType);
 
-    const systemPrompt = `You are a Principal SAP ERP ABAP Architect.
-Convert a business requirement into a realistic SAP ALV Functional Specification JSON object.
-Rules:
+    const systemPrompt = `You are a Principal SAP ERP ABAP Architect (S/4HANA & ECC 6.0).
+Convert the user's business requirement & meeting design notes into a production-grade SAP ALV Functional Specification JSON object.
+
+STRICT ABAP & DDIC RULES:
 1. program_id & tcode MUST start with 'Z' or 'Y'.
-2. selection_params: Parameter/Select-Option names MUST BE <= 8 characters (SAP ABAP standard!). Group into boxes with block_id & block_title.
-3. field_catalog: Start with ZICON (icon_type: "LIGHTS"), include ref_table, ref_field, key, hotspot/drilldown_tcode, do_sum+cfieldname/qfieldname.
-4. Prefer registered project Z*/Y* custom DDIC tables when relevant to the prompt!
-5. Return ONLY valid JSON matching ProgramSpec fields plus detectedTables.`;
+2. module MUST match the true SAP business domain ("FI", "CO", "SD", "MM", "PP", "HR", "QM", "PM", "BC", or "CM").
+3. selection_params (6~10 items grouped into logical blocks via block_id & block_title):
+   - Parameter/Select-Option names MUST BE <= 8 characters (SAP ABAP standard: P_BUKRS, S_BUDAT, P_GJAHR, S_BELNR, etc.).
+   - Include exact SAP DDIC ref_table & ref_field (e.g., BKPF-BUKRS, BKPF-BUDAT), datatype, length, obligatory, default_val, radio_group (for RADIOBUTTON).
+4. field_catalog (Header/Main ALV, 8~12 columns):
+   - First column MUST be ZICON (icon_type: "LIGHTS", coltext: "상태", datatype: "CHAR", outputlen: 4, just: "C", key: true).
+   - ALL other columns MUST specify accurate SAP DDIC ref_table & ref_field, key flags, hotspot + drilldown_tcode (e.g., FB03, FS03, VA03, ME23N, KS03, MM03), do_sum + cfieldname/qfieldname on CURR/DEC columns.
+5. ${
+      cleanSampleType === '02'
+        ? `CRITICAL FOR SAMPLE TYPE "02" (Master-Detail 2-Grid ALV):
+   - You MUST generate a complete "item_grid" object representing the LOWER detail table!
+   - item_grid MUST contain:
+     * "grid_name": "Item ALV Grid"
+     * "grid_title": Korean title naming the lower standard SAP table(s)
+     * "foreign_key": Primary link key connecting upper header to lower detail (e.g., BELNR for FI, VBELN for SD, EBELN for MM, KOSTL for CO, AUFNR for PP)
+     * "field_catalog": 7~11 lower detail columns from SAP standard item/detail tables (e.g., BSEG/ACDOCA/SKAT for FI; VBAP/LIPS for SD; EKPO/EKET for MM; COEP/CSKU for CO) with exact ref_table & ref_field, hotspot/drilldown_tcode, and do_sum+cfieldname/qfieldname
+     * "mock_rows": 6~8 realistic records whose foreign_key values match the header mock_rows!`
+        : 'Include realistic mock_rows (5 rows) matching every fieldname in field_catalog.'
+    }
+6. Rich Korean Markdown documentation:
+   - "business_purpose": 2~3 structured Markdown bullets/paragraphs covering business background, upper/lower table roles, and target users.
+   - "data_extraction_logic": 4 structured numbered Markdown sections:
+     1) 주요 SAP 표준 테이블 및 조인 관계 (상단/하단 테이블·키 명시)
+     2) 데이터 추출·가공 및 계산 로직 (FOR ALL ENTRIES, 차대변/미납잔량/차이 산식)
+     3) 상태 신호등(ZICON '1' Green / '2' Yellow / '3' Red) 판정 기준
+     4) ALV 출력·합계(DO_SUM)·핫스팟 드릴다운 및 툴바 이벤트 처리
+   - "data_flow": Rich Mermaid flowchart + step-by-step developer specifications:
+     * "mermaid_code": "graph TD; ..." with 8~12 domain-accurate steps in Korean/ABAP terms (${cleanSampleType === '02' ? 'MUST explicitly cover 상단 헤더 추출 -> 상단 ALV 출력 -> 상단 행 선택 -> 하단 상세 추출 -> 하단 ALV 동기화 -> 드릴다운/툴바 -> 종료' : 'covering INITIALIZATION -> SELECTION-SCREEN -> 권한/입력 검증 -> 데이터 추출 -> 비즈니스 계산/신호등 -> ALV 출력 -> 사용자 명령/드릴다운 -> 종료'})
+     * "node_details": Object keyed by EVERY node ID in mermaid_code (e.g. "A", "B", "C", ...), each containing { "label": "...", "markdown": "..." } using the 5-part Korean developer structure:
+       #### 1. 이 단계는 무엇을 하나요? (쉬운 업무 설명)
+       #### 2. 입력 및 선행 조건 (Input & Pre-condition)
+       #### 3. 상세 처리 로직 (Step-by-Step ABAP Logic)
+       #### 4. 관련 SAP 테이블 · 필드 · T-Code
+       #### 5. 예외 처리 및 QA 체크포인트
+7. Include "authority_checks" (1~3 SAP auth objects e.g. F_BKPF_BUK, V_VBAK_VKO, M_BEST_WRK), "sap_messages" (2~3 SE91 style messages), "custom_toolbar" (2~3 actions), "test_cases" (3~4 QA scenarios), "detectedTables" (string array of all SAP tables used), and "mock_rows" (5 realistic header rows).
+8. Prefer registered project Z*/Y* custom DDIC tables when relevant to the prompt!
+9. Return ONLY valid JSON.`;
 
     const userPrompt = `Business Requirement:
 ${requirementPrompt.trim()}
 ${customContext}
+
+${sapRefBlock}
+
 Constraints:
-- Requested Module: ${explicitModule || 'Auto-detect'}
+- Candidate / Requested Module: ${explicitModule || `${moduleHint} (Auto-detected)`}
 - Sample Type: ${cleanSampleType}
 - Target SAP Release: ${targetSapRelease}
 - Preferred Program ID: ${programId || '(auto-generate Z*)'}
@@ -356,17 +460,28 @@ Constraints:
 
     let rawDraft: any = null;
     let source: 'ai' | 'fallback' = 'ai';
+    let fallbackReason: 'missing_api_key' | 'timeout' | 'ai_error' | undefined;
 
     try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_TEXT_MODEL,
-        contents: userPrompt,
-        config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
-      });
+      const ai = getGeminiClient();
+      const response = await withGeminiTimeout(
+        ai.models.generateContent({
+          model: GEMINI_TEXT_MODEL,
+          contents: userPrompt,
+          config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
+        }),
+        35_000,
+        'Full spec generation AI'
+      );
       rawDraft = JSON.parse(response.text?.trim() || '{}');
     } catch (err: any) {
       console.warn('Gemini full-spec generation issue, using fallback:', err?.message);
       source = 'fallback';
+      fallbackReason = isCredentialOrMissingKeyError(err)
+        ? 'missing_api_key'
+        : err instanceof GeminiTimeoutError
+        ? 'timeout'
+        : 'ai_error';
     }
 
     if (!rawDraft || !Array.isArray(rawDraft.field_catalog) || rawDraft.field_catalog.length === 0) {
@@ -394,6 +509,7 @@ Constraints:
       spec: normalized.spec,
       detectedTables: normalized.detectedTables,
       source,
+      ...(source === 'fallback' ? { fallbackReason: fallbackReason || 'ai_error' } : {}),
     });
   } catch (error: any) {
     console.error('Full spec generation error:', error);
@@ -404,7 +520,6 @@ Constraints:
 // 7. Reverse-extract missing Selection Params & Field Catalog columns (with customTables)
 aiSpecRoutes.post('/api/extract-spec-elements', requireStandardAiAuth, async (req, res) => {
   try {
-    const ai = getGeminiClient();
     const {
       businessPurpose = '',
       dataExtractionLogic = '',
@@ -436,10 +551,14 @@ aiSpecRoutes.post('/api/extract-spec-elements', requireStandardAiAuth, async (re
 
     const boundedTables = Array.isArray(customTables) ? customTables.slice(0, 15) : [];
     const customContext = formatCustomTablesContext(boundedTables);
-    const systemPrompt = `You are a senior SAP ABAP Architect reverse-extracting missing Selection Screen params (max 8 chars name!) and ALV Field Catalog columns from specification text and custom DDIC tables. Return JSON { detectedTables, suggestedSelectionParams, suggestedFieldCatalog }.`;
+    const sapRefBlock = buildSapPromptReferenceBlock(String(module || 'SD').toUpperCase(), String(sampleType || '01'));
+    const systemPrompt = `You are a senior SAP ABAP Architect reverse-extracting missing Selection Screen params (max 8 chars name!) and ALV Field Catalog columns from specification text, SAP standard DDIC tables, and custom Z/Y tables.
+Always include exact ref_table, ref_field, datatype, length/outputlen, do_sum, cfieldname/qfieldname, hotspot, drilldown_tcode, and concise Korean reason.
+Return ONLY valid JSON: { "detectedTables": string[], "suggestedSelectionParams": [...], "suggestedFieldCatalog": [...] }.`;
 
     const userPrompt = `Module: ${module}, Sample Type: ${sampleType}
 ${customContext}
+${sapRefBlock}
 [Existing Selection]: ${Array.from(existingParamNames).join(', ') || '(None)'}
 [Existing Fields]: ${Array.from(existingFieldNames).join(', ') || '(None)'}
 [Business Purpose]: ${businessPurpose}
@@ -449,11 +568,16 @@ ${customContext}
     let source: 'ai' | 'fallback' = 'ai';
 
     try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_TEXT_MODEL,
-        contents: userPrompt,
-        config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
-      });
+      const ai = getGeminiClient();
+      const response = await withGeminiTimeout(
+        ai.models.generateContent({
+          model: GEMINI_TEXT_MODEL,
+          contents: userPrompt,
+          config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
+        }),
+        20_000,
+        'Reverse extraction AI'
+      );
       extracted = JSON.parse(response.text?.trim() || '{}');
     } catch (err: any) {
       console.warn('Gemini reverse-extract issue, using rule-based fallback:', err?.message);
@@ -564,7 +688,6 @@ ${customContext}
 // 8. Incremental AI Spec Patching (Modify only requested parts without overwriting the whole spec)
 aiSpecRoutes.post('/api/patch-spec', requireStandardAiAuth, async (req, res) => {
   try {
-    const ai = getGeminiClient();
     const { instruction, currentSpec, customTables = [] } = req.body || {};
 
     if (!instruction || typeof instruction !== 'string' || !instruction.trim()) {
@@ -613,11 +736,16 @@ Do NOT replace existing items unless directly requested.`;
     let patch: any = null;
     let source: 'ai' | 'fallback' = 'ai';
     try {
-      const response = await ai.models.generateContent({
-        model: GEMINI_TEXT_MODEL,
-        contents: `[Current Spec]\n${JSON.stringify(compactSpec, null, 2)}\n${customContext}\n\n[User Modification Instruction]\n${instruction.trim()}`,
-        config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
-      });
+      const ai = getGeminiClient();
+      const response = await withGeminiTimeout(
+        ai.models.generateContent({
+          model: GEMINI_TEXT_MODEL,
+          contents: `[Current Spec]\n${JSON.stringify(compactSpec, null, 2)}\n${customContext}\n\n[User Modification Instruction]\n${instruction.trim()}`,
+          config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
+        }),
+        20_000,
+        'Patch spec AI'
+      );
       patch = JSON.parse(response.text?.trim() || '{}');
     } catch (err: any) {
       console.warn('Gemini patch-spec issue, using deterministic fallback:', err?.message);
@@ -638,7 +766,6 @@ Do NOT replace existing items unless directly requested.`;
 // 9. Reverse Import Legacy ABAP / SE11 code into ProgramSpec
 aiSpecRoutes.post('/api/reverse-import-abap', requireHeavyAiAuth, async (req, res) => {
   try {
-    const ai = getGeminiClient();
     const { abapSource, targetSapRelease = 'SAP S/4HANA 2023 / ECC 6.0' } = req.body || {};
 
     if (!abapSource || typeof abapSource !== 'string' || !abapSource.trim()) {
@@ -654,6 +781,7 @@ aiSpecRoutes.post('/api/reverse-import-abap', requireHeavyAiAuth, async (req, re
     let detectedTables = deterministic.detectedTables;
 
     try {
+      const ai = getGeminiClient();
       const systemPrompt = `You are a Principal SAP ABAP Reverse Engineering Architect.
 Analyze pasted Legacy ABAP source code (REPORT, TOP, SELECTION-SCREEN, TYPES, FORM, AUTHORITY-CHECK) or SE11 definitions, and extract a complete ProgramSpec JSON:
 {
@@ -670,11 +798,15 @@ Analyze pasted Legacy ABAP source code (REPORT, TOP, SELECTION-SCREEN, TYPES, FO
 }
 Note: SelectionParameter name max 8 chars!`;
 
-      const response = await ai.models.generateContent({
-        model: GEMINI_TEXT_MODEL,
-        contents: `Analyze this Legacy ABAP source and return ProgramSpec JSON:\n\n${abapSource.slice(0, 12000)}`,
-        config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
-      });
+      const response = await withGeminiTimeout(
+        ai.models.generateContent({
+          model: GEMINI_TEXT_MODEL,
+          contents: `Analyze this Legacy ABAP source and return ProgramSpec JSON:\n\n${abapSource.slice(0, 12000)}`,
+          config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
+        }),
+        25_000,
+        'Legacy ABAP import AI'
+      );
 
       const aiJson = JSON.parse(response.text?.trim() || '{}');
       if (aiJson && Array.isArray(aiJson.field_catalog) && aiJson.field_catalog.length > 0) {

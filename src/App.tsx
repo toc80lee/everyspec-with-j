@@ -31,11 +31,16 @@ import {
   subscribeProjectMeetings,
   subscribeProjectSpecs,
   subscribeSpecPresence,
-  subscribeSpecReviewComments,
   syncProjectToFirestore,
   syncSpecPresence,
   syncSpecToFirestore,
 } from './services/firestoreSync';
+import {
+  FIRESTORE_CONSOLE_UPGRADE_URL,
+  FIRESTORE_PRICING_URL,
+  isFirestoreQuotaExceeded,
+  subscribeFirestoreQuotaState,
+} from './lib/firebase';
 import {
   COMMON_PROJECT_CODE,
   TEMP_PROJECT_CODE,
@@ -60,10 +65,7 @@ import {
   reconcileProjectMeetingsFromRemote,
 } from './utils/meetingStorage';
 import { reconcileCustomDdicFromRemote } from './utils/sapDdicStorage';
-import {
-  getUnresolvedCommentCountsMap,
-  mergeRemoteReviewComments,
-} from './utils/reviewCommentStorage';
+import { getUnresolvedCommentCountsMap } from './utils/reviewCommentStorage';
 import { createBlankProgramSpec } from './utils/blankSpecFactory';
 import { createRevisionSnapshot } from './utils/specSnapshotStorage';
 import {
@@ -73,7 +75,7 @@ import {
   removeFavoriteProgram,
   toggleFavoriteProgram,
 } from './utils/favoriteStorage';
-import { CheckCircle2, Loader2, Undo2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Undo2, X } from 'lucide-react';
 
 function lazyNamed<T extends React.ComponentType<any>>(
   loader: () => Promise<Record<string, unknown>>,
@@ -163,6 +165,17 @@ export default function App() {
   } = useAuth();
   const { t } = useLanguage();
   const [currentUser, setCurrentUserState] = useState<CurrentUser>(() => authActiveUser || getCurrentUser());
+  const currentUserNameRef = useRef(currentUser.name);
+  currentUserNameRef.current = currentUser.name;
+  const [firestoreQuotaExceeded, setFirestoreQuotaExceeded] = useState<boolean>(() => isFirestoreQuotaExceeded());
+  const [dismissedQuotaBanner, setDismissedQuotaBanner] = useState(false);
+
+  useEffect(() => {
+    return subscribeFirestoreQuotaState((exceeded) => {
+      setFirestoreQuotaExceeded(exceeded);
+    });
+  }, []);
+
   const isAdminOperator = isAdmin;
   const [projectRefreshKey, setProjectRefreshKey] = useState(0);
   const [remoteProjects, setRemoteProjects] = useState<SapProject[]>([]);
@@ -190,9 +203,11 @@ export default function App() {
 
   // Subscribe to Firestore projects accessible to current user (Admin = all, User = COMM + assigned)
   useEffect(() => {
-    if (!isFirebaseAuthenticated || !userProfile?.uid) {
-      setRemoteProjects([]);
-      setRemoteProjectsLoaded(false);
+    if (!isFirebaseAuthenticated || !userProfile?.uid || firestoreQuotaExceeded) {
+      if (!isFirebaseAuthenticated || !userProfile?.uid) {
+        setRemoteProjects([]);
+        setRemoteProjectsLoaded(false);
+      }
       return;
     }
     const assignedCodes = userProfile.assignedProjects || [];
@@ -206,7 +221,7 @@ export default function App() {
       assignedCodes
     );
     return () => unsub();
-  }, [isFirebaseAuthenticated, userProfile?.uid, isAdmin, assignedProjectsKey]);
+  }, [isFirebaseAuthenticated, userProfile?.uid, isAdmin, assignedProjectsKey, firestoreQuotaExceeded]);
 
   // Seed missing local system/team projects once when Admin connects so non-admin users can read COMM & assigned projects
   useEffect(() => {
@@ -482,7 +497,7 @@ export default function App() {
 
   // Multi-project real-time subscriptions for specs & meetings (propagates remote deletes & updates across all accessible projects)
   useEffect(() => {
-    if (!isFirebaseAuthenticated || !accessibleProjectCodesKey) return;
+    if (!isFirebaseAuthenticated || !accessibleProjectCodesKey || firestoreQuotaExceeded) return;
 
     const projectCodes = accessibleProjectCodesKey.split(',').filter(Boolean);
     const unsubs: (() => void)[] = [];
@@ -494,7 +509,7 @@ export default function App() {
             reconcileProjectSpecsFromRemote(
               projCode,
               remoteSpecs,
-              currentUser.name,
+              currentUserNameRef.current,
               userProfile?.uid
             );
             setAllSavedSpecs(getSavedSpecList());
@@ -539,7 +554,7 @@ export default function App() {
             reconcileProjectMeetingsFromRemote(
               projCode,
               remoteMinutes,
-              currentUser.name,
+              currentUserNameRef.current,
               userProfile?.uid
             );
             setMeetingRefreshKey((k) => k + 1);
@@ -551,60 +566,16 @@ export default function App() {
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [isFirebaseAuthenticated, accessibleProjectCodesKey, currentUser.name, userProfile?.uid]);
+  }, [isFirebaseAuthenticated, accessibleProjectCodesKey, userProfile?.uid, firestoreQuotaExceeded]);
 
   // Shared custom DDIC subscription (DD02L / DD03L live sync across teammates)
   useEffect(() => {
-    if (!isFirebaseAuthenticated) return;
+    if (!isFirebaseAuthenticated || firestoreQuotaExceeded) return;
     const unsub = subscribeCustomDdicTables((entries) => {
       reconcileCustomDdicFromRemote(entries);
     });
     return () => unsub();
-  }, [isFirebaseAuthenticated]);
-
-  // Live unresolved review comments subscription for visible specs on Overview / Program List
-  const activeProjectSpecIdsKey = useMemo(() => {
-    if (
-      !isFirebaseAuthenticated ||
-      (workspaceMode !== 'overview' && workspaceMode !== 'program_list') ||
-      !selectedProjectCode ||
-      selectedProjectCode === COMMON_PROJECT_CODE
-    ) {
-      return '';
-    }
-    return allSavedSpecs
-      .filter((item) =>
-        isSpecVisibleInProject(item, selectedProjectCode, currentUser.name, currentUser.id)
-      )
-      .slice(0, 25)
-      .map((item) => item.spec.id)
-      .filter(Boolean)
-      .sort()
-      .join(',');
-  }, [
-    isFirebaseAuthenticated,
-    workspaceMode,
-    selectedProjectCode,
-    allSavedSpecs,
-    currentUser.name,
-    currentUser.id,
-  ]);
-
-  useEffect(() => {
-    if (!activeProjectSpecIdsKey || !selectedProjectCode || selectedProjectCode === COMMON_PROJECT_CODE) {
-      return;
-    }
-    const specIds = activeProjectSpecIdsKey.split(',').filter(Boolean);
-    const unsubs = specIds.map((specId) =>
-      subscribeSpecReviewComments(selectedProjectCode, specId, (remote) => {
-        mergeRemoteReviewComments(selectedProjectCode, specId, remote);
-        setCommentRefreshKey((k) => k + 1);
-      })
-    );
-    return () => {
-      unsubs.forEach((u) => u());
-    };
-  }, [activeProjectSpecIdsKey, selectedProjectCode]);
+  }, [isFirebaseAuthenticated, firestoreQuotaExceeded]);
 
   const formatNowHms = () => {
     const d = new Date();
@@ -762,6 +733,7 @@ export default function App() {
     const projCode = normalizeLegacyProjectCode(currentSpec.project_code || TEMP_PROJECT_CODE);
     if (
       !isFirebaseAuthenticated ||
+      firestoreQuotaExceeded ||
       !userProfile?.uid ||
       !isViewingOrEditingSpec ||
       !specId ||
@@ -775,11 +747,13 @@ export default function App() {
 
     const mode: 'viewing' | 'editing' = isCurrentSpecReadOnly ? 'viewing' : 'editing';
     const sendHeartbeat = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (isFirestoreQuotaExceeded()) return;
       const projObj = accessibleProjectsRef.current.find((p) => p.code === projCode);
       void syncSpecPresence({
         projectCode: projCode,
         specId,
-        displayName: currentUser.name,
+        displayName: currentUserNameRef.current,
         projectRole: resolveEffectiveProjectRole(projObj),
         mode,
         project: projObj,
@@ -791,7 +765,7 @@ export default function App() {
     });
 
     sendHeartbeat();
-    const intervalId = window.setInterval(sendHeartbeat, 25_000);
+    const intervalId = window.setInterval(sendHeartbeat, 60_000);
 
     return () => {
       window.clearInterval(intervalId);
@@ -800,13 +774,13 @@ export default function App() {
     };
   }, [
     isFirebaseAuthenticated,
+    firestoreQuotaExceeded,
     userProfile?.uid,
     isViewingOrEditingSpec,
     currentSpec.id,
     currentSpec.program_id,
     currentSpec.project_code,
     isCurrentSpecReadOnly,
-    currentUser.name,
     effectiveSpecRole,
     resolveEffectiveProjectRole,
   ]);
@@ -1327,6 +1301,45 @@ export default function App() {
           hasUnsavedChanges={hasUnsavedChanges}
           onQuickSnapshotSave={() => void handleQuickSnapshotSave()}
         />
+
+        {firestoreQuotaExceeded && !dismissedQuotaBanner && (
+          <div className="bg-amber-950/90 border-b border-amber-700/80 px-4 py-2 text-xs text-amber-100 flex items-center justify-between gap-3 print:hidden">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="truncate sm:whitespace-normal leading-snug">
+                {t(
+                  'Firestore daily free-tier quota exceeded. Background cloud sync is paused (local workspace edits are preserved) until quota resets tomorrow.',
+                  'Firestore 일일 무료 할당량이 초과되어 클라우드 실시간 동기화가 일시 중단되었습니다(로컬 작업은 계속 유지되며 할당량은 다음 날 초기화됩니다).'
+                )}{' '}
+                <a
+                  href={FIRESTORE_CONSOLE_UPGRADE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline font-semibold text-amber-300 hover:text-white"
+                >
+                  {t('Upgrade in Firebase Console', 'Firebase Console에서 업그레이드')}
+                </a>
+                {' · '}
+                <a
+                  href={FIRESTORE_PRICING_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline text-amber-200 hover:text-white"
+                >
+                  {t('Spark Quota Info', 'Spark 플랜 할당량 안내')}
+                </a>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissedQuotaBanner(true)}
+              className="p-1 text-amber-300 hover:text-white rounded cursor-pointer shrink-0"
+              aria-label="Close quota notice"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Main Workspace Viewport */}
         <main

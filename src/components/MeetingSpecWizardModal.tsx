@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import {
+  MeetingAiSuggestionItem,
   MeetingTranscriptSegment,
   ProgramSpec,
   ProjectMeetingMinute,
@@ -36,12 +37,19 @@ import { formatNowDateTime, saveMeetingMinute } from '../utils/meetingStorage';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { MarkdownFieldEditor } from './MarkdownFieldEditor';
 import {
+  MermaidFlowChartSvg,
+  getEffectiveDataFlow,
+  parseMermaidCode,
+} from './MermaidFlowChartSvg';
+import {
+  AiFallbackReason,
   SampleRecommendationResult,
   cloneAndApplyCommonSampleSpine,
   requestAiFullSpecDraft,
   requestAiMeetingMinutes,
   requestAiSampleRecommendation,
 } from '../utils/aiLogicGenerator';
+import { isAuthorizedFetchAbortError } from '../utils/authorizedFetch';
 import { SAMPLE_SPECS } from '../data/sampleSpecs';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useConfirmDialog } from '../contexts/ConfirmDialogContext';
@@ -191,6 +199,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
     lang === 'ko' ? '신규 프로그램 설계 회의' : 'New Program Design Meeting'
   );
   const [minutesMarkdown, setMinutesMarkdown] = useState<string>('');
+  const [aiSuggestions, setAiSuggestions] = useState<MeetingAiSuggestionItem[]>([]);
   const [supplementalNotes, setSupplementalNotes] = useState<string>('');
   const [isProcessingAi, setIsProcessingAi] = useState<boolean>(false);
   const [aiFeedbackMsg, setAiFeedbackMsg] = useState<string | null>(null);
@@ -210,6 +219,49 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
   const [generatedSpec, setGeneratedSpec] = useState<ProgramSpec | null>(null);
   const [detectedTables, setDetectedTables] = useState<string[]>([]);
   const [previewTab, setPreviewTab] = useState<'overview' | 'fields' | 'flow'>('overview');
+  const [selectedFlowNodeId, setSelectedFlowNodeId] = useState<string>('A');
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const startNewAiAbortController = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    return controller;
+  };
+
+  const handleCancelAiProcessing = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsProcessingAi(false);
+    setAiFeedbackMsg(t('AI processing was cancelled.', 'AI 처리가 취소되었습니다.'));
+  };
+
+  const formatFallbackMessage = (
+    reason: AiFallbackReason | undefined,
+    koBase: string,
+    enBase: string
+  ) => {
+    const reasonDetailKo: Record<AiFallbackReason, string> = {
+      missing_api_key: ' (서버 Gemini API 키 미설정으로 규칙 기반 자동 생성 사용)',
+      timeout: ' (AI 응답 시간 초과로 규칙 기반 자동 생성으로 전환됨)',
+      server_unavailable: ' (AI 서버 연결 지연/불가로 규칙 기반 자동 생성 사용)',
+      ai_error: ' (AI 일시 오류로 규칙 기반 자동 생성으로 전환됨)',
+    };
+    const reasonDetailEn: Record<AiFallbackReason, string> = {
+      missing_api_key: ' (Rule-based fallback used: server Gemini API key is not configured.)',
+      timeout: ' (Rule-based fallback used: AI response timed out.)',
+      server_unavailable: ' (Rule-based fallback used: AI server unavailable.)',
+      ai_error: ' (Rule-based fallback used due to transient AI error.)',
+    };
+    const suffixKo = reason ? reasonDetailKo[reason] : '';
+    const suffixEn = reason ? reasonDetailEn[reason] : '';
+    return t(`${enBase}${suffixEn}`, `${koBase}${suffixKo}`);
+  };
 
   // Initialize / hydrate when modal opens or initialMinute changes
   useEffect(() => {
@@ -228,7 +280,9 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
         initialMinute.title || t('New Program Design Meeting', '신규 프로그램 설계 회의')
       );
       setMinutesMarkdown(initialMinute.minutes_markdown || '');
+      setAiSuggestions(initialMinute.ai_suggestions || []);
       setSupplementalNotes(initialMinute.supplemental_notes || '');
+      setSelectedFlowNodeId('A');
       setSelectedSampleType(initialMinute.recommended_sample_type || '01');
       setSelectedModule(initialMinute.suggested_module || 'SD');
       setProgramId(initialMinute.suggested_program_id || 'ZR_SD_MON_10');
@@ -238,7 +292,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
           initialMinute.title ||
           t('New ALV Program', '신규 ALV 리포트 프로그램')
       );
-      setGeneratedSpec(null);
+      setDetectedTables([]);
 
       if (initialMinute.recommended_sample_type && initialMinute.suggested_program_id) {
         setRecommendation({
@@ -267,14 +321,20 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
         if (startInSpecGen) {
           setStep(2);
           setIsProcessingAi(true);
+          const controller = startNewAiAbortController();
           const safeProj = resolveSafeTargetProject(initialMinute.project_code);
           const projObj = nonCommonProjects.find((p) => p.code === safeProj);
-          requestAiSampleRecommendation({
-            minutesMarkdown: initialMinute.minutes_markdown.trim(),
-            projectName: projObj?.name || safeProj,
-            existingProgramIds,
-          })
+          requestAiSampleRecommendation(
+            {
+              minutesMarkdown: initialMinute.minutes_markdown.trim(),
+              projectName: projObj?.name || safeProj,
+              existingProgramIds,
+              preferredModule: initialMinute.suggested_module,
+            },
+            { signal: controller.signal }
+          )
             .then((res) => {
+              if (controller.signal.aborted) return;
               const std = getProjectAbapStandards(safeProj);
               const compliant = suggestCompliantIdsForProject(
                 res.suggestedProgramId,
@@ -283,6 +343,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
                 std
               );
               setRecommendation(res);
+              setDetectedTables(res.detectedTables || []);
               setSelectedSampleType(res.recommendedSampleType);
               setSelectedModule(res.suggestedModule);
               setProgramId(compliant.program_id);
@@ -290,21 +351,34 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
               setProgramTitle(res.suggestedTitle);
               setStep(3);
               setAiFeedbackMsg(
-                t(
-                  `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}). Review details before generating the spec.`,
-                  `COMM 샘플 유형 ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId})을(를) 추천했습니다. 확인 후 사양서를 생성하세요.`
-                )
+                res.source === 'ai'
+                  ? t(
+                      `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}). Review details before generating the spec.`,
+                      `COMM 샘플 유형 ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId})을(를) 추천했습니다. 확인 후 사양서를 생성하세요.`
+                    )
+                  : formatFallbackMessage(
+                      res.fallbackReason,
+                      `COMM 샘플 유형 ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId})을(를) 추천했습니다.`,
+                      `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}).`
+                    )
               );
             })
             .catch((err: any) => {
+              if (isAuthorizedFetchAbortError(err)) return;
               setErrorMsg(
                 err?.message ||
                   t('Failed to recommend sample type.', '샘플 유형 추천 중 오류가 발생했습니다.')
               );
             })
             .finally(() => {
-              setIsProcessingAi(false);
+              if (abortControllerRef.current === controller) {
+                abortControllerRef.current = null;
+                setIsProcessingAi(false);
+              }
             });
+          return () => {
+            controller.abort();
+          };
         } else {
           setStep(2);
         }
@@ -319,6 +393,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setManualNoteInput('');
       setMeetingTitle(t('New Program Design Meeting', '신규 프로그램 설계 회의'));
       setMinutesMarkdown('');
+      setAiSuggestions([]);
       setSupplementalNotes('');
       setRecommendation(null);
       setSelectedSampleType('01');
@@ -327,6 +402,8 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setTcode('ZSD010');
       setProgramTitle(t('New ALV Program', '신규 ALV 리포트 프로그램'));
       setGeneratedSpec(null);
+      setDetectedTables([]);
+      setSelectedFlowNodeId('A');
       setStep(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -389,8 +466,22 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
     if (!isOpen) {
       if (mainVoiceRef.current.isListening) mainVoiceRef.current.stopListening();
       if (suppVoiceRef.current.isListening) suppVoiceRef.current.stopListening();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setIsProcessingAi(false);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   const isDuplicateProgramId = useMemo(() => {
     const clean = programId.trim().toUpperCase();
@@ -433,6 +524,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       raw_transcript: rawTranscriptText,
       supplemental_notes: supplementalNotes,
       minutes_markdown: minutesMarkdown,
+      ai_suggestions: aiSuggestions,
       recommended_sample_type: selectedSampleType,
       recommendation_reason: recommendation?.confidenceReason,
       suggested_module: selectedModule,
@@ -472,41 +564,56 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
 
     setGate(null);
     setErrorMsg(null);
+    setAiFeedbackMsg(null);
     setIsProcessingAi(true);
+    const controller = startNewAiAbortController();
     try {
-      const res = await requestAiMeetingMinutes({
-        mode: 'create',
-        rawTranscript: combinedTranscript,
-        projectName: activeTargetProject?.name || targetProjectCode,
-        targetRelease: activeTargetProject?.target_sap_release || 'SAP S/4HANA 2023',
-      });
+      const res = await requestAiMeetingMinutes(
+        {
+          mode: 'create',
+          rawTranscript: combinedTranscript,
+          segments,
+          projectName: activeTargetProject?.name || targetProjectCode,
+          targetRelease: activeTargetProject?.target_sap_release || 'SAP S/4HANA 2023',
+        },
+        { signal: controller.signal }
+      );
+      if (controller.signal.aborted) return;
+      const nextSuggestions = res.aiSuggestions || [];
       setMeetingTitle(res.title);
       setMinutesMarkdown(res.minutesMarkdown);
+      setAiSuggestions(nextSuggestions);
       setSelectedModule(res.detectedModule);
       setStep(2);
       setAiFeedbackMsg(
         res.source === 'ai'
           ? t(
               'AI generated structured SAP meeting minutes. Review and enrich before confirming.',
-              'AI가 SAP 설계 회의록을 정리했습니다. 내용을 검토·보완한 후 다음 단계로 진행하세요.'
+              'AI가 육하원칙·근거 기반 SAP 설계 회의록과 보완 제안을 정리했습니다. 검토 후 살을 붙여 확정하세요.'
             )
-          : t(
-              'Draft meeting minutes prepared. Review and refine before proceeding.',
-              '회의록 초안이 작성되었습니다. 검토 후 진행해 주세요.'
+          : formatFallbackMessage(
+              res.fallbackReason,
+              '육하원칙·근거 기반 회의록 초안이 작성되었습니다. 검토 후 진행해 주세요.',
+              'Draft meeting minutes prepared. Review and refine before proceeding.'
             )
       );
       persistProgress({
         title: res.title,
         minutes_markdown: res.minutesMarkdown,
+        ai_suggestions: nextSuggestions,
         suggested_module: res.detectedModule,
         status: 'minutes_ready',
       });
     } catch (err: any) {
+      if (isAuthorizedFetchAbortError(err)) return;
       setErrorMsg(
         err?.message || t('Failed to generate meeting minutes.', '회의록 생성 중 오류가 발생했습니다.')
       );
     } finally {
-      setIsProcessingAi(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setIsProcessingAi(false);
+      }
     }
   };
 
@@ -523,36 +630,56 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       return;
     }
     setErrorMsg(null);
+    setAiFeedbackMsg(null);
     setIsProcessingAi(true);
+    const controller = startNewAiAbortController();
     try {
-      const res = await requestAiMeetingMinutes({
-        mode: 'enrich',
-        rawTranscript: rawTranscriptText,
-        existingMinutes: minutesMarkdown,
-        supplementalNotes,
-        projectName: activeTargetProject?.name || targetProjectCode,
-        targetRelease: activeTargetProject?.target_sap_release || 'SAP S/4HANA 2023',
-      });
+      const res = await requestAiMeetingMinutes(
+        {
+          mode: 'enrich',
+          rawTranscript: rawTranscriptText,
+          segments,
+          existingMinutes: minutesMarkdown,
+          supplementalNotes,
+          projectName: activeTargetProject?.name || targetProjectCode,
+          targetRelease: activeTargetProject?.target_sap_release || 'SAP S/4HANA 2023',
+        },
+        { signal: controller.signal }
+      );
+      if (controller.signal.aborted) return;
+      const nextSuggestions = res.aiSuggestions?.length ? res.aiSuggestions : aiSuggestions;
       setMinutesMarkdown(res.minutesMarkdown);
+      setAiSuggestions(nextSuggestions);
       if (res.title) setMeetingTitle(res.title);
       setSelectedModule(res.detectedModule);
       setSupplementalNotes('');
       setAiFeedbackMsg(
-        t('Supplemental notes merged into meeting minutes.', '추가 보완 내용이 회의록에 병합되었습니다.')
+        res.source === 'ai'
+          ? t('Supplemental notes merged into meeting minutes.', '추가 보완 내용이 기존 회의록 양식에 맞춰 병합되었습니다.')
+          : formatFallbackMessage(
+              res.fallbackReason,
+              '추가 보완 내용이 기존 회의록 양식에 맞춰 병합되었습니다.',
+              'Supplemental notes merged into meeting minutes.'
+            )
       );
       persistProgress({
         title: res.title || meetingTitle,
         minutes_markdown: res.minutesMarkdown,
+        ai_suggestions: nextSuggestions,
         supplemental_notes: '',
         suggested_module: res.detectedModule,
         status: 'minutes_ready',
       });
     } catch (err: any) {
+      if (isAuthorizedFetchAbortError(err)) return;
       setErrorMsg(
         err?.message || t('Failed to apply supplemental notes.', '보완 내용 반영 중 오류가 발생했습니다.')
       );
     } finally {
-      setIsProcessingAi(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setIsProcessingAi(false);
+      }
     }
   };
 
@@ -571,13 +698,20 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
 
     setGate(null);
     setErrorMsg(null);
+    setAiFeedbackMsg(null);
     setIsProcessingAi(true);
+    const controller = startNewAiAbortController();
     try {
-      const res = await requestAiSampleRecommendation({
-        minutesMarkdown: combinedMinutes,
-        projectName: activeTargetProject?.name || targetProjectCode,
-        existingProgramIds,
-      });
+      const res = await requestAiSampleRecommendation(
+        {
+          minutesMarkdown: combinedMinutes,
+          projectName: activeTargetProject?.name || targetProjectCode,
+          existingProgramIds,
+          preferredModule: selectedModule,
+        },
+        { signal: controller.signal }
+      );
+      if (controller.signal.aborted) return;
       const std = getProjectAbapStandards(targetProjectCode);
       const compliant = suggestCompliantIdsForProject(
         res.suggestedProgramId,
@@ -588,6 +722,7 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setMinutesMarkdown(combinedMinutes);
       if (supplementalNotes.trim()) setSupplementalNotes('');
       setRecommendation(res);
+      setDetectedTables(res.detectedTables || []);
       setSelectedSampleType(res.recommendedSampleType);
       setSelectedModule(res.suggestedModule);
       setProgramId(compliant.program_id);
@@ -595,10 +730,16 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
       setProgramTitle(res.suggestedTitle);
       setStep(3);
       setAiFeedbackMsg(
-        t(
-          `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}) and suggested IDs.`,
-          `COMM 샘플 유형 ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId})과(와) 권장 ID를 도출했습니다.`
-        )
+        res.source === 'ai'
+          ? t(
+              `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}) and suggested IDs.`,
+              `COMM 샘플 유형 ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId})과(와) 권장 ID를 도출했습니다.`
+            )
+          : formatFallbackMessage(
+              res.fallbackReason,
+              `COMM 샘플 유형 ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId})과(와) 권장 ID를 도출했습니다.`,
+              `Recommended COMM sample type ${res.recommendedSampleType} (${SAMPLE_TYPE_META[res.recommendedSampleType].sampleId}) and suggested IDs.`
+            )
       );
       persistProgress({
         minutes_markdown: combinedMinutes,
@@ -612,11 +753,15 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
         status: 'recommended',
       });
     } catch (err: any) {
+      if (isAuthorizedFetchAbortError(err)) return;
       setErrorMsg(
         err?.message || t('Failed to recommend sample type.', '샘플 유형 추천 중 오류가 발생했습니다.')
       );
     } finally {
-      setIsProcessingAi(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setIsProcessingAi(false);
+      }
     }
   };
 
@@ -646,23 +791,37 @@ export const MeetingSpecWizardModal: React.FC<MeetingSpecWizardModalProps> = ({
 
     setGate(null);
     setErrorMsg(null);
+    setAiFeedbackMsg(null);
     setIsProcessingAi(true);
+    const controller = startNewAiAbortController();
     try {
+      const tablesHint =
+        detectedTables.length > 0
+          ? detectedTables.join(', ')
+          : (recommendation?.detectedTables || []).join(', ');
       const promptPayload = `[Project]: ${activeTargetProject?.name || targetProjectCode}
+[SAP Module]: ${selectedModule}
 [Program Title]: ${programTitle}
 [Selected COMM Sample Type]: ${selectedSampleType} (${SAMPLE_TYPE_META[selectedSampleType].sampleId} - ${SAMPLE_TYPE_META[selectedSampleType].title})
+${tablesHint ? `[Detected SAP Standard Tables]: ${tablesHint}` : ''}
+${recommendation?.requirementPrompt ? `\n[Synthesized Requirement & Standard Table Plan]\n${recommendation.requirementPrompt}` : ''}
+${selectedSampleType === '02' ? '\n[Master-Detail 2-Grid Design Requirement]: 상단 Header Grid(field_catalog)와 하단 Item/Detail Grid(item_grid.field_catalog, item_grid.foreign_key, item_grid.mock_rows)를 SAP 표준 테이블(DDIC ref_table/ref_field) 기준으로 각각 충분히 설계하세요.' : ''}
 
 [Confirmed Design Minutes]
 ${minutesMarkdown}`;
 
-      const draft = await requestAiFullSpecDraft({
-        requirementPrompt: promptPayload,
-        module: selectedModule,
-        sampleType: selectedSampleType,
-        targetSapRelease: activeTargetProject?.target_sap_release || 'SAP S/4HANA 2023',
-        programId: cleanPid,
-        tcode: tcode.trim().toUpperCase() || `Z${selectedModule}010`,
-      });
+      const draft = await requestAiFullSpecDraft(
+        {
+          requirementPrompt: promptPayload,
+          module: selectedModule,
+          sampleType: selectedSampleType,
+          targetSapRelease: activeTargetProject?.target_sap_release || 'SAP S/4HANA 2023',
+          programId: cleanPid,
+          tcode: tcode.trim().toUpperCase() || `Z${selectedModule}010`,
+        },
+        { signal: controller.signal }
+      );
+      if (controller.signal.aborted) return;
 
       const baseSpec = cloneAndApplyCommonSampleSpine({
         generatedSpec: draft.spec,
@@ -684,13 +843,20 @@ ${minutesMarkdown}`;
       };
 
       setGeneratedSpec(finalSpec);
-      setDetectedTables(draft.detectedTables);
+      setDetectedTables(draft.detectedTables?.length ? draft.detectedTables : detectedTables);
+      setSelectedFlowNodeId(finalSpec.data_flow?.active_node_id || 'A');
       setStep(4);
       setAiFeedbackMsg(
-        t(
-          `Cloned COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' structure into '${finalSpec.program_id}'.`,
-          `COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' 구조를 복제하여 '${finalSpec.program_id}' 사양서를 생성했습니다.`
-        )
+        draft.source === 'ai'
+          ? t(
+              `Cloned COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' structure into '${finalSpec.program_id}'.`,
+              `COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' 구조를 복제하여 '${finalSpec.program_id}' 사양서를 생성했습니다.`
+            )
+          : formatFallbackMessage(
+              draft.fallbackReason,
+              `COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' 구조를 복제하여 '${finalSpec.program_id}' 사양서 초안을 생성했습니다.`,
+              `Cloned COMM '${SAMPLE_TYPE_META[selectedSampleType].sampleId}' structure into '${finalSpec.program_id}'.`
+            )
       );
       persistProgress({
         recommended_sample_type: selectedSampleType,
@@ -700,11 +866,15 @@ ${minutesMarkdown}`;
         suggested_title: finalSpec.title,
       });
     } catch (err: any) {
+      if (isAuthorizedFetchAbortError(err)) return;
       setErrorMsg(
         err?.message || t('Failed to build specification.', '프로그램 사양서 생성 중 오류가 발생했습니다.')
       );
     } finally {
-      setIsProcessingAi(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setIsProcessingAi(false);
+      }
     }
   };
 
@@ -1126,7 +1296,7 @@ ${minutesMarkdown}`;
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       {t('Meeting Title', '회의록 제목')}
@@ -1137,6 +1307,22 @@ ${minutesMarkdown}`;
                       onChange={(e) => setMeetingTitle(e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:border-blue-500"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      {t('SAP Module', 'SAP 모듈')}
+                    </label>
+                    <select
+                      value={selectedModule}
+                      onChange={(e) => setSelectedModule(e.target.value as SapModule)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-semibold text-slate-800 cursor-pointer"
+                    >
+                      {SAP_MODULES.map((m) => (
+                        <option key={m} value={m}>
+                          {m === 'CM' ? t('CM (Common)', 'CM (공통)') : m}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -1173,6 +1359,111 @@ ${minutesMarkdown}`;
                 </div>
               </div>
 
+              {/* AI Review Comments & Interactive Enrichment Suggestions */}
+              {aiSuggestions.length > 0 && (
+                <div className="bg-white border border-blue-200 rounded-xl p-5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                        <span>
+                          {t(
+                            'AI Review Comments & Follow-up Prompts',
+                            'AI 리뷰 코멘트 및 추가 도출 제안 (질의·응답 살 붙이기)'
+                          )}
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {t(
+                          'Adopt a suggestion directly or draft a confirmation answer into supplemental notes, then click Merge into Minutes.',
+                          '아래 제안을 바로 채택하거나 확인 답변을 작성한 뒤 [회의록에 병합]을 누르면 표준 회의록 양식에 근거와 함께 반영됩니다.'
+                        )}
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-mono font-semibold text-blue-700 shrink-0">
+                      {aiSuggestions.filter((s) => !s.resolved).length} {t('open', '건 검토')}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {aiSuggestions.map((item) => {
+                      const catLabel =
+                        item.category === 'missing_fact'
+                          ? t('Missing Check', '누락 확인')
+                          : item.category === 'question'
+                          ? t('Business Question', '현업 질문')
+                          : t('Enhancement', '보완 제안');
+                      const borderAccent =
+                        item.resolved
+                          ? 'border-l-4 border-l-emerald-500 border-slate-200 bg-emerald-50/30'
+                          : item.category === 'missing_fact'
+                          ? 'border-l-4 border-l-amber-500 border-slate-200 bg-white'
+                          : item.category === 'question'
+                          ? 'border-l-4 border-l-indigo-500 border-slate-200 bg-white'
+                          : 'border-l-4 border-l-blue-500 border-slate-200 bg-white';
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`border rounded-lg p-3.5 space-y-2 flex flex-col justify-between ${borderAccent}`}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-bold text-slate-600">
+                                [{catLabel}]
+                              </span>
+                              {item.resolved && (
+                                <span className="text-[11px] font-semibold text-emerald-700">
+                                  {t('Added to Notes', '보완 입력됨')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs font-bold text-slate-900">{item.title}</div>
+                            <p className="text-[11px] text-slate-600 leading-relaxed">
+                              {item.detail}
+                            </p>
+                            <div className="text-[11px] text-blue-800 bg-blue-50/70 border border-blue-100 rounded px-2.5 py-1.5">
+                              <span className="font-semibold">{t('Proposal:', '권장안:')}</span>{' '}
+                              {item.suggestedAction}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const template = `[AI 확인 - ${item.title}]\n- 권장안: ${item.suggestedAction}\n- 현업 확정 답변: `;
+                                setSupplementalNotes((prev) =>
+                                  prev.trim() ? `${prev.trim()}\n${template}` : template
+                                );
+                              }}
+                              className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded text-[11px] font-semibold cursor-pointer"
+                            >
+                              {t('Write Reply', '답변/확인 작성')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const adoptedLine = `[제안 채택 - ${item.title}]: ${item.suggestedAction}`;
+                                setSupplementalNotes((prev) =>
+                                  prev.trim() ? `${prev.trim()}\n${adoptedLine}` : adoptedLine
+                                );
+                                setAiSuggestions((prev) =>
+                                  prev.map((s) => (s.id === item.id ? { ...s, resolved: true } : s))
+                                );
+                              }}
+                              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-semibold cursor-pointer"
+                            >
+                              {t('Adopt Proposal', '제안 채택 추가')}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Enrichment / Supplemental Voice & Notes Panel */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1183,7 +1474,7 @@ ${minutesMarkdown}`;
                     <p className="text-[11px] text-slate-500">
                       {t(
                         'Record or type missing business rules or criteria and merge them into the minutes.',
-                        '빠진 업무 규칙이나 조회 조건을 녹음·입력하여 기존 회의록에 병합합니다.'
+                        '빠진 업무 규칙이나 조회 조건을 녹음·입력하여 기존 회의록(육하원칙·근거 로그)에 병합합니다.'
                       )}
                     </p>
                   </div>
@@ -1235,7 +1526,7 @@ ${minutesMarkdown}`;
                   onChange={(e) => setSupplementalNotes(e.target.value)}
                   placeholder={t(
                     'e.g. Also show open AR balance per customer and add an authority check before Excel export...',
-                    '예: 고객별 미결 채권 잔액 컬럼을 추가하고 엑셀 다운로드 전 권한 점검을 넣어주세요...'
+                    '예: 역분개 전표(STBLG)는 기본 제외하고 미결 항목만 황색 신호등으로 표시해 주세요...'
                   )}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:bg-white focus:border-blue-500"
                 />
@@ -1282,6 +1573,14 @@ ${minutesMarkdown}`;
                       '회의록 요구사항을 분석하여 가장 적합한 COMM 표준 ALV 패턴을 추천했습니다.'
                     )}
                 </p>
+                {(detectedTables.length > 0 || (recommendation?.detectedTables?.length ?? 0) > 0) && (
+                  <div className="text-[11px] font-mono text-slate-700 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                    <span className="font-bold text-slate-800">
+                      {t('Detected SAP Standard Tables:', '식별 SAP 표준 테이블:')}
+                    </span>{' '}
+                    {(detectedTables.length > 0 ? detectedTables : recommendation?.detectedTables || []).join(', ')}
+                  </div>
+                )}
 
                 {/* 4 Selectable COMM Sample Type Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
@@ -1594,7 +1893,9 @@ ${minutesMarkdown}`;
 
                       <div>
                         <h4 className="text-xs font-bold text-slate-800 mb-2">
-                          {t('ALV Field Catalog', 'ALV 필드 카탈로그')} ({generatedSpec.field_catalog.length})
+                          {generatedSpec.item_grid
+                            ? `${t('Header ALV Field Catalog', '상단 ALV 필드 카탈로그 (Header Grid)')} (${generatedSpec.field_catalog.length})`
+                            : `${t('ALV Field Catalog', 'ALV 필드 카탈로그')} (${generatedSpec.field_catalog.length})`}
                         </h4>
                         <div className="overflow-x-auto border border-slate-200 rounded-lg">
                           <table className="w-full text-left text-xs">
@@ -1604,6 +1905,7 @@ ${minutesMarkdown}`;
                                 <th className="px-3 py-2">{t('Fieldname', '필드명')}</th>
                                 <th className="px-3 py-2">{t('Header Text', '컬럼 헤더')}</th>
                                 <th className="px-3 py-2">{t('Type', '타입')}</th>
+                                <th className="px-3 py-2">{t('Ref Field', '참조 필드')}</th>
                                 <th className="px-3 py-2">{t('Key', '키')}</th>
                                 <th className="px-3 py-2">Hotspot / T-Code</th>
                                 <th className="px-3 py-2">{t('Sum', '합계')}</th>
@@ -1616,6 +1918,9 @@ ${minutesMarkdown}`;
                                   <td className="px-3 py-2 font-mono font-bold text-slate-900">{f.fieldname}</td>
                                   <td className="px-3 py-2 text-slate-800">{f.coltext}</td>
                                   <td className="px-3 py-2 font-mono text-slate-600">{f.datatype}</td>
+                                  <td className="px-3 py-2 font-mono text-slate-600">
+                                    {f.ref_table ? `${f.ref_table}-${f.ref_field || ''}` : '-'}
+                                  </td>
                                   <td className="px-3 py-2 font-mono">{f.key ? 'X' : '-'}</td>
                                   <td className="px-3 py-2 font-mono text-blue-700">
                                     {f.hotspot ? f.drilldown_tcode || 'YES' : '-'}
@@ -1627,11 +1932,119 @@ ${minutesMarkdown}`;
                           </table>
                         </div>
                       </div>
+
+                      {generatedSpec.item_grid && generatedSpec.item_grid.field_catalog?.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 mb-2">
+                            {t(
+                              `Item ALV Field Catalog (Detail Grid · Foreign Key: ${generatedSpec.item_grid.foreign_key || '-'})`,
+                              `하단 상세 ALV 필드 카탈로그 (Item Grid · 연결 키: ${generatedSpec.item_grid.foreign_key || '-'})`
+                            )}{' '}
+                            ({generatedSpec.item_grid.field_catalog.length})
+                          </h4>
+                          <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-slate-100 text-slate-700 font-bold">
+                                <tr>
+                                  <th className="px-3 py-2">{t('Pos', '순번')}</th>
+                                  <th className="px-3 py-2">{t('Fieldname', '필드명')}</th>
+                                  <th className="px-3 py-2">{t('Header Text', '컬럼 헤더')}</th>
+                                  <th className="px-3 py-2">{t('Type', '타입')}</th>
+                                  <th className="px-3 py-2">{t('Ref Field', '참조 필드')}</th>
+                                  <th className="px-3 py-2">{t('Key', '키')}</th>
+                                  <th className="px-3 py-2">Hotspot / T-Code</th>
+                                  <th className="px-3 py-2">{t('Sum', '합계')}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200">
+                                {generatedSpec.item_grid.field_catalog.map((f) => (
+                                  <tr key={f.id}>
+                                    <td className="px-3 py-2 font-mono tabular-nums">{f.col_pos}</td>
+                                    <td className="px-3 py-2 font-mono font-bold text-slate-900">{f.fieldname}</td>
+                                    <td className="px-3 py-2 text-slate-800">{f.coltext}</td>
+                                    <td className="px-3 py-2 font-mono text-slate-600">{f.datatype}</td>
+                                    <td className="px-3 py-2 font-mono text-slate-600">
+                                      {f.ref_table ? `${f.ref_table}-${f.ref_field || ''}` : '-'}
+                                    </td>
+                                    <td className="px-3 py-2 font-mono">{f.key ? 'X' : '-'}</td>
+                                    <td className="px-3 py-2 font-mono text-blue-700">
+                                      {f.hotspot ? f.drilldown_tcode || 'YES' : '-'}
+                                    </td>
+                                    <td className="px-3 py-2 font-mono">{f.do_sum ? 'Σ' : '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {previewTab === 'flow' && (
                     <div className="space-y-4">
+                      {generatedSpec.authority_checks && generatedSpec.authority_checks.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 mb-2">
+                            {t('Authority Checks (AUTHORITY-CHECK)', '권한 점검 오브젝트 (AUTHORITY-CHECK)')} ({generatedSpec.authority_checks.length})
+                          </h4>
+                          <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-slate-100 text-slate-700 font-bold">
+                                <tr>
+                                  <th className="px-3 py-2">{t('Object', '권한 오브젝트')}</th>
+                                  <th className="px-3 py-2">{t('Fields', '점검 필드')}</th>
+                                  <th className="px-3 py-2">{t('Trigger', '점검 시점')}</th>
+                                  <th className="px-3 py-2">{t('Description', '설명')}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200">
+                                {generatedSpec.authority_checks.map((a) => (
+                                  <tr key={a.id}>
+                                    <td className="px-3 py-2 font-mono font-bold text-slate-900">{a.object}</td>
+                                    <td className="px-3 py-2 font-mono text-slate-700">{a.fields}</td>
+                                    <td className="px-3 py-2 font-mono text-slate-600">{a.trigger_point}</td>
+                                    <td className="px-3 py-2 text-slate-700">{a.description}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {generatedSpec.sap_messages && generatedSpec.sap_messages.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 mb-2">
+                            {t('SE91 Message Definitions', '메시지 정의 (SE91)')} ({generatedSpec.sap_messages.length})
+                          </h4>
+                          <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-slate-100 text-slate-700 font-bold">
+                                <tr>
+                                  <th className="px-3 py-2">{t('ID', '번호')}</th>
+                                  <th className="px-3 py-2">{t('Type', '유형')}</th>
+                                  <th className="px-3 py-2">{t('Message Text', '메시지 문구')}</th>
+                                  <th className="px-3 py-2">{t('Condition', '발생 조건')}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200">
+                                {generatedSpec.sap_messages.map((m) => (
+                                  <tr key={m.id}>
+                                    <td className="px-3 py-2 font-mono font-bold text-slate-900">
+                                      {m.msg_class}-{m.msg_no}
+                                    </td>
+                                    <td className="px-3 py-2 font-mono">{m.msg_type}</td>
+                                    <td className="px-3 py-2 text-slate-800">{m.text}</td>
+                                    <td className="px-3 py-2 text-slate-600">{m.trigger_condition}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
                       <div>
                         <h4 className="text-xs font-bold text-slate-800 mb-2">
                           {t('QA Test Scenarios', 'QA 테스트 시나리오')} ({generatedSpec.test_cases.length})
@@ -1647,16 +2060,115 @@ ${minutesMarkdown}`;
                         </div>
                       </div>
 
-                      {generatedSpec.data_flow?.mermaid_code && (
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-800 mb-1.5">
-                            {t('Data Flow Diagram', '데이터 흐름도')}
-                          </h4>
-                          <pre className="p-3 bg-slate-900 text-slate-200 rounded-lg text-[11px] font-mono overflow-x-auto">
-                            {generatedSpec.data_flow.mermaid_code}
-                          </pre>
-                        </div>
-                      )}
+                      {(() => {
+                        const effectiveFlow = getEffectiveDataFlow(generatedSpec);
+                        const parsedFlow = parseMermaidCode(effectiveFlow.mermaidCode);
+                        const activeNode =
+                          parsedFlow.nodes.find((n) => n.id === selectedFlowNodeId) ||
+                          parsedFlow.nodes[0];
+                        const activeDetailMarkdown = activeNode
+                          ? effectiveFlow.nodeDetails[activeNode.id]?.markdown || ''
+                          : '';
+
+                        return (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <h4 className="text-xs font-bold text-slate-800">
+                                  {t(
+                                    'Data Flow Diagram & Step-by-Step Developer Guide',
+                                    '데이터 흐름도 및 단계별 상세 사양 (1번 ~ N번 노드)'
+                                  )}
+                                </h4>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  {t(
+                                    'Click any node in the diagram or step button below to inspect its 5-part developer specification.',
+                                    '흐름도 노드나 아래 단계 번호(1번~N번)를 클릭하면 개발자가 바로 이해하고 구현할 수 있는 단계별 상세 설명을 확인할 수 있습니다.'
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                              <div className="lg:col-span-6 p-3 bg-[#fdfdfd] border border-slate-200 rounded-lg overflow-auto max-h-[460px]">
+                                <MermaidFlowChartSvg
+                                  mermaidCode={effectiveFlow.mermaidCode}
+                                  nodeDetails={effectiveFlow.nodeDetails}
+                                  selectedNodeId={activeNode?.id || 'A'}
+                                  onSelectNode={(nodeId) => setSelectedFlowNodeId(nodeId)}
+                                  fitToWidth
+                                />
+                              </div>
+
+                              <div className="lg:col-span-6 space-y-2.5">
+                                {parsedFlow.nodes.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                                    {parsedFlow.nodes.map((node, idx) => {
+                                      const isSelected = activeNode?.id === node.id;
+                                      return (
+                                        <button
+                                          key={node.id}
+                                          type="button"
+                                          onClick={() => setSelectedFlowNodeId(node.id)}
+                                          className={`px-2 py-1 rounded text-[11px] font-semibold border transition-colors cursor-pointer ${
+                                            isSelected
+                                              ? 'bg-blue-600 text-white border-blue-600'
+                                              : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400'
+                                          }`}
+                                          title={node.label}
+                                        >
+                                          <span className="font-mono">{node.id}</span> · {idx + 1}번
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {activeNode && (
+                                  <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+                                    <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+                                      <span className="text-xs font-bold text-slate-900">
+                                        [{activeNode.id}] {activeNode.label}
+                                      </span>
+                                      <span className="text-[11px] text-blue-700 font-semibold shrink-0">
+                                        {t('Editable 5-Part Spec', '개발자 상세 사양')}
+                                      </span>
+                                    </div>
+                                    <div className="p-3">
+                                      <MarkdownFieldEditor
+                                        key={`wiz-flow-${activeNode.id}`}
+                                        value={activeDetailMarkdown}
+                                        onChange={(updatedMd) => {
+                                          setGeneratedSpec((prev) => {
+                                            if (!prev) return prev;
+                                            return {
+                                              ...prev,
+                                              data_flow: {
+                                                ...(prev.data_flow || {}),
+                                                mermaid_code: effectiveFlow.mermaidCode,
+                                                active_node_id: activeNode.id,
+                                                node_details: {
+                                                  ...effectiveFlow.nodeDetails,
+                                                  [activeNode.id]: {
+                                                    label: activeNode.label,
+                                                    markdown: updatedMd,
+                                                  },
+                                                },
+                                              },
+                                            };
+                                          });
+                                        }}
+                                        rows={10}
+                                        minHeight="240px"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1766,9 +2278,18 @@ ${minutesMarkdown}`;
 
           <div className="flex items-center gap-2.5">
             {isProcessingAi && (
-              <div className="text-xs font-semibold text-blue-700 flex items-center gap-1.5 mr-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{t('Processing with AI...', 'AI 처리 중...')}</span>
+              <div className="flex items-center gap-2 mr-2">
+                <div className="text-xs font-semibold text-blue-700 flex items-center gap-1.5">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{t('Processing with AI...', 'AI 처리 중...')}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelAiProcessing}
+                  className="px-2.5 py-1 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-300 hover:border-rose-300 rounded-md text-[11px] font-semibold transition-colors cursor-pointer"
+                >
+                  {t('Cancel', '취소')}
+                </button>
               </div>
             )}
 

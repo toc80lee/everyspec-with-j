@@ -20,10 +20,15 @@ import {
   MERMAID_TEMPLATES,
   parseMermaidCode,
   layoutMermaidDiagram,
+  getEffectiveDataFlow,
   ParsedMermaidNode,
   ParsedMermaidEdge,
   LayoutedNode,
 } from './MermaidFlowChartSvg';
+import {
+  buildRichNodeDetailMarkdown,
+  generateRichDataFlowFromSpec,
+} from '../utils/dataFlowGenerator';
 
 export {
   MERMAID_TEMPLATES,
@@ -46,19 +51,15 @@ export const MermaidDataFlowEditor: React.FC<MermaidDataFlowEditorProps> = ({
   isReadOnly = false,
 }) => {
   const { t } = useLanguage();
+  const effectiveBaseFlow = useMemo(() => getEffectiveDataFlow(spec), [spec]);
+
   // Initial default Mermaid code
   const initialCode = useMemo(() => {
     if (config?.mermaid_code && config.mermaid_code.trim()) {
       return config.mermaid_code;
     }
-    if (spec.sample_type === '02') {
-      return MERMAID_TEMPLATES.sample_02_master_detail.code;
-    }
-    if (spec.sample_type === '04') {
-      return MERMAID_TEMPLATES.sample_04_cds_pivot.code;
-    }
-    return MERMAID_TEMPLATES.basic_condition.code;
-  }, [config?.mermaid_code, spec.sample_type]);
+    return effectiveBaseFlow.mermaidCode;
+  }, [config?.mermaid_code, effectiveBaseFlow.mermaidCode]);
 
   const [mermaidText, setMermaidText] = useState<string>(initialCode);
   const [selectedNodeId, setSelectedNodeId] = useState<string>(
@@ -72,10 +73,10 @@ export const MermaidDataFlowEditor: React.FC<MermaidDataFlowEditorProps> = ({
       : 'sample_01_standard'
   );
 
-  // Box Collapse/Expand states (RFQ v1.30: Editor collapsed, Flow Chart expanded, Detail Spec collapsed by default)
+  // Box Collapse/Expand states (Detail Spec expanded by default for immediate step inspection)
   const [isCodeCollapsed, setIsCodeCollapsed] = useState<boolean>(true);
   const [isFlowChartCollapsed, setIsFlowChartCollapsed] = useState<boolean>(false);
-  const [isDetailCollapsed, setIsDetailCollapsed] = useState<boolean>(true);
+  const [isDetailCollapsed, setIsDetailCollapsed] = useState<boolean>(false);
 
   // Full Screen Modal State (RFQ v1.23)
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -109,18 +110,17 @@ export const MermaidDataFlowEditor: React.FC<MermaidDataFlowEditorProps> = ({
     return layoutedNodes[0] || null;
   }, [layoutedNodes, selectedNodeId]);
 
-  // Node details map (ID -> { label, markdown })
+  // Node details map (ID -> { label, markdown }) enriched dynamically from ProgramSpec
   const nodeDetails: Record<string, { label?: string; markdown: string }> = useMemo(() => {
-    return (config?.node_details ||
-      (spec.sample_type === '02'
-        ? MERMAID_TEMPLATES.sample_02_master_detail.node_details
-        : spec.sample_type === '04'
-        ? MERMAID_TEMPLATES.sample_04_cds_pivot.node_details
-        : MERMAID_TEMPLATES.basic_condition.node_details)) as Record<
-      string,
-      { label?: string; markdown: string }
-    >;
-  }, [config?.node_details, spec.sample_type]);
+    return getEffectiveDataFlow({
+      ...spec,
+      data_flow: {
+        ...(config || {}),
+        mermaid_code: mermaidText,
+        node_details: config?.node_details,
+      },
+    }).nodeDetails;
+  }, [spec, config, mermaidText]);
 
   // Sync mermaidText and selectedNodeId when switching between specs
   useEffect(() => {
@@ -185,7 +185,53 @@ export const MermaidDataFlowEditor: React.FC<MermaidDataFlowEditorProps> = ({
   const currentNodeMarkdown =
     activeNode && nodeDetails[activeNode.id]?.markdown !== undefined
       ? nodeDetails[activeNode.id].markdown
-      : `### ${activeNode?.label || activeNode?.id || 'Step'} Detail Spec\n- **Purpose**: Describe business logic and processing scope for this step\n- **Inputs**: Selection parameters or upstream internal tables\n- **Outputs**: Downstream data or screen display updates`;
+      : activeNode
+      ? buildRichNodeDetailMarkdown(spec, {
+          id: activeNode.id,
+          label: activeNode.label,
+          shape: activeNode.shape,
+        })
+      : '';
+
+  const handleGenerateAllNodeDetails = () => {
+    if (isReadOnly) return;
+    const regeneratedFlow = generateRichDataFlowFromSpec(spec);
+    const updatedDetails: Record<string, { label?: string; markdown: string }> = {};
+    layoutedNodes.forEach((node) => {
+      const prevNodes = parsed.edges
+        .filter((e) => e.to === node.id)
+        .map((e) => {
+          const src = layoutedNodes.find((n) => n.id === e.from);
+          return `${e.from}: ${src?.label || e.from}${e.label ? ` (${e.label})` : ''}`;
+        });
+      const nextNodes = parsed.edges
+        .filter((e) => e.from === node.id)
+        .map((e) => {
+          const dst = layoutedNodes.find((n) => n.id === e.to);
+          return `${e.to}: ${dst?.label || e.to}${e.label ? ` (${e.label})` : ''}`;
+        });
+      updatedDetails[node.id] = {
+        label: node.label,
+        markdown: buildRichNodeDetailMarkdown(spec, {
+          id: node.id,
+          label: node.label,
+          shape: node.shape,
+          prevNodes,
+          nextNodes,
+        }),
+      };
+    });
+    const finalDetails =
+      Object.keys(updatedDetails).length > 0
+        ? updatedDetails
+        : regeneratedFlow.node_details || {};
+    onChange({
+      ...(config || {}),
+      mermaid_code: mermaidText,
+      node_details: finalDetails,
+      active_node_id: activeNode?.id || selectedNodeId || 'A',
+    });
+  };
 
   return (
     <div className="space-y-3">
@@ -416,20 +462,52 @@ export const MermaidDataFlowEditor: React.FC<MermaidDataFlowEditorProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Quick SAP Event Template button (Icon-only) */}
+            <button
+              type="button"
+              disabled={isReadOnly}
+              onClick={handleGenerateAllNodeDetails}
+              title={
+                isReadOnly
+                  ? t('Read-only mode', '읽기 전용 모드')
+                  : t('Generate 5-part Korean dev specs for all steps from current ProgramSpec', '현재 사양서 기준으로 전체 단계(1~N번) 개발자 상세 사양 일괄 생성')
+              }
+              className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 rounded flex items-center gap-1 shadow-2xs cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              <Sparkles className="w-3 h-3 text-blue-600" />
+              <span>{t('Generate All Steps', '전체 노드 상세 생성')}</span>
+            </button>
+            {/* Current Node 5-Part Template Regenerate button */}
             <button
               type="button"
               disabled={isReadOnly}
               onClick={() => {
                 if (!activeNode || isReadOnly) return;
-                const template = `### [${activeNode.id}] ${activeNode.label} Processing Spec\n\n#### 1. Event / Processing Purpose\n- Key trigger conditions and business logic for ${activeNode.label}\n\n#### 2. Database & Internal Tables\n- Source Tables: \`VBAK\`, \`VBAP\`\n- Target Internal Table: \`GT_DATA\`\n\n#### 3. Validation & Exception Handling\n- Trigger \`MESSAGE E001\` when mandatory criteria fail\n- Position cursor: \`SET CURSOR FIELD 'PA_BUKRS'\``;
-                handleNodeMarkdownChange(activeNode.id, template);
+                const prevNodes = parsed.edges
+                  .filter((e) => e.to === activeNode.id)
+                  .map((e) => {
+                    const src = layoutedNodes.find((n) => n.id === e.from);
+                    return `${e.from}: ${src?.label || e.from}${e.label ? ` (${e.label})` : ''}`;
+                  });
+                const nextNodes = parsed.edges
+                  .filter((e) => e.from === activeNode.id)
+                  .map((e) => {
+                    const dst = layoutedNodes.find((n) => n.id === e.to);
+                    return `${e.to}: ${dst?.label || e.to}${e.label ? ` (${e.label})` : ''}`;
+                  });
+                const richTemplate = buildRichNodeDetailMarkdown(spec, {
+                  id: activeNode.id,
+                  label: activeNode.label,
+                  shape: activeNode.shape,
+                  prevNodes,
+                  nextNodes,
+                });
+                handleNodeMarkdownChange(activeNode.id, richTemplate);
               }}
               className="p-1.5 text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded flex items-center justify-center shadow-2xs cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-              title={isReadOnly ? t('Insert Standard Template (Read-only)', '표준 템플릿 삽입 (읽기 전용)') : t('Insert Standard Template', '표준 템플릿 삽입')}
-              aria-label={t('Insert Standard Template', '표준 템플릿 삽입')}
+              title={isReadOnly ? t('Insert Spec Template (Read-only)', '현재 노드 상세 자동 채우기 (읽기 전용)') : t('Fill Current Step Spec from ProgramSpec', '현재 노드 상세 사양 자동 채우기')}
+              aria-label={t('Fill Current Step Spec', '현재 노드 상세 사양 자동 채우기')}
             >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />
             </button>
           </div>
         </div>
@@ -437,6 +515,32 @@ export const MermaidDataFlowEditor: React.FC<MermaidDataFlowEditorProps> = ({
         {/* Collapsible content */}
         {!isDetailCollapsed && (
           <>
+            {/* Quick Step Jump Bar (1번 ~ N번) */}
+            {layoutedNodes.length > 0 && (
+              <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-1.5 overflow-x-auto">
+                <span className="text-[11px] font-semibold text-slate-500 shrink-0 mr-1">
+                  {t('Steps:', '단계 선택:')}
+                </span>
+                {layoutedNodes.map((n, idx) => {
+                  const isActive = activeNode?.id === n.id;
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => setSelectedNodeId(n.id)}
+                      className={`px-2 py-1 rounded text-[11px] font-semibold whitespace-nowrap border transition-colors cursor-pointer shrink-0 ${
+                        isActive
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400'
+                      }`}
+                    >
+                      <span className="font-mono">{n.id}</span> · {idx + 1}번
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Description banner */}
             <div className="px-3 py-1.5 bg-blue-50/60 border-b border-blue-100 flex items-center gap-1.5 text-[11px] text-blue-900">
               <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
@@ -444,11 +548,11 @@ export const MermaidDataFlowEditor: React.FC<MermaidDataFlowEditorProps> = ({
                 {isReadOnly
                   ? t(
                       'Select a node above to inspect its step-level logic (read-only).',
-                      '상단 다이어그램에서 노드를 선택하면 단계별 로직을 확인할 수 있습니다 (읽기 전용).'
+                      '상단 다이어그램이나 단계 버튼을 선택하면 개발자용 상세 로직(5단 구조)을 확인할 수 있습니다 (읽기 전용).'
                     )
                   : t(
                       'Synced with the selected node in the diagram above to document step logic independently.',
-                      '상단 다이어그램의 선택된 노드와 연동되어 해당 단계의 로직 사양을 독립적으로 작성합니다.'
+                      '상단 다이어그램의 선택된 노드와 연동되어 해당 단계의 로직 사양을 개발자 관점으로 상세히 작성합니다.'
                     )}
               </span>
             </div>

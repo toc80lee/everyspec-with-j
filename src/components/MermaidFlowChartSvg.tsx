@@ -1,6 +1,10 @@
 import React, { useMemo } from 'react';
 import { ProgramSpec } from '../types/sap';
 import { useLanguage } from '../contexts/LanguageContext';
+import {
+  buildRichNodeDetailMarkdown,
+  generateRichDataFlowFromSpec,
+} from '../utils/dataFlowGenerator';
 
 export interface ParsedMermaidNode {
   id: string;
@@ -25,316 +29,482 @@ export interface LayoutedNode extends ParsedMermaidNode {
   layer: number;
 }
 
+const makeDevNodeSpec = (
+  id: string,
+  label: string,
+  purpose: string,
+  preCondition: string,
+  steps: string,
+  tables: string,
+  qa: string
+) => ({
+  label,
+  markdown: `### [${id}] ${label}
+
+#### 1. 이 단계는 무엇을 하나요? (쉬운 업무 설명)
+- ${purpose}
+
+#### 2. 입력 및 선행 조건 (Input & Pre-condition)
+- ${preCondition}
+
+#### 3. 상세 처리 로직 (Step-by-Step ABAP Logic)
+${steps}
+
+#### 4. 관련 SAP 테이블 · 필드 · T-Code
+- ${tables}
+
+#### 5. 예외 처리 및 QA 체크포인트
+- ${qa}`,
+});
+
 export const MERMAID_TEMPLATES = {
   basic_condition: {
     name: 'Basic Branching',
     code: `graph TD;
-  A[Start] --> B{Condition};
-  B -->|Yes| C[Process Task];
-  B -->|No| D[Alternative Task];
-  C --> E[End];
+  A[1. 시작 / INITIALIZATION] --> B{2. 입력 · 권한 검증};
+  B -->|정상| C[3. 데이터 추출 및 가공];
+  B -->|오류| D[3-1. 오류 메시지 반환];
+  C --> E[4. ALV 화면 출력 및 종료];
   D --> E;`,
     node_details: {
-      A: {
-        label: 'Start',
-        markdown: `### Start (Program Start)
-- Program entry point
-- Initialize parameters and system variables (\`SY-REPID\`, \`SY-UNAME\`)
-- Prepare screen titlebar and GUI status`,
-      },
-      B: {
-        label: 'Condition',
-        markdown: `### Condition (Input Check & Validation)
-- Validate Selection Screen parameters
-- Check mandatory inputs (Company Code, Document Date, etc.)
-- Raise error message (\`TYPE 'E'\`) and focus field on failure`,
-      },
-      C: {
-        label: 'Process Task',
-        markdown: `### Process Task (Main Processing)
-- Query source DB tables (\`VBAK\`, \`VBAP\`)
-- Build internal table (\`GT_DATA\`) and run business calculations
-- Compute traffic lights (\`LIGHTS\`) and currency totals`,
-      },
-      D: {
-        label: 'Alternative Task',
-        markdown: `### Alternative Task (Error Handling)
-- Handle fallback or exception cases
-- Log errors (\`GT_ERROR\`) and trigger warning messages`,
-      },
-      E: {
-        label: 'End',
-        markdown: `### End (Display & Screen End)
-- Instantiate ALV Grid on Screen \`0100 PBO\` and bind data
-- Handle user commands (\`PAI\`) and exit cleanly`,
-      },
+      A: makeDevNodeSpec(
+        'A',
+        '1. 시작 / INITIALIZATION',
+        '프로그램 진입 시 선택화면 기본값과 전역 내부 테이블을 초기화합니다.',
+        '사용자가 T-Code 또는 SE38로 프로그램 실행',
+        '1. 조회 기간(당월 1일~오늘) 및 기본 조직 코드 세팅\n2. 전역 인터널 테이블 및 컨테이너 참조 초기화',
+        '모듈별 기준 마스터 및 `SY-DATUM`, `SY-UNAME`',
+        '배치 모드(`SY-BATCH`) 실행 시에도 오류가 없는지 확인'
+      ),
+      B: makeDevNodeSpec(
+        'B',
+        '2. 입력 · 권한 검증',
+        'F8 실행 전 필수 파라미터 누락 여부와 사용자 실행 권한을 점검합니다.',
+        '선택화면(Selection Screen) 입력 완료 후 실행(F8)',
+        '1. 필수 파라미터 공백 및 기간 역전 검증\n2. `AUTHORITY-CHECK` 수행 (`SY-SUBRC <> 0` 시 중단)',
+        '모듈 표준 `AUTHORITY-CHECK` 오브젝트',
+        '권한 미보유/오류 입력 시 `MESSAGE TYPE E`와 함께 입력 필드로 커서 복귀'
+      ),
+      C: makeDevNodeSpec(
+        'C',
+        '3. 데이터 추출 및 가공',
+        'DB 원천 테이블에서 조건에 맞는 데이터를 읽어 가공·집계하고 신호등을 부여합니다.',
+        '입력값 및 권한 검증 통과',
+        '1. 원천 헤더/디테일 테이블 `SELECT` 및 `FOR ALL ENTRIES` 조회\n2. `LOOP AT GT_DATA`로 금액 합계 및 `ZICON` 신호등(1/2/3) 계산',
+        '각 모듈 표준 헤더/아이템 테이블 및 `GT_DATA`',
+        '`FOR ALL ENTRIES` 수행 전 대상 테이블 `IS NOT INITIAL` 필수 확인'
+      ),
+      D: makeDevNodeSpec(
+        'D',
+        '3-1. 오류 메시지 반환',
+        '예외·오류 발생 시 사용자에게 명확한 원인을 안내하고 불필요한 조회를 방지합니다.',
+        '유효성/권한 검증 실패 또는 조회 결과 0건',
+        '1. SE91 메시지 클래스 기준 안내/경고/오류 메시지 출력\n2. 선택화면 재입력 대기 또는 로그 적재',
+        'SE91 커스텀 메시지 (`Z01`)',
+        '0건 조회 시 빈 화면 덤프 대신 안내 문구가 정상 출력되는지 확인'
+      ),
+      E: makeDevNodeSpec(
+        'E',
+        '4. ALV 화면 출력 및 종료',
+        '가공된 데이터를 Screen 0100 ALV Grid에 출력하고 사용자 명령 및 종료를 처리합니다.',
+        '데이터 추출·가공 완료 후 `CALL SCREEN 0100`',
+        '1. `CL_GUI_ALV_GRID->SET_TABLE_FOR_FIRST_DISPLAY` 호출\n2. `USER_COMMAND`(핫스팟·툴바) 및 `LEAVE TO SCREEN 0` 처리',
+        '`CL_GUI_CUSTOM_CONTAINER`, `CL_GUI_ALV_GRID`',
+        'F3 종료 시 컨테이너 메모리 해제(`FREE`) 누락 여부 확인'
+      ),
     },
   },
 
   sample_01_standard: {
     name: 'Sample Type 01: SAP Standard 10-Step Flow',
     code: `graph TD;
-  A([1. Start / INITIALIZATION]) --> B[/2. Selection / SELECTION-SCREEN/];
-  B --> C{3. Input Validation};
-  C -->|Error| B;
-  C -->|Valid| D[4. START-OF-SELECTION];
-  D --> E[(5. Extract Data / SELECT)];
-  E --> F[6. Business Logic / CALCULATE];
-  F --> G[7. ALV Grid Output / 0100 PBO];
-  G --> H{8. User Command / PAI};
-  H -->|Double Click / Hotspot| I[9. Document Drilldown / VA03];
-  H -->|Excel / Print| J[9-1. Export Data];
-  H -->|Exit / F3| K([10. Exit / LEAVE TO SCREEN 0]);
+  A([1. 시작 / INITIALIZATION]) --> B[/2. 선택화면 / SELECTION-SCREEN/];
+  B --> C{3. 입력값 · 권한 검증};
+  C -->|오류| B;
+  C -->|정상| D[4. START-OF-SELECTION];
+  D --> E[(5. 원천 데이터 추출 / SELECT)];
+  E --> F[6. 비즈니스 계산 · 신호등];
+  F --> G[7. ALV 그리드 출력 / 0100 PBO];
+  G --> H{8. 사용자 명령 / PAI};
+  H -->|핫스팟 드릴다운| I[9. 표준 T-Code 상세 조회];
+  H -->|엑셀 · 툴바| J[9-1. 내보내기 · 후속 처리];
+  H -->|종료 F3| K([10. 종료 / LEAVE TO SCREEN 0]);
   I --> G;
   J --> G;`,
     node_details: {
-      A: {
-        label: '1. Start / INITIALIZATION',
-        markdown: `### 1. INITIALIZATION
-- Executed once on program launch
-- Set default Selection Screen date range (1st of month to today)
-- Prepare \`AUTHORITY-CHECK\` object checks`,
-      },
-      B: {
-        label: '2. Selection / SELECTION-SCREEN',
-        markdown: `### 2. AT SELECTION-SCREEN OUTPUT
-- Selection Screen PBO event
-- Dynamically toggle field attributes (\`SCREEN-ACTIVE\`, \`SCREEN-INPUT\`)
-- Control field enablement based on radio buttons and checkboxes`,
-      },
-      C: {
-        label: '3. Input Validation',
-        markdown: `### 3. AT SELECTION-SCREEN (PAI)
-- Validate mandatory input parameters
-- Verify master existence for document and company code (\`T001\`, \`VBAK\`)
-- Display \`MESSAGE E001\` and move cursor to invalid field`,
-      },
-      D: {
-        label: '4. START-OF-SELECTION',
-        markdown: `### 4. START-OF-SELECTION
-- Enter main data processing upon Execute (F8)
-- Display progress indicator (\`SAPGUI_PROGRESS_INDICATOR\`)`,
-      },
-      E: {
-        label: '5. Extract Data / SELECT',
-        markdown: `### 5. Data Extraction
-- Join \`VBAK\` (Sales Header) and \`VBAP\` (Sales Item)
-- Fetch customer name from \`KNA1\`
-- Load into \`INTO CORRESPONDING FIELDS OF TABLE gt_data\``,
-      },
-      F: {
-        label: '6. Business Logic / CALCULATE',
-        markdown: `### 6. Business Calculation
-- Convert currency amounts and compute subtotals
-- Derive status lights (\`LIGHTS\`: 1 Green, 2 Yellow, 3 Red)
-- Populate ALV style (\`LVC_T_STYL\`) and color (\`LVC_T_SCOL\`) tables`,
-      },
-      G: {
-        label: '7. ALV Grid Output / 0100 PBO',
-        markdown: `### 7. Display Main Screen (Screen 0100 PBO)
-- Create \`CL_GUI_CUSTOM_CONTAINER\` instance
-- Instantiate \`CL_GUI_ALV_GRID\` control
-- Bind Field Catalog (\`LVC_T_FCAT\`) and Layout (\`LVC_S_LAYO\`)
-- Call \`SET_TABLE_FOR_FIRST_DISPLAY\``,
-      },
-      H: {
-        label: '8. User Command / PAI',
-        markdown: `### 8. USER COMMAND Handling (Screen 0100 PAI)
-- Dispatch actions by OK code (\`GV_OK_CODE\`)
-- Handle toolbar buttons, double-click, and hotspot events`,
-      },
-      I: {
-        label: '9. Document Drilldown / VA03',
-        markdown: `### 9. Drilldown to Transaction
-- Store clicked \`VBELN\` in memory (\`SET PARAMETER ID 'AUN'\`)
-- Call \`CALL TRANSACTION 'VA03' AND SKIP FIRST SCREEN\`
-- Refresh ALV grid safely on return (\`REFRESH_TABLE_DISPLAY\`)`,
-      },
-      J: {
-        label: '9-1. Export Data',
-        markdown: `### 9-1. Excel / Print Export
-- Trigger standard ALV Excel export (\`&XXL\`)
-- Connect print form output`,
-      },
-      K: {
-        label: '10. Exit / LEAVE TO SCREEN 0',
-        markdown: `### 10. Program Exit
-- Release screen & container resources on F3 / Shift+F3 / F12
-- Exit screen (\`LEAVE TO SCREEN 0\`)`,
-      },
+      A: makeDevNodeSpec(
+        'A',
+        '1. 시작 / INITIALIZATION',
+        '선택화면 표시 전 기본 조회 조건(회사코드·조회기간)과 전역 변수를 초기화합니다.',
+        'T-Code 실행 직후 진입 (`INITIALIZATION` 이벤트)',
+        '1. 기본 조직코드 및 당월 1일~현재일 세팅\n2. 전역 테이블 `CLEAR` 및 ALV 변수 초기화',
+        '모듈 기준 조직 마스터 (`T001` 등)',
+        '월초/연초 날짜 경계에서도 기본 기간이 정상 세팅되는지 확인'
+      ),
+      B: makeDevNodeSpec(
+        'B',
+        '2. 선택화면 / SELECTION-SCREEN',
+        '조회 조건 입력 화면을 구성하고 라디오버튼 선택에 따라 입력창을 동적 제어합니다.',
+        '`INITIALIZATION` 완료 후 `AT SELECTION-SCREEN OUTPUT`',
+        '1. `BLOCK` 단위 조회 조건 배치\n2. `LOOP AT SCREEN`으로 조건별 `SCREEN-INPUT` / `SCREEN-ACTIVE` 전환',
+        'DDIC Search Help 및 `VALUE-REQUEST`',
+        '필수(`OBLIGATORY`) 표시와 라디오버튼 그룹 전환 동작 확인'
+      ),
+      C: makeDevNodeSpec(
+        'C',
+        '3. 입력값 · 권한 검증',
+        '실행(F8) 시 필수 조건과 `AUTHORITY-CHECK` 권한을 사전 점검합니다.',
+        '사용자가 실행(`F8`) 버튼 클릭',
+        '1. 필수 조건 공백 및 기간 역전 검증\n2. 모듈 표준 `AUTHORITY-CHECK` 실행',
+        '모듈 표준 권한 오브젝트 및 SE91 메시지',
+        '권한 미보유 계정에서 에러 메시지 출력 후 차단되는지 검증'
+      ),
+      D: makeDevNodeSpec(
+        'D',
+        '4. START-OF-SELECTION',
+        '입력 검증 통과 후 본격적인 데이터 추출 루틴을 시작하고 진행률을 안내합니다.',
+        '3번 입력·권한 검증 통과',
+        '1. 내부 테이블 초기화\n2. `SAPGUI_PROGRESS_INDICATOR` 호출 후 추출 루틴 실행',
+        '실행 진행 표시 함수 (`SAPGUI_PROGRESS_INDICATOR`)',
+        '반복 실행 시 이전 데이터 잔류 여부 확인'
+      ),
+      E: makeDevNodeSpec(
+        'E',
+        '5. 원천 데이터 추출 / SELECT',
+        '조회 조건으로 DB 원천 테이블과 마스터 텍스트 테이블을 추출합니다.',
+        '4번 `START-OF-SELECTION` 진입 완료',
+        '1. 주요 원천 테이블 조인 추출\n2. 마스터 텍스트는 `FOR ALL ENTRIES`(전 `IS NOT INITIAL` 체크) 후 `BINARY SEARCH` 매핑',
+        '모듈 표준 원천 테이블 및 마스터 텍스트 테이블',
+        '조회 0건 시 `MESSAGE S002` 안내 후 불필요한 후속 루프 스킵'
+      ),
+      F: makeDevNodeSpec(
+        'F',
+        '6. 비즈니스 계산 · 신호등',
+        '추출 데이터에서 금액/수량 차이를 계산하고 상태 신호등(`ZICON`: 1/2/3)을 판정합니다.',
+        '5번 원천 데이터 `GT_DATA` 적재 완료',
+        '1. `LOOP AT GT_DATA`로 차이 수량/금액 산출\n2. 정상(`1`), 주의(`2`), 오류/지연(`3`) 신호등 및 셀 강조 색상 설정',
+        '`GT_DATA` (`ZICON`, `LVC_T_SCOL`)',
+        '신호등 경계값 및 통화(`WAERS`) 소수점 환산 오차 점검'
+      ),
+      G: makeDevNodeSpec(
+        'G',
+        '7. ALV 그리드 출력 / 0100 PBO',
+        'Screen 0100 PBO에서 `CL_GUI_ALV_GRID`를 생성해 컬럼과 합계를 화면에 바인딩합니다.',
+        '6번 데이터 가공 완료 후 `CALL SCREEN 0100`',
+        '1. `CL_GUI_CUSTOM_CONTAINER` & `CL_GUI_ALV_GRID` 최초 1회 생성\n2. `LVC_T_FCAT`, `LVC_S_LAYO` 바인딩 및 `SET_TABLE_FOR_FIRST_DISPLAY` 호출',
+        '`CL_GUI_CUSTOM_CONTAINER`, `CL_GUI_ALV_GRID`',
+        '재조회 시 컨테이너 중복 생성(`CNTL_ERROR`) 방지 여부 확인'
+      ),
+      H: makeDevNodeSpec(
+        'H',
+        '8. 사용자 명령 / PAI',
+        '사용자의 핫스팟 클릭, 툴바 버튼 클릭, 뒤로가기(F3) 명령을 분기 처리합니다.',
+        'ALV 화면에서 사용자 인터랙션 발생 (`PAI`)',
+        '1. `GV_OK_CODE` 및 ALV 이벤트(`HOTSPOT_CLICK`, `USER_COMMAND`) 수신\n2. 드릴다운(9번), 툴바(9-1번), 종료(10번)으로 분기',
+        '`GV_OK_CODE`, `LCL_EVENT_RECEIVER`',
+        '소계/합계 행 클릭 시 덤프(`ITAB_LINE_NOT_FOUND`) 방지 확인'
+      ),
+      I: makeDevNodeSpec(
+        'I',
+        '9. 표준 T-Code 상세 조회',
+        '클릭한 전표/마스터 키로 SAP 표준 조회 트랜잭션을 즉시 실행합니다.',
+        '8번에서 핫스팟 또는 더블클릭 이벤트 발생',
+        '1. `SET PARAMETER ID`로 키 전달\n2. `CALL TRANSACTION ... AND SKIP FIRST SCREEN` 실행 후 복귀 시 화면 갱신',
+        '각 모듈 표준 조회 T-Code (`FB03`, `VA03`, `ME23N`, `KS03` 등)',
+        '표준 화면에서 F3 복귀 시 원래 선택 목록 유지 여부 확인'
+      ),
+      J: makeDevNodeSpec(
+        'J',
+        '9-1. 내보내기 · 후속 처리',
+        '선택 행에 대해 커스텀 툴바 액션이나 엑셀 다운로드를 실행합니다.',
+        '8번에서 툴바 또는 엑셀(`&XXL`) 명령 발생',
+        '1. `GET_SELECTED_ROWS`로 선택 행 추출\n2. 커스텀 기능 수행 후 `REFRESH_TABLE_DISPLAY` 호출',
+        'ALV 표준 `&XXL` 및 커스텀 `FCODE`',
+        '행을 선택하지 않고 일괄 처리 버튼 클릭 시 안내 메시지 출력 확인'
+      ),
+      K: makeDevNodeSpec(
+        'K',
+        '10. 종료 / LEAVE TO SCREEN 0',
+        '할당된 컨테이너와 그리드 객체를 정리하고 프로그램을 안전하게 종료합니다.',
+        '8번에서 F3 / BACK / EXIT 명령 입력',
+        '1. `GO_GRID->FREE( )`, `GO_CONTAINER->FREE( )` 호출\n2. `LEAVE TO SCREEN 0` 실행',
+        '메모리 및 GUI Control 리소스',
+        '반복 진입/종료 후 GUI 리소스 누수 여부 점검'
+      ),
     },
   },
 
   sample_02_master_detail: {
     name: 'Sample Type 02: Master-Detail 2-Grid Flow',
     code: `graph TD;
-  A([1. Start / INITIALIZATION]) --> B[/2. Input Filters / SELECTION-SCREEN/];
-  B --> C{3. Validate Inputs};
-  C -->|Error| B;
-  C -->|Valid| D[(4. Query Header / VBAK)];
-  D --> E[5. Bind Top Header ALV / 0100];
-  E --> F{6. Header Row Selection};
-  F -->|Row Click| G[(7. Query Items / VBAP)];
-  G --> H[8. Refresh Bottom Item ALV / 0110];
-  H --> I{9. User Command};
-  I -->|Save / Update| J[10. BAPI Document Update];
-  I -->|Exit| K([11. Exit Program]);
+  A([1. 시작 / INITIALIZATION]) --> B[/2. 선택화면 / SELECTION-SCREEN/];
+  B --> C{3. 입력값 · 권한 검증};
+  C -->|오류| B;
+  C -->|정상| D[(4. 상단 헤더 추출 / Header SELECT)];
+  D --> E[5. 상단 헤더 ALV 바인딩 / 0100];
+  E --> F{6. 상단 행 선택 / Row Click};
+  F -->|행 선택| G[(7. 하단 상세 추출 / Item SELECT)];
+  G --> H[8. 하단 상세 ALV 동기화 / REFRESH];
+  H --> I{9. 사용자 명령 / PAI};
+  I -->|드릴다운 · 저장| J[10. 상세 T-Code · 후속 처리];
+  I -->|종료 F3| K([11. 종료 / LEAVE TO SCREEN 0]);
   J --> E;`,
     node_details: {
-      A: {
-        label: '1. Start / INITIALIZATION',
-        markdown: `### Master-Detail Initialization
-- Initialize startup variables and \`CL_GUI_SPLITTER_CONTAINER\` layout`,
-      },
-      B: {
-        label: '2. Input Filters / SELECTION-SCREEN',
-        markdown: `### 2. Selection Screen
-- Enter header query criteria (Company Code, Sales Org, Date Range)`,
-      },
-      C: {
-        label: '3. Validate Inputs',
-        markdown: `### 3. Input Validation
-- Check mandatory fields and raise validation errors if missing`,
-      },
-      D: {
-        label: '4. Query Header / VBAK',
-        markdown: `### Header Data Extraction
-- Select matching records from \`VBAK\`
-- Store results in internal table \`GT_0100\``,
-      },
-      E: {
-        label: '5. Bind Top Header ALV / 0100',
-        markdown: `### Header ALV Binding
-- Bind Header ALV Grid to splitter container top pane (Row 1)`,
-      },
-      F: {
-        label: '6. Header Row Selection',
-        markdown: `### Row Selection Event
-- Capture \`HANDLE_DOUBLE_CLICK\` or \`HOTSPOT_CLICK\` on header row
-- Extract selected \`VBELN\``,
-      },
-      G: {
-        label: '7. Query Items / VBAP',
-        markdown: `### Item Data Extraction
-- Select line items from \`VBAP\` for the selected \`VBELN\`
-- Calculate item pricing, quantity, and net value into \`GT_0110\``,
-      },
-      H: {
-        label: '8. Refresh Bottom Item ALV / 0110',
-        markdown: `### Item ALV Refresh
-- Bind item rows to splitter container bottom pane (Row 2) and refresh`,
-      },
-      I: {
-        label: '9. User Command',
-        markdown: `### 9. User Command
-- Dispatch save, change, and print actions`,
-      },
-      J: {
-        label: '10. BAPI Document Update',
-        markdown: `### 10. BAPI Transaction
-- Post modified items via \`BAPI_SALESORDER_CHANGE\``,
-      },
-      K: {
-        label: '11. Exit Program',
-        markdown: `### 11. Exit
-- Free UI controls and memory before exit`,
-      },
+      A: makeDevNodeSpec(
+        'A',
+        '1. 시작 / INITIALIZATION',
+        '2단 Master-Detail 화면 구성 변수와 선택화면 기본 조회 조건을 초기화합니다.',
+        'T-Code 실행 직후 진입',
+        '1. 기본 조직/일자 조건 초기화\n2. 상단(`GT_HEADER`)·하단(`GT_ITEM`) 인터널 테이블 초기화',
+        '표준 기준 정보 및 2-Grid 제어 변수',
+        '초기 화면 진입 시 잔류 데이터 없음 확인'
+      ),
+      B: makeDevNodeSpec(
+        'B',
+        '2. 선택화면 / SELECTION-SCREEN',
+        '상단 헤더 목록을 필터링할 조직·기간·문서번호 조회 조건을 입력받습니다.',
+        '`INITIALIZATION` 완료 후 진입',
+        '1. 필수/선택 조회 조건 화면 배치\n2. F4 검색 도움말 및 동적 화면 제어',
+        '선택화면 파라미터 및 `SELECT-OPTIONS`',
+        '필수 입력 표시 및 조회 옵션 전환 점검'
+      ),
+      C: makeDevNodeSpec(
+        'C',
+        '3. 입력값 · 권한 검증',
+        '실행 전 입력값 정합성과 `AUTHORITY-CHECK` 권한을 검증합니다.',
+        'F8 실행 입력 시 호출',
+        '1. 필수 입력값 및 날짜 구간 검증\n2. 모듈 표준 권한 오브젝트 점검',
+        '모듈별 `AUTHORITY-CHECK` 오브젝트',
+        '검증 실패 시 오류 메시지(`TYPE E`) 및 입력창 복귀'
+      ),
+      D: makeDevNodeSpec(
+        'D',
+        '4. 상단 헤더 추출 / Header SELECT',
+        '조회 조건으로 상단 마스터/전표 헤더 데이터를 추출해 `GT_HEADER`에 적재합니다.',
+        '3번 입력·권한 검증 통과',
+        '1. 상단 원천 테이블 조회 및 마스터 명칭 조인\n2. 상단 상태 신호등(`ZICON`) 및 요약 금액 계산',
+        '상단 헤더 원천 테이블 (`BKPF`, `VBAK`, `EKKO` 등)',
+        '0건 조회 시 안내 메시지 출력 후 종료 방지'
+      ),
+      E: makeDevNodeSpec(
+        'E',
+        '5. 상단 헤더 ALV 바인딩 / 0100',
+        '스플리터 상단 영역(Container 1)에 헤더 목록을 바인딩하고 1행 기준으로 하단을 초기 연동합니다.',
+        '4번 `GT_HEADER` 추출 완료',
+        '1. `CL_GUI_SPLITTER_CONTAINER` 2행 1열 분할(45:55)\n2. 상단 `GO_GRID_HDR->SET_TABLE_FOR_FIRST_DISPLAY` 및 1행 자동 선택',
+        '`CL_GUI_SPLITTER_CONTAINER`, `CL_GUI_ALV_GRID`',
+        '초기 1행이 있을 때 하단 그리드가 비어 보이지 않도록 초기 연동 확인'
+      ),
+      F: makeDevNodeSpec(
+        'F',
+        '6. 상단 행 선택 / Row Click',
+        '사용자가 상단 그리드의 특정 행을 클릭/더블클릭하면 연결 키(Foreign Key)를 추출합니다.',
+        '사용자가 상단 ALV 행 선택 또는 더블클릭',
+        '1. `HANDLE_DOUBLE_CLICK` / `SELECTION_CHANGED` 이벤트 수신\n2. `READ TABLE GT_HEADER INDEX E_ROW-INDEX`로 연결 키 추출',
+        '상·하단 연결 키 (`BELNR`, `VBELN`, `EBELN` 등)',
+        '합계/소계 행 클릭 시(`ROWTYPE IS NOT INITIAL`) 무시 처리 확인'
+      ),
+      G: makeDevNodeSpec(
+        'G',
+        '7. 하단 상세 추출 / Item SELECT',
+        '선택된 상단 키에 해당하는 하단 품목/분개 상세 내역을 추출합니다.',
+        '6번에서 연결 키 추출 완료',
+        '1. 연결 키 조건으로 하단 원천 테이블 조회(또는 캐시 필터링)\n2. 상세 컬럼, 텍스트, 합계 금액 계산 후 `GT_ITEM` 적재',
+        '하단 상세 원천 테이블 (`BSEG`, `VBAP`, `EKPO` 등)',
+        '상단 행 전환 시 이전 하단 내역이 섞이지 않도록 `CLEAR GT_ITEM` 필수 확인'
+      ),
+      H: makeDevNodeSpec(
+        'H',
+        '8. 하단 상세 ALV 동기화 / REFRESH',
+        '스플리터 하단 영역(Container 2)의 그리드를 새로운 상세 데이터로 즉시 새로고침합니다.',
+        '7번 `GT_ITEM` 준비 완료',
+        '1. `GO_GRID_ITM->REFRESH_TABLE_DISPLAY( IS_STABLE = LS_STABLE )` 호출\n2. `CL_GUI_CFW=>FLUSH( )` 실행',
+        '하단 `CL_GUI_ALV_GRID` 인스턴스',
+        '상단 클릭 즉시 하단 제목/합계/행 건수가 동기화되는지 확인'
+      ),
+      I: makeDevNodeSpec(
+        'I',
+        '9. 사용자 명령 / PAI',
+        '상·하단 핫스팟 드릴다운, 커스텀 툴바 일괄 처리, 프로그램 종료 명령을 처리합니다.',
+        '화면 0100 `PAI` 이벤트 발생',
+        '1. `GV_OK_CODE` 및 ALV 이벤트 분기\n2. 후속 처리(10번) 또는 종료(11번) 이동',
+        '`GV_OK_CODE`, 커스텀 `FCODE`',
+        '툴바 실행 전 선택 행 유무 검증 확인'
+      ),
+      J: makeDevNodeSpec(
+        'J',
+        '10. 상세 T-Code · 후속 처리',
+        '표준 트랜잭션 드릴다운 또는 툴바 기반 상태 갱신/전표 처리를 수행합니다.',
+        '9번에서 드릴다운 또는 툴바 버튼 실행',
+        '1. `SET PARAMETER ID` & `CALL TRANSACTION` 또는 BAPI/기능 호출\n2. 처리 후 상·하단 데이터 재조회 및 화면 갱신',
+        '표준 T-Code 또는 BAPI/커스텀 처리 함수',
+        '처리 실패 시 `BAPI_TRANSACTION_ROLLBACK` 및 오류 메시지 출력 확인'
+      ),
+      K: makeDevNodeSpec(
+        'K',
+        '11. 종료 / LEAVE TO SCREEN 0',
+        '상·하단 그리드와 스플리터 컨테이너 리소스를 모두 해제하고 종료합니다.',
+        '9번에서 F3 / 종료 명령 입력',
+        '1. `GO_GRID_ITM->FREE( )`, `GO_GRID_HDR->FREE( )`, `GO_SPLITTER->FREE( )`\n2. `LEAVE TO SCREEN 0`',
+        'GUI Control 리소스 전체',
+        '반복 진입/종료 시 메모리 누수 없음 확인'
+      ),
     },
   },
 
   sample_04_cds_pivot: {
     name: 'Sample Type 04: CDS View / Pivot Flow',
     code: `graph TD;
-  A([1. Start / INITIALIZATION]) --> B[/2. Analysis Filters / SELECTION-SCREEN/];
-  B --> C[(3. Query CDS View / ACDOCA)];
-  C --> D[4. Pivot Aggregation & Subtotals];
-  D --> E[5. Display Pivot ALV / 0100];
-  E --> F{6. User Interaction};
-  F -->|Slice / Filter| D;
-  F -->|Export Excel| G[7. Generate Report File];
-  F -->|Exit| H([8. Exit]);`,
+  A([1. 시작 / INITIALIZATION]) --> B[/2. 분석 조건 입력 / SELECTION-SCREEN/];
+  B --> C[(3. CDS View · 원천 추출 / ACDOCA)];
+  C --> D[4. 다차원 피벗 · 소계 집계];
+  D --> E[5. 피벗 ALV 출력 / 0100 PBO];
+  E --> F{6. 동적 슬라이서 · 명령};
+  F -->|축 전환 · 필터| D;
+  F -->|엑셀 다운로드| G[7. 리포트 파일 생성];
+  F -->|종료 F3| H([8. 종료 / LEAVE TO SCREEN 0]);`,
     node_details: {
-      A: {
-        label: '1. Start / INITIALIZATION',
-        markdown: `### Pivot Initialization
-- Initialize default analysis period and dimension fields`,
-      },
-      B: {
-        label: '2. Analysis Filters / SELECTION-SCREEN',
-        markdown: `### Analysis Criteria Input
-- Enter Fiscal Year, Period, Company Code, and Cost Center range`,
-      },
-      C: {
-        label: '3. Query CDS View / ACDOCA',
-        markdown: `### CDS View / Table Query
-- High-speed in-memory query via \`ACDOCA\` or CDS View`,
-      },
-      D: {
-        label: '4. Pivot Aggregation & Subtotals',
-        markdown: `### Multi-Dimensional Aggregation
-- Aggregate measures by Period, G/L Account, and Cost Center`,
-      },
-      E: {
-        label: '5. Display Pivot ALV / 0100',
-        markdown: `### Pivot Grid Display
-- Render hierarchical subtotals and sorting in ALV Grid`,
-      },
-      F: {
-        label: '6. User Interaction',
-        markdown: `### Dynamic Slicer Update
-- Recompute subtotals on dimension or filter change`,
-      },
-      G: {
-        label: '7. Generate Report File',
-        markdown: `### Excel Report Download
-- Export pivot summary to Excel format`,
-      },
-      H: {
-        label: '8. Exit',
-        markdown: `### Exit
-- Release memory and exit program`,
-      },
+      A: makeDevNodeSpec(
+        'A',
+        '1. 시작 / INITIALIZATION',
+        '다차원 분석 기준 연도·기간 및 기본 피벗 레이아웃 변수를 초기화합니다.',
+        '프로그램 실행 직후 진입',
+        '1. 기본 회계연도 및 당월 기간 설정\n2. 피벗 집계 테이블 초기화',
+        '분석 기준 마스터 (`T001`, `FINSC_LEDGER`)',
+        '연도/기간 기본값 정상 세팅 확인'
+      ),
+      B: makeDevNodeSpec(
+        'B',
+        '2. 분석 조건 입력 / SELECTION-SCREEN',
+        '회사코드, 회계연도, 원장/계정/코스트센터 범위 등 다차원 분석 조건을 입력받습니다.',
+        '`INITIALIZATION` 완료 후 선택화면 출력',
+        '1. 필수 분석 조건 입력 및 기간 검증\n2. 집계 단위(월별/분기별/계정별) 옵션 제어',
+        '선택화면 파라미터 및 권한 검증',
+        '대용량 기간 조회 시 경고 또는 기간 제한 확인'
+      ),
+      C: makeDevNodeSpec(
+        'C',
+        '3. CDS View · 원천 추출 / ACDOCA',
+        'SAP HANA Code-Pushdown 기반 CDS View 또는 `ACDOCA`에서 집계 원천 데이터를 조회합니다.',
+        '분석 조건 검증 통과 후 실행',
+        '1. `SELECT` 시 DB 레이어에서 `SUM` / `GROUP BY` 1차 집계 수행\n2. 필요한 마스터 텍스트 매핑',
+        '`ACDOCA`, CDS View (`I_JOURNALENTRYITEM` 등)',
+        'DB 레벨 집계로 대량 데이터 메모리 초과 방지 확인'
+      ),
+      D: makeDevNodeSpec(
+        'D',
+        '4. 다차원 피벗 · 소계 집계',
+        '행/열 차원 축(기간, 계정, 조직)에 맞춰 크로스탭 매트릭스와 소계·증감률을 계산합니다.',
+        '3번 원천 데이터 추출 또는 6번 축 전환 요청',
+        '1. 기간/차원 축 기준 동적 컬럼 매핑\n2. 행 합계·열 합계 및 전월 대비 증감률 계산',
+        '동적 내부 테이블 (`CL_ABAP_STRUCTDESCR`)',
+        '동적 피벗 컬럼 생성 시 통화(`WAERS`) 참조 연결 확인'
+      ),
+      E: makeDevNodeSpec(
+        'E',
+        '5. 피벗 ALV 출력 / 0100 PBO',
+        '계산된 크로스탭 피벗 결과를 ALV 그리드에 출력하고 정렬·소계를 표시합니다.',
+        '4번 피벗 집계 완료',
+        '1. 동적 필드카탈로그(`DO_SUM = X`) 생성\n2. `SET_TABLE_FOR_FIRST_DISPLAY` 호출',
+        '`CL_GUI_ALV_GRID`, `LVC_T_FCAT`',
+        '가로 컬럼 수가 많아질 때 수평 스크롤 및 틀고정(`KEY = X`) 확인'
+      ),
+      F: makeDevNodeSpec(
+        'F',
+        '6. 동적 슬라이서 · 명령',
+        '사용자의 행/열 축 변경, 필터 재적용, 엑셀 다운로드, 종료 명령을 분기합니다.',
+        '피벗 화면에서 사용자 명령 발생',
+        '1. 축 전환 요청 시 4번 집계 루틴 재호출\n2. 다운로드(7번) 또는 종료(8번) 분기',
+        '`GV_OK_CODE`, 사용자 레이아웃 Variant',
+        '축 전환 후에도 선택 조건이 유지되는지 확인'
+      ),
+      G: makeDevNodeSpec(
+        'G',
+        '7. 리포트 파일 생성',
+        '현재 피벗 집계 표 그대로 엑셀(`.xlsx`) 파일로 내보냅니다.',
+        '6번에서 엑셀 다운로드 실행',
+        '1. `CL_SALV_EX_RESULT_DATA_TABLE` 또는 `&XXL` 실행\n2. 다운로드 경로 선택 및 완료 알림',
+        '표준 ALV Export / SAP GUI File Dialog',
+        '수치 금액과 천 단위 서식이 엑셀에서 숫자형으로 유지되는지 확인'
+      ),
+      H: makeDevNodeSpec(
+        'H',
+        '8. 종료 / LEAVE TO SCREEN 0',
+        '피벗 화면 리소스를 정리하고 종료합니다.',
+        '6번에서 F3 / 종료 입력',
+        '1. 컨테이너/그리드 `FREE( )`\n2. `LEAVE TO SCREEN 0`',
+        'GUI 리소스 해제',
+        '반복 실행 후 정상 복귀 확인'
+      ),
     },
   },
 };
 
 /**
- * Returns effective Mermaid Code and Node Details for any ProgramSpec
+ * Returns effective Mermaid Code and Node Details for any ProgramSpec.
+ * Automatically generates module-aware flowcharts when missing and backfills
+ * any node missing rich 5-part developer specs.
  */
 export function getEffectiveDataFlow(spec: ProgramSpec): {
   mermaidCode: string;
   nodeDetails: Record<string, { label?: string; markdown: string }>;
 } {
   const config = spec.data_flow;
-  let code = config?.mermaid_code?.trim();
-  let details = config?.node_details;
+  const generated = generateRichDataFlowFromSpec(spec);
+  const code = config?.mermaid_code?.trim() || generated.mermaid_code || MERMAID_TEMPLATES.sample_01_standard.code;
+  const existingDetails = (config?.node_details || {}) as Record<
+    string,
+    { label?: string; markdown: string }
+  >;
 
-  if (!code) {
-    if (spec.sample_type === '02') {
-      code = MERMAID_TEMPLATES.sample_02_master_detail.code;
-      if (!details) details = MERMAID_TEMPLATES.sample_02_master_detail.node_details;
-    } else if (spec.sample_type === '04') {
-      code = MERMAID_TEMPLATES.sample_04_cds_pivot.code;
-      if (!details) details = MERMAID_TEMPLATES.sample_04_cds_pivot.node_details;
-    } else {
-      code = MERMAID_TEMPLATES.sample_01_standard.code;
-      if (!details) details = MERMAID_TEMPLATES.sample_01_standard.node_details;
-    }
-  }
+  const parsed = parseMermaidCode(code);
+  const nodeDetails: Record<string, { label?: string; markdown: string }> = {
+    ...existingDetails,
+  };
 
-  if (!details) {
-    if (spec.sample_type === '02') {
-      details = MERMAID_TEMPLATES.sample_02_master_detail.node_details;
-    } else if (spec.sample_type === '04') {
-      details = MERMAID_TEMPLATES.sample_04_cds_pivot.node_details;
-    } else {
-      details = MERMAID_TEMPLATES.basic_condition.node_details;
+  parsed.nodes.forEach((n) => {
+    const existing = nodeDetails[n.id];
+    const generatedNode = generated.node_details?.[n.id];
+    const hasRichExisting = existing?.markdown && existing.markdown.trim().length >= 80;
+    if (hasRichExisting) {
+      nodeDetails[n.id] = {
+        label: existing.label || n.label,
+        markdown: existing.markdown,
+      };
+      return;
     }
-  }
+
+    const prevNodes = parsed.edges
+      .filter((e) => e.to === n.id)
+      .map((e) => {
+        const src = parsed.nodes.find((pn) => pn.id === e.from);
+        return `${e.from}: ${src?.label || e.from}${e.label ? ` (${e.label})` : ''}`;
+      });
+    const nextNodes = parsed.edges
+      .filter((e) => e.from === n.id)
+      .map((e) => {
+        const dst = parsed.nodes.find((pn) => pn.id === e.to);
+        return `${e.to}: ${dst?.label || e.to}${e.label ? ` (${e.label})` : ''}`;
+      });
+
+    nodeDetails[n.id] = {
+      label: existing?.label || n.label,
+      markdown:
+        generatedNode?.markdown && generatedNode.label === n.label
+          ? generatedNode.markdown
+          : buildRichNodeDetailMarkdown(spec, {
+              id: n.id,
+              label: n.label,
+              shape: n.shape,
+              prevNodes,
+              nextNodes,
+            }),
+    };
+  });
 
   return {
     mermaidCode: code,
-    nodeDetails: details as Record<string, { label?: string; markdown: string }>,
+    nodeDetails,
   };
 }
 

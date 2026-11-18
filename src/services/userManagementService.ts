@@ -12,7 +12,15 @@ import {
   writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import {
+  db,
+  handleFirestoreError,
+  handleFirestoreSnapshotError,
+  isFirestoreQuotaExceeded,
+  isFirestoreQuotaExceededError,
+  OperationType,
+  reportFirestoreQuotaExceeded,
+} from '../lib/firebase';
 import {
   SapProject,
   UserAccountRole,
@@ -108,7 +116,7 @@ export async function ensureUserProfileOnSignIn(
     department: isBootAdmin ? 'ERP Development Team' : 'SAP Project Team',
   };
 
-  if (!user.emailVerified) {
+  if (!user.emailVerified || isFirestoreQuotaExceeded()) {
     return profile;
   }
 
@@ -181,10 +189,14 @@ export async function ensureUserProfileOnSignIn(
       }
     }
   } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      reportFirestoreQuotaExceeded(err);
+      return profile;
+    }
     handleFirestoreError(err, OperationType.WRITE, publicPath);
   }
 
-  if (email) {
+  if (email && !isFirestoreQuotaExceeded()) {
     const privatePath = `users/${uid}/private/info`;
     const privateRef = doc(db, 'users', uid, 'private', 'info');
     try {
@@ -203,11 +215,15 @@ export async function ensureUserProfileOnSignIn(
         });
       }
     } catch (err) {
+      if (isFirestoreQuotaExceededError(err)) {
+        reportFirestoreQuotaExceeded(err);
+        return profile;
+      }
       handleFirestoreError(err, OperationType.WRITE, privatePath);
     }
   }
 
-  if (isBootAdmin && email) {
+  if (isBootAdmin && email && !isFirestoreQuotaExceeded()) {
     const adminPath = `admins/${uid}`;
     try {
       const adminRef = doc(db, 'admins', uid);
@@ -233,6 +249,9 @@ export function subscribeCurrentUserProfile(
   onProfile: (profile: UserProfileRecord | null) => void,
   onError?: (err: unknown) => void
 ): Unsubscribe {
+  if (isFirestoreQuotaExceeded()) {
+    return () => {};
+  }
   const cleanUid = sanitizeFirebaseId(uid);
   const path = `users/${cleanUid}`;
   const ref = doc(db, 'users', cleanUid);
@@ -247,10 +266,9 @@ export function subscribeCurrentUserProfile(
       onProfile(mapDocToUserProfile(cleanUid, snap.data() || {}, fallbackEmail));
     },
     (err) => {
+      handleFirestoreSnapshotError(err, OperationType.GET, path);
       if (onError) {
         onError(err);
-      } else {
-        handleFirestoreError(err, OperationType.GET, path);
       }
     }
   );
@@ -263,6 +281,9 @@ export function subscribeAllUsersForAdmin(
   onUsers: (users: UserProfileRecord[]) => void,
   onError?: (err: unknown) => void
 ): Unsubscribe {
+  if (isFirestoreQuotaExceeded()) {
+    return () => {};
+  }
   const colPath = 'users';
   const emailCache = new Map<string, string>();
 
@@ -274,7 +295,9 @@ export function subscribeAllUsersForAdmin(
       );
 
       // Enrich missing emails from PII-isolated /users/{uid}/private/info
-      const missingEmailProfiles = baseProfiles.filter((u) => !emailCache.has(u.uid));
+      const missingEmailProfiles = isFirestoreQuotaExceeded()
+        ? []
+        : baseProfiles.filter((u) => !emailCache.has(u.uid));
       if (missingEmailProfiles.length > 0) {
         await Promise.all(
           missingEmailProfiles.map(async (u) => {
@@ -286,7 +309,10 @@ export function subscribeAllUsersForAdmin(
                   emailCache.set(u.uid, emailVal);
                 }
               }
-            } catch {
+            } catch (privErr) {
+              if (isFirestoreQuotaExceededError(privErr)) {
+                reportFirestoreQuotaExceeded(privErr);
+              }
               // Ignore individual private doc misses gracefully
             }
           })
@@ -303,10 +329,9 @@ export function subscribeAllUsersForAdmin(
       onUsers(enriched);
     },
     (err) => {
+      handleFirestoreSnapshotError(err, OperationType.LIST, colPath);
       if (onError) {
         onError(err);
-      } else {
-        handleFirestoreError(err, OperationType.LIST, colPath);
       }
     }
   );

@@ -4,6 +4,9 @@ import { doc, getDoc } from 'firebase/firestore';
 import {
   auth,
   db,
+  isFirestoreQuotaExceeded,
+  isFirestoreQuotaExceededError,
+  reportFirestoreQuotaExceeded,
   signInWithGoogle,
   signOutFirebase,
 } from '../lib/firebase';
@@ -155,12 +158,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let unsubProfile: (() => void) | null = null;
+    let profileSafetyTimer: ReturnType<typeof setTimeout> | null = null;
+    let authSequence = 0;
+
+    const clearSafetyTimer = () => {
+      if (profileSafetyTimer !== null) {
+        clearTimeout(profileSafetyTimer);
+        profileSafetyTimer = null;
+      }
+    };
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      const seq = ++authSequence;
       if (unsubProfile) {
         unsubProfile();
         unsubProfile = null;
       }
+      clearSafetyTimer();
 
       setFirebaseUser(user);
       setAuthReady(true);
@@ -174,54 +188,101 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       setProfileLoading(true);
+      setAuthError(null);
       const uid = sanitizeFirebaseId(user.uid);
+
+      profileSafetyTimer = setTimeout(() => {
+        if (seq !== authSequence) return;
+        setProfileLoading((loading) => {
+          if (loading) {
+            setAuthError(
+              '사용자 권한 프로필 조회가 지연되고 있습니다. 네트워크 상태를 확인하거나 새로고침해 주세요.'
+            );
+          }
+          return false;
+        });
+      }, 10_000);
 
       try {
         const ensured = await ensureUserProfileOnSignIn(user, 'FUNC');
+        if (seq !== authSequence) return;
         setUserProfile(ensured);
         syncLegacyActiveUser(user, ensured);
 
-        if (user.emailVerified) {
-          try {
-            const adminSnap = await getDoc(doc(db, 'admins', uid));
-            setHasAdminDoc(adminSnap.exists());
-          } catch {
-            setHasAdminDoc(false);
+        if (user.emailVerified && !isFirestoreQuotaExceeded()) {
+          if (!isBootstrappedAdminEmail(user.email)) {
+            try {
+              const adminSnap = await getDoc(doc(db, 'admins', uid));
+              if (seq === authSequence) {
+                setHasAdminDoc(adminSnap.exists());
+              }
+            } catch (adminErr) {
+              if (isFirestoreQuotaExceededError(adminErr)) {
+                reportFirestoreQuotaExceeded(adminErr);
+              }
+              if (seq === authSequence) {
+                setHasAdminDoc(false);
+              }
+            }
           }
 
-          unsubProfile = subscribeCurrentUserProfile(
-            uid,
-            user.email || '',
-            (liveProfile) => {
-              if (liveProfile) {
-                setUserProfile(liveProfile);
-                syncLegacyActiveUser(user, liveProfile);
+          if (seq !== authSequence) return;
+
+          if (!isFirestoreQuotaExceeded()) {
+            unsubProfile = subscribeCurrentUserProfile(
+              uid,
+              user.email || '',
+              (liveProfile) => {
+                if (seq !== authSequence) return;
+                clearSafetyTimer();
+                if (liveProfile) {
+                  setUserProfile(liveProfile);
+                  syncLegacyActiveUser(user, liveProfile);
+                }
+                setProfileLoading(false);
+              },
+              (err) => {
+                if (seq !== authSequence) return;
+                clearSafetyTimer();
+                if (isFirestoreQuotaExceededError(err)) {
+                  reportFirestoreQuotaExceeded(err);
+                } else {
+                  console.warn('User profile listener warning:', err);
+                }
+                setProfileLoading(false);
               }
-              setProfileLoading(false);
-            },
-            (err) => {
-              console.warn('User profile listener warning:', err);
-              setProfileLoading(false);
-            }
-          );
+            );
+          } else {
+            clearSafetyTimer();
+            setProfileLoading(false);
+          }
         } else {
+          clearSafetyTimer();
           setProfileLoading(false);
         }
       } catch (err: any) {
-        console.error('Failed to initialize user profile:', err);
-        setAuthError(err?.message || 'Failed to load user profile.');
+        if (seq !== authSequence) return;
+        clearSafetyTimer();
+        if (isFirestoreQuotaExceededError(err)) {
+          reportFirestoreQuotaExceeded(err);
+        } else {
+          console.error('Failed to initialize user profile:', err);
+          setAuthError(err?.message || 'Failed to load user profile.');
+        }
         setProfileLoading(false);
       }
     });
 
     return () => {
+      authSequence++;
+      clearSafetyTimer();
       unsubscribe();
       if (unsubProfile) unsubProfile();
     };
-  }, []);
+  }, [syncLegacyActiveUser]);
 
   const refreshProfile = async (): Promise<void> => {
-    if (!firebaseUser) return;
+    if (!firebaseUser || isFirestoreQuotaExceeded()) return;
     setProfileLoading(true);
     try {
       const uid = sanitizeFirebaseId(firebaseUser.uid);
@@ -246,7 +307,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         syncLegacyActiveUser(firebaseUser, refreshed);
       }
     } catch (err: any) {
-      setAuthError(err?.message || 'Failed to refresh profile status.');
+      if (isFirestoreQuotaExceededError(err)) {
+        reportFirestoreQuotaExceeded(err);
+      } else {
+        setAuthError(err?.message || 'Failed to refresh profile status.');
+      }
     } finally {
       setProfileLoading(false);
     }

@@ -1,5 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { authorizedFetch } from '../utils/authorizedFetch';
+import {
+  authorizedFetch,
+  isAuthorizedFetchTimeoutError,
+} from '../utils/authorizedFetch';
 
 interface UseVoiceInputOptions {
   lang?: string;
@@ -48,6 +51,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
           const res = await authorizedFetch('/api/transcribe-audio', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            timeoutMs: 30_000,
             body: JSON.stringify({
               audioData: base64Data,
               mimeType,
@@ -57,13 +61,29 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
           if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
             const rawErr = String(errData.error || `Server error (${res.status})`);
+            if (res.status === 403 && errData.code === 'APPROVAL_REQUIRED') {
+              throw new Error(
+                errData.error ||
+                  '관리자 승인 대기 중인 계정입니다. 관리자에게 승인을 요청한 뒤 다시 시도해 주세요.'
+              );
+            }
+            if (res.status === 401) {
+              throw new Error(
+                errData.error || '인증이 만료되었습니다. 다시 로그인한 뒤 시도해 주세요.'
+              );
+            }
+            if (res.status === 429) {
+              throw new Error(
+                errData.error || '음성 변환 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.'
+              );
+            }
             if (
               errData.code === 'MISSING_GEMINI_API_KEY' ||
               rawErr.toLowerCase().includes('default credentials') ||
               rawErr.toLowerCase().includes('access_token_scope_insufficient')
             ) {
               throw new Error(
-                '태블릿 등 모바일 환경에서는 서버 음성 변환(Gemini)이 사용됩니다. AI Studio의 Settings > Secrets 패널에서 GEMINI_API_KEY가 설정되어 있는지 확인해 주세요.'
+                '태블릿 등 모바일 환경에서는 서버 음성 변환(Gemini)이 사용됩니다. 배포 환경 또는 AI Studio Settings > Secrets에서 GEMINI_API_KEY가 설정되어 있는지 확인해 주세요.'
               );
             }
             throw new Error(rawErr);
@@ -72,6 +92,14 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
           const data = await res.json();
           resolve(data.text || '');
         } catch (err: any) {
+          if (isAuthorizedFetchTimeoutError(err)) {
+            reject(
+              new Error(
+                '음성 변환 요청 시간이 초과되었습니다(30초). 네트워크 상태를 확인하거나 직접 메모를 입력해 주세요.'
+              )
+            );
+            return;
+          }
           reject(err);
         }
       };

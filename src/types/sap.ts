@@ -514,6 +514,17 @@ export interface MeetingActionItem {
   created_at: string;
 }
 
+export type MeetingAiSuggestionCategory = 'missing_fact' | 'enhancement' | 'question';
+
+export interface MeetingAiSuggestionItem {
+  id: string;
+  category: MeetingAiSuggestionCategory;
+  title: string;
+  detail: string;
+  suggestedAction: string;
+  resolved?: boolean;
+}
+
 export interface ProjectMeetingMinute {
   id: string;
   project_code: string;
@@ -527,6 +538,7 @@ export interface ProjectMeetingMinute {
   raw_transcript: string;
   supplemental_notes?: string;
   minutes_markdown: string;
+  ai_suggestions?: MeetingAiSuggestionItem[];
   recommended_sample_type?: '01' | '02' | '03' | '04';
   recommendation_reason?: string;
   suggested_module?: SapModule;

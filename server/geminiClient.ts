@@ -16,6 +16,36 @@ export class GeminiMissingKeyError extends Error {
   }
 }
 
+export class GeminiTimeoutError extends Error {
+  statusCode = 504;
+  constructor(timeoutMs: number, label = 'Gemini AI') {
+    super(`${label} request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    this.name = 'GeminiTimeoutError';
+  }
+}
+
+export async function withGeminiTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs = 20_000,
+  label = 'Gemini AI'
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new GeminiTimeoutError(timeoutMs, label));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export function getConfiguredGeminiApiKey(): string | null {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key || key === 'MY_GEMINI_API_KEY') {

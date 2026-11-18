@@ -78,7 +78,17 @@ async function fetchGooglePublicCerts(forceRefresh = false): Promise<Record<stri
   }
 
   lastCertRefreshAt = now;
-  const res = await fetch(GOOGLE_CERTS_URL);
+  let res: globalThis.Response;
+  try {
+    res = await fetch(GOOGLE_CERTS_URL, {
+      signal: AbortSignal.timeout(8_000),
+    });
+  } catch (err: any) {
+    if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+      throw new AuthHttpError(504, 'AUTH_LOOKUP_TIMEOUT', 'Google 인증 키 조회 응답 시간이 초과되었습니다.');
+    }
+    throw err;
+  }
   if (!res.ok) {
     throw new Error(`Failed to fetch Firebase public keys (HTTP ${res.status})`);
   }
@@ -235,12 +245,29 @@ async function fetchUserApprovalFromFirestoreRest(
   const encodedDb = encodeURIComponent(firestoreDatabaseId || '(default)');
   const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/${encodedDb}/documents/users/${encodeURIComponent(uid)}`;
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
-  });
+  let res: globalThis.Response;
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+  } catch (err: any) {
+    if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+      throw new AuthHttpError(
+        504,
+        'AUTH_LOOKUP_TIMEOUT',
+        '사용자 권한 확인 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.'
+      );
+    }
+    throw new AuthHttpError(
+      503,
+      'AUTH_LOOKUP_UNAVAILABLE',
+      '권한 조회 서비스에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.'
+    );
+  }
 
   if (res.status === 404) {
     throw new AuthHttpError(403, 'APPROVAL_REQUIRED', '등록된 사용자 프로필이 없습니다. 관리자 승인 후 이용해 주세요.');

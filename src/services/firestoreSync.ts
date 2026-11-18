@@ -12,7 +12,16 @@ import {
   where,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import {
+  auth,
+  db,
+  handleFirestoreError,
+  handleFirestoreSnapshotError,
+  isFirestoreQuotaExceeded,
+  isFirestoreQuotaExceededError,
+  OperationType,
+  reportFirestoreQuotaExceeded,
+} from '../lib/firebase';
 import {
   ProgramSpec,
   ProjectMeetingMinute,
@@ -65,7 +74,7 @@ function stripUndefinedDeep<T>(val: T): T {
 
 export async function syncProjectToFirestore(project: SapProject): Promise<void> {
   const user = auth.currentUser;
-  if (!user || !user.emailVerified) return;
+  if (!user || !user.emailVerified || isFirestoreQuotaExceeded()) return;
 
   const projectId = sanitizeProjectCode(project.code);
   const path = `projects/${projectId}`;
@@ -167,7 +176,7 @@ export function subscribeAccessibleProjects(
   assignedProjectCodes: string[] = []
 ): Unsubscribe {
   const user = auth.currentUser;
-  if (!user) return () => {};
+  if (!user || isFirestoreQuotaExceeded()) return () => {};
 
   if (isAdmin) {
     return onSnapshot(
@@ -177,7 +186,7 @@ export function subscribeAccessibleProjects(
         onProjects(list);
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, 'projects');
+        handleFirestoreSnapshotError(err, OperationType.LIST, 'projects');
       }
     );
   }
@@ -201,7 +210,7 @@ export function subscribeAccessibleProjects(
       emitMerged();
     },
     (err) => {
-      console.warn('Common projects subscription warning:', err);
+      handleFirestoreSnapshotError(err, OperationType.LIST, 'projects(common)');
     }
   );
 
@@ -217,7 +226,7 @@ export function subscribeAccessibleProjects(
       emitMerged();
     },
     (err) => {
-      console.warn('Assigned projects query fallback warning:', err);
+      handleFirestoreSnapshotError(err, OperationType.LIST, 'projects(assigned)');
     }
   );
 
@@ -241,7 +250,7 @@ export function subscribeAccessibleProjects(
         emitMerged();
       },
       (err) => {
-        console.warn(`Assigned project doc (${code}) listener warning:`, err);
+        handleFirestoreSnapshotError(err, OperationType.GET, `projects/${code}`);
       }
     )
   );
@@ -291,7 +300,7 @@ export async function syncSpecToFirestore(
   options?: { expectedRevision?: number; forceOverwrite?: boolean }
 ): Promise<{ revision: number } | undefined> {
   const user = auth.currentUser;
-  if (!user || !user.emailVerified) return undefined;
+  if (!user || !user.emailVerified || isFirestoreQuotaExceeded()) return undefined;
 
   const projectId = sanitizeProjectCode(spec.project_code);
   const specId = sanitizeId(spec.id || spec.program_id);
@@ -542,7 +551,7 @@ export async function fetchSnapshotsFromFirestore(
   }[]
 > {
   const user = auth.currentUser;
-  if (!user) return [];
+  if (!user || isFirestoreQuotaExceeded()) return [];
 
   const cleanProj = sanitizeProjectCode(projectCode);
   const cleanSpec = sanitizeId(specId);
@@ -566,13 +575,17 @@ export async function fetchSnapshotsFromFirestore(
     const snap = await getDocs(q);
     return snap.docs.map((d) => d.data() as any);
   } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      reportFirestoreQuotaExceeded(err);
+      return [];
+    }
     handleFirestoreError(err, OperationType.LIST, colPath);
   }
 }
 
 export async function syncMeetingMinuteToFirestore(minute: ProjectMeetingMinute): Promise<void> {
   const user = auth.currentUser;
-  if (!user || !user.emailVerified) return;
+  if (!user || !user.emailVerified || isFirestoreQuotaExceeded()) return;
 
   const projectId = sanitizeProjectCode(minute.project_code);
   const minuteId = sanitizeId(minute.id);
@@ -666,7 +679,7 @@ export function subscribeProjectSpecs(
   onData: (specs: ProgramSpec[]) => void
 ): Unsubscribe {
   const user = auth.currentUser;
-  if (!user) return () => {};
+  if (!user || isFirestoreQuotaExceeded()) return () => {};
 
   const cleanProj = sanitizeProjectCode(projectCode);
   const colPath = `projects/${cleanProj}/specs`;
@@ -712,7 +725,7 @@ export function subscribeProjectSpecs(
       onData(list);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, colPath);
+      handleFirestoreSnapshotError(error, OperationType.LIST, colPath);
     }
   );
 }
@@ -722,7 +735,7 @@ export function subscribeProjectMeetings(
   onData: (minutes: ProjectMeetingMinute[]) => void
 ): Unsubscribe {
   const user = auth.currentUser;
-  if (!user) return () => {};
+  if (!user || isFirestoreQuotaExceeded()) return () => {};
 
   const cleanProj = sanitizeProjectCode(projectCode);
   const colPath = `projects/${cleanProj}/meetings`;
@@ -758,7 +771,7 @@ export function subscribeProjectMeetings(
       onData(list);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, colPath);
+      handleFirestoreSnapshotError(error, OperationType.LIST, colPath);
     }
   );
 }
@@ -846,7 +859,7 @@ export function subscribeSpecReviewComments(
   onData: (comments: SpecReviewComment[]) => void
 ): Unsubscribe {
   const user = auth.currentUser;
-  if (!user) return () => {};
+  if (!user || isFirestoreQuotaExceeded()) return () => {};
 
   const cleanProj = sanitizeProjectCode(projectCode);
   const cleanSpec = sanitizeId(specId);
@@ -895,7 +908,7 @@ export function subscribeSpecReviewComments(
       onData(list);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, colPath);
+      handleFirestoreSnapshotError(error, OperationType.LIST, colPath);
     }
   );
 }
@@ -904,7 +917,7 @@ export function subscribeCustomDdicTables(
   onData: (entries: { table: SapDD02LTable; fields: SapDD03LField[] }[]) => void
 ): Unsubscribe {
   const user = auth.currentUser;
-  if (!user) return () => {};
+  if (!user || isFirestoreQuotaExceeded()) return () => {};
 
   const q = query(collection(db, 'ddic_tables'), where('is_custom', '==', true));
   return onSnapshot(
@@ -928,7 +941,7 @@ export function subscribeCustomDdicTables(
       onData(entries);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'ddic_tables');
+      handleFirestoreSnapshotError(error, OperationType.LIST, 'ddic_tables');
     }
   );
 }
@@ -942,7 +955,7 @@ export async function syncSpecPresence(params: {
   project?: SapProject;
 }): Promise<void> {
   const user = auth.currentUser;
-  if (!user || !user.emailVerified) return;
+  if (!user || !user.emailVerified || isFirestoreQuotaExceeded()) return;
 
   const projectId = sanitizeProjectCode(params.projectCode);
   if (projectId === TEMP_PROJECT_CODE || projectId === COMMON_PROJECT_CODE) return;
@@ -951,14 +964,21 @@ export async function syncSpecPresence(params: {
   const ref = doc(db, 'projects', projectId, 'specs', specId, 'presence', user.uid);
 
   try {
-    const projSnap = await getDoc(doc(db, 'projects', projectId));
-    if (!projSnap.exists()) return;
-    const projData = projSnap.data();
-    const projectVisibility = projData?.visibility || params.project?.visibility || 'project';
+    let projectVisibility = params.project?.visibility;
+    let baseMemberUids = params.project?.memberUids;
+
+    if (!projectVisibility || !Array.isArray(baseMemberUids) || baseMemberUids.length === 0) {
+      const projSnap = await getDoc(doc(db, 'projects', projectId));
+      if (!projSnap.exists()) return;
+      const projData = projSnap.data();
+      projectVisibility = projData?.visibility || projectVisibility || 'project';
+      baseMemberUids = Array.isArray(projData?.memberUids) ? projData.memberUids : [];
+    }
+
     if (projectVisibility === 'temp') return;
 
     const projectMemberUids: string[] = Array.from(
-      new Set([...(Array.isArray(projData?.memberUids) ? projData.memberUids : []), user.uid])
+      new Set([...(Array.isArray(baseMemberUids) ? baseMemberUids : []), user.uid])
     ).slice(0, 50);
 
     const payload = {
@@ -975,6 +995,10 @@ export async function syncSpecPresence(params: {
 
     await setDoc(ref, payload, { merge: true });
   } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      reportFirestoreQuotaExceeded(err);
+      return;
+    }
     // Non-fatal heartbeat warning unless permission denied needs surfacing
     console.warn('Spec presence heartbeat notice:', path, err);
   }
@@ -982,7 +1006,7 @@ export async function syncSpecPresence(params: {
 
 export async function clearSpecPresence(projectCode: string, specId: string): Promise<void> {
   const user = auth.currentUser;
-  if (!user || !user.emailVerified) return;
+  if (!user || !user.emailVerified || isFirestoreQuotaExceeded()) return;
 
   const projectId = sanitizeProjectCode(projectCode);
   if (projectId === TEMP_PROJECT_CODE || projectId === COMMON_PROJECT_CODE) return;
@@ -1000,7 +1024,7 @@ export function subscribeSpecPresence(
   onData: (collaborators: SpecPresenceEntry[]) => void
 ): Unsubscribe {
   const user = auth.currentUser;
-  if (!user) return () => {};
+  if (!user || isFirestoreQuotaExceeded()) return () => {};
 
   const projectId = sanitizeProjectCode(projectCode);
   if (projectId === TEMP_PROJECT_CODE || projectId === COMMON_PROJECT_CODE) {
@@ -1018,7 +1042,7 @@ export function subscribeSpecPresence(
   return onSnapshot(
     q,
     (snapshot) => {
-      const cutoff = Date.now() - 65_000;
+      const cutoff = Date.now() - 130_000;
       const list: SpecPresenceEntry[] = [];
       snapshot.forEach((docSnap) => {
         const d = docSnap.data();
@@ -1038,7 +1062,7 @@ export function subscribeSpecPresence(
       onData(list);
     },
     (error) => {
-      console.warn('Spec presence subscription warning:', colPath, error);
+      handleFirestoreSnapshotError(error, OperationType.LIST, colPath);
     }
   );
 }
@@ -1047,7 +1071,7 @@ export async function syncUserPreferencesToFirestore(
   prefs: Omit<UserWorkspacePreferences, 'uid' | 'updatedAt'>
 ): Promise<void> {
   const user = auth.currentUser;
-  if (!user || !user.emailVerified) return;
+  if (!user || !user.emailVerified || isFirestoreQuotaExceeded()) return;
 
   const path = `users/${user.uid}/preferences/workspace`;
   const ref = doc(db, 'users', user.uid, 'preferences', 'workspace');
@@ -1082,6 +1106,10 @@ export async function syncUserPreferencesToFirestore(
   try {
     await setDoc(ref, payload, { merge: true });
   } catch (err) {
+    if (isFirestoreQuotaExceededError(err)) {
+      reportFirestoreQuotaExceeded(err);
+      return;
+    }
     handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
@@ -1091,7 +1119,7 @@ export function subscribeUserPreferences(
   onData: (prefs: UserWorkspacePreferences | null) => void
 ): Unsubscribe {
   const user = auth.currentUser;
-  if (!user || user.uid !== uid) return () => {};
+  if (!user || user.uid !== uid || isFirestoreQuotaExceeded()) return () => {};
 
   const path = `users/${uid}/preferences/workspace`;
   return onSnapshot(
@@ -1112,7 +1140,7 @@ export function subscribeUserPreferences(
       });
     },
     (error) => {
-      handleFirestoreError(error, OperationType.GET, path);
+      handleFirestoreSnapshotError(error, OperationType.GET, path);
     }
   );
 }

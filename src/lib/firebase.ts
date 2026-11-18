@@ -8,14 +8,88 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   getDocFromServer,
+  type Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+function createFirestoreInstance(): Firestore {
+  try {
+    if (typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined') {
+      return initializeFirestore(
+        app,
+        {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        },
+        firebaseConfig.firestoreDatabaseId
+      );
+    }
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+}
+
+export const db = createFirestoreInstance();
 export const auth = getAuth(app);
+
+export const FIRESTORE_PRICING_URL = 'https://firebase.google.com/pricing#cloud-firestore';
+export const FIRESTORE_CONSOLE_UPGRADE_URL = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/firestore/databases/${firebaseConfig.firestoreDatabaseId}/data?openUpgradeDialog=true`;
+
+let quotaExceededFlag = false;
+const quotaListeners = new Set<(exceeded: boolean) => void>();
+
+export function isFirestoreQuotaExceeded(): boolean {
+  return quotaExceededFlag;
+}
+
+export function subscribeFirestoreQuotaState(listener: (exceeded: boolean) => void): () => void {
+  quotaListeners.add(listener);
+  listener(quotaExceededFlag);
+  return () => {
+    quotaListeners.delete(listener);
+  };
+}
+
+export function isFirestoreQuotaExceededError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    const text = String(error || '');
+    return text.includes('resource-exhausted') || text.toLowerCase().includes('quota exceeded');
+  }
+  const code = String((error as any).code || '').toLowerCase();
+  const message = String((error as any).message || '').toLowerCase();
+  return (
+    code === 'resource-exhausted' ||
+    code.includes('resource-exhausted') ||
+    message.includes('resource-exhausted') ||
+    message.includes('quota exceeded')
+  );
+}
+
+export function reportFirestoreQuotaExceeded(error?: unknown): void {
+  if (!quotaExceededFlag) {
+    quotaExceededFlag = true;
+    console.warn(
+      'Firestore daily quota exceeded; pausing background cloud sync until quota resets.',
+      error instanceof Error ? error.message : error || ''
+    );
+    quotaListeners.forEach((cb) => {
+      try {
+        cb(true);
+      } catch {
+        // ignore listener errors
+      }
+    });
+  }
+}
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -51,6 +125,9 @@ export function handleFirestoreError(
   operationType: OperationType,
   path: string | null
 ): never {
+  if (isFirestoreQuotaExceededError(error)) {
+    reportFirestoreQuotaExceeded(error);
+  }
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -72,11 +149,27 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function handleFirestoreSnapshotError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): void {
+  if (isFirestoreQuotaExceededError(error)) {
+    reportFirestoreQuotaExceeded(error);
+    return;
+  }
+  console.warn(`Firestore listener notice (${operationType} ${path || ''}):`, error);
+}
+
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
   } catch (error) {
+    if (isFirestoreQuotaExceededError(error)) {
+      reportFirestoreQuotaExceeded(error);
+      return false;
+    }
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error('Please check your Firebase configuration.');
       return false;

@@ -1,15 +1,18 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GeminiMissingKeyError,
+  GeminiTimeoutError,
   getConfiguredGeminiApiKey,
   getGeminiClient,
   isCredentialOrMissingKeyError,
+  withGeminiTimeout,
 } from './geminiClient';
 
 describe('geminiClient credential validation', () => {
   const originalKey = process.env.GEMINI_API_KEY;
 
   afterEach(() => {
+    vi.useRealTimers();
     if (originalKey === undefined) {
       delete process.env.GEMINI_API_KEY;
     } else {
@@ -44,4 +47,24 @@ describe('geminiClient credential validation', () => {
     expect(isCredentialOrMissingKeyError(new GeminiMissingKeyError())).toBe(true);
     expect(isCredentialOrMissingKeyError(new Error('Network timeout'))).toBe(false);
   });
+
+  it('withGeminiTimeout resolves when inner promise completes before deadline', async () => {
+    const result = await withGeminiTimeout(Promise.resolve('ok'), 500, 'Unit test AI');
+    expect(result).toBe('ok');
+  });
+
+  it('withGeminiTimeout rejects with GeminiTimeoutError (status 504) after timeoutMs', async () => {
+    vi.useFakeTimers();
+    const neverResolving = new Promise<string>(() => {});
+    const pending = withGeminiTimeout(neverResolving, 2500, 'Meeting AI');
+    const assertion = expect(pending).rejects.toMatchObject({
+      name: 'GeminiTimeoutError',
+      statusCode: 504,
+    });
+
+    await vi.advanceTimersByTimeAsync(2500);
+    await assertion;
+    await expect(pending).rejects.toBeInstanceOf(GeminiTimeoutError);
+  });
 });
+
