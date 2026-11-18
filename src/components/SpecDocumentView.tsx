@@ -302,9 +302,9 @@ export const SpecDocumentView: React.FC<SpecDocumentViewProps> = ({
   };
 
   // Download Multi-Sheet Excel (.xlsx) Deliverable
-  const handleDownloadXlsx = () => {
+  const handleDownloadXlsx = async () => {
     try {
-      const filename = exportSpecificationXlsx(spec);
+      const filename = await exportSpecificationXlsx(spec);
       setCopiedNotice(t(`Exported Excel (.xlsx): ${filename}`, `Excel (.xlsx) 내보내기 완료: ${filename}`));
       setTimeout(() => setCopiedNotice(null), 4000);
     } catch (err) {

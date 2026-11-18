@@ -518,13 +518,13 @@ export const ProjectOverviewDashboard: React.FC<ProjectOverviewDashboardProps> =
     });
   };
 
-  const handleExportWricefIndex = () => {
+  const handleExportWricefIndex = async () => {
     setIsExportMenuOpen(false);
     if (!activeProject || projectSpecs.length === 0) {
       onNotify?.(t('No project specs available to export.', '내보낼 프로젝트 사양서가 없습니다.'));
       return;
     }
-    const filename = exportProjectWricefIndexXlsx(
+    const filename = await exportProjectWricefIndexXlsx(
       activeProject,
       projectSpecs.map((item) => item.spec),
       unresolvedCommentCounts

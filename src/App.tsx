@@ -1,24 +1,14 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { Suspense, lazy, useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { ProgramSpec, ProjectMeetingMinute, SapProject, SpecPresenceEntry } from './types/sap';
 import { SAMPLE_SPECS } from './data/sampleSpecs';
-import { TopNav, MainWorkspaceMode, DualSplitLayout } from './components/TopNav';
+import { TopNav, MainWorkspaceMode } from './components/TopNav';
 import { SideNav } from './components/SideNav';
-import { SpecEditor } from './components/SpecEditor';
-import { SapGuiMockup } from './components/SapGuiMockup';
-import { AbapCodeGenerator } from './components/AbapCodeGenerator';
-import { SpecDocumentView } from './components/SpecDocumentView';
-import { ProgramTemplateModal } from './components/ProgramTemplateModal';
-import { PdfExportModal } from './components/PdfExportModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { ProjectOverviewDashboard } from './components/ProjectOverviewDashboard';
-import { ProjectManagerModal } from './components/ProjectManagerModal';
-import { AdminDashboard } from './components/AdminDashboard';
-import { CopySpecModal } from './components/CopySpecModal';
-import { MeetingSpecWizardModal } from './components/MeetingSpecWizardModal';
-import { MeetingMinutesPage } from './components/MeetingMinutesPage';
-import { GlobalCommandPalette } from './components/GlobalCommandPalette';
-import { SapDdicManagerModal } from './components/SapDdicManagerModal';
-import { UserGuidePage } from './components/UserGuidePage';
+import {
+  PendingNavigationDialog,
+  SyncConflictDialog,
+  SyncConflictState,
+} from './components/WorkspaceDialogs';
 import { GuideActionId } from './data/userGuideData';
 import {
   SapGuiTheme,
@@ -31,6 +21,8 @@ import {
 import { CurrentUser, getCurrentUser } from './utils/authStorage';
 import { useAuth } from './contexts/AuthContext';
 import { useLanguage } from './contexts/LanguageContext';
+import { useSplitWorkspace } from './hooks/useSplitWorkspace';
+import { useUserPreferencesSync } from './hooks/useUserPreferencesSync';
 import {
   SpecSyncConflictError,
   clearSpecPresence,
@@ -40,11 +32,9 @@ import {
   subscribeProjectSpecs,
   subscribeSpecPresence,
   subscribeSpecReviewComments,
-  subscribeUserPreferences,
   syncProjectToFirestore,
   syncSpecPresence,
   syncSpecToFirestore,
-  syncUserPreferencesToFirestore,
 } from './services/firestoreSync';
 import {
   COMMON_PROJECT_CODE,
@@ -74,24 +64,94 @@ import {
   getUnresolvedCommentCountsMap,
   mergeRemoteReviewComments,
 } from './utils/reviewCommentStorage';
-import { suggestCompliantIdsForProject } from './utils/sapValidation';
+import { createBlankProgramSpec } from './utils/blankSpecFactory';
 import { createRevisionSnapshot } from './utils/specSnapshotStorage';
 import {
   FAVORITE_STORAGE_KEY,
   getFavoriteProgramIds,
   migrateFavoriteUserKey,
   removeFavoriteProgram,
-  setFavoriteProgramIds,
   toggleFavoriteProgram,
 } from './utils/favoriteStorage';
-import { AlertTriangle, CheckCircle2, Copy, RefreshCw, Save, Undo2, X } from 'lucide-react';
+import { CheckCircle2, Loader2, Undo2, X } from 'lucide-react';
 
-const DUAL_SPLIT_CYCLE: DualSplitLayout[] = [
-  'top-bottom',
-  'left-right',
-  'bottom-top',
-  'right-left',
-];
+function lazyNamed<T extends React.ComponentType<any>>(
+  loader: () => Promise<Record<string, unknown>>,
+  exportName: string
+): React.LazyExoticComponent<T> {
+  return lazy(async () => {
+    const mod = await loader();
+    return { default: mod[exportName] as T };
+  });
+}
+
+const SpecEditor = lazyNamed<typeof import('./components/SpecEditor').SpecEditor>(
+  () => import('./components/SpecEditor'),
+  'SpecEditor'
+);
+const SapGuiMockup = lazyNamed<typeof import('./components/SapGuiMockup').SapGuiMockup>(
+  () => import('./components/SapGuiMockup'),
+  'SapGuiMockup'
+);
+const AbapCodeGenerator = lazyNamed<typeof import('./components/AbapCodeGenerator').AbapCodeGenerator>(
+  () => import('./components/AbapCodeGenerator'),
+  'AbapCodeGenerator'
+);
+const SpecDocumentView = lazyNamed<typeof import('./components/SpecDocumentView').SpecDocumentView>(
+  () => import('./components/SpecDocumentView'),
+  'SpecDocumentView'
+);
+const ProgramTemplateModal = lazyNamed<typeof import('./components/ProgramTemplateModal').ProgramTemplateModal>(
+  () => import('./components/ProgramTemplateModal'),
+  'ProgramTemplateModal'
+);
+const PdfExportModal = lazyNamed<typeof import('./components/PdfExportModal').PdfExportModal>(
+  () => import('./components/PdfExportModal'),
+  'PdfExportModal'
+);
+const KeyboardShortcutsModal = lazyNamed<typeof import('./components/KeyboardShortcutsModal').KeyboardShortcutsModal>(
+  () => import('./components/KeyboardShortcutsModal'),
+  'KeyboardShortcutsModal'
+);
+const ProjectManagerModal = lazyNamed<typeof import('./components/ProjectManagerModal').ProjectManagerModal>(
+  () => import('./components/ProjectManagerModal'),
+  'ProjectManagerModal'
+);
+const AdminDashboard = lazyNamed<typeof import('./components/AdminDashboard').AdminDashboard>(
+  () => import('./components/AdminDashboard'),
+  'AdminDashboard'
+);
+const CopySpecModal = lazyNamed<typeof import('./components/CopySpecModal').CopySpecModal>(
+  () => import('./components/CopySpecModal'),
+  'CopySpecModal'
+);
+const MeetingSpecWizardModal = lazyNamed<typeof import('./components/MeetingSpecWizardModal').MeetingSpecWizardModal>(
+  () => import('./components/MeetingSpecWizardModal'),
+  'MeetingSpecWizardModal'
+);
+const MeetingMinutesPage = lazyNamed<typeof import('./components/MeetingMinutesPage').MeetingMinutesPage>(
+  () => import('./components/MeetingMinutesPage'),
+  'MeetingMinutesPage'
+);
+const GlobalCommandPalette = lazyNamed<typeof import('./components/GlobalCommandPalette').GlobalCommandPalette>(
+  () => import('./components/GlobalCommandPalette'),
+  'GlobalCommandPalette'
+);
+const SapDdicManagerModal = lazyNamed<typeof import('./components/SapDdicManagerModal').SapDdicManagerModal>(
+  () => import('./components/SapDdicManagerModal'),
+  'SapDdicManagerModal'
+);
+const UserGuidePage = lazyNamed<typeof import('./components/UserGuidePage').UserGuidePage>(
+  () => import('./components/UserGuidePage'),
+  'UserGuidePage'
+);
+
+const WorkspacePaneFallback: React.FC = () => (
+  <div className="h-full w-full flex items-center justify-center bg-slate-900/20 text-slate-400 text-xs gap-2">
+    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+    <span>Loading workspace module...</span>
+  </div>
+);
 
 export default function App() {
   const {
@@ -114,8 +174,6 @@ export default function App() {
   const [favoriteProgramIds, setFavoriteProgramIdsState] = useState<string[]>(() =>
     getFavoriteProgramIds(getCurrentUser().name)
   );
-  const prefsHydratedRef = useRef(false);
-  const applyingRemotePrefsRef = useRef(false);
 
   useEffect(() => {
     setCurrentUserState(authActiveUser);
@@ -223,9 +281,9 @@ export default function App() {
     }
   };
 
-  const refreshAllSpecs = () => {
+  const refreshAllSpecs = useCallback(() => {
     setAllSavedSpecs(getSavedSpecList());
-  };
+  }, []);
 
   // Default entry screen is Project Overview Dashboard (or /admin for admins)
   const [workspaceMode, setWorkspaceMode] = useState<MainWorkspaceMode>(() => {
@@ -283,15 +341,9 @@ export default function App() {
     | null
   >(null);
   const [activeCollaborators, setActiveCollaborators] = useState<SpecPresenceEntry[]>([]);
-  const [syncConflict, setSyncConflict] = useState<{
-    specId: string;
-    programId: string;
-    localSpec: ProgramSpec;
-    remoteSpec: ProgramSpec;
-    remoteEditor: string;
-    expectedRevision: number;
-    remoteRevision: number;
-  } | null>(null);
+  const [syncConflict, setSyncConflict] = useState<SyncConflictState | null>(null);
+  const syncConflictRef = useRef<SyncConflictState | null>(null);
+  syncConflictRef.current = syncConflict;
   const loadedRevisionRef = useRef<Record<string, number>>({});
   const specSyncTimerRef = useRef<number | null>(null);
   const pendingSpecSyncRef = useRef<{ spec: ProgramSpec; expectedRevision?: number } | null>(null);
@@ -397,19 +449,26 @@ export default function App() {
   } | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
-  const showWorkspaceToast = (
-    message: string,
-    actionLabel?: string,
-    onAction?: () => void
-  ) => {
-    if (toastTimerRef.current) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-    setWorkspaceToast({ message, actionLabel, onAction });
-    toastTimerRef.current = window.setTimeout(() => {
-      setWorkspaceToast(null);
-    }, 3600);
-  };
+  const showWorkspaceToast = useCallback(
+    (message: string, actionLabel?: string, onAction?: () => void) => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      setWorkspaceToast({ message, actionLabel, onAction });
+      toastTimerRef.current = window.setTimeout(() => {
+        setWorkspaceToast(null);
+      }, 3600);
+    },
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   const accessibleProjectCodesKey = useMemo(
     () =>
@@ -447,7 +506,7 @@ export default function App() {
                 (r) => r.id === prev.id || r.program_id === prev.program_id
               );
               if (!matched) return prev;
-              if (syncConflict && syncConflict.specId === specKey) return prev;
+              if (syncConflictRef.current?.specId === specKey) return prev;
               if (pendingSpecSyncRef.current?.spec.id === prev.id) return prev;
               if (Date.now() - lastEditTimestampRef.current < 2500) return prev;
 
@@ -457,7 +516,14 @@ export default function App() {
                 Boolean(matched.last_edited_by_uid) &&
                 matched.last_edited_by_uid !== userProfile?.uid;
 
-              if (!editedByOther && remoteRev <= prevRev && JSON.stringify(matched) === JSON.stringify(prev)) {
+              if (
+                !editedByOther &&
+                remoteRev <= prevRev &&
+                matched.last_edited_by_uid === prev.last_edited_by_uid &&
+                matched.status === prev.status &&
+                matched.title === prev.title &&
+                (matched.change_history?.length ?? 0) === (prev.change_history?.length ?? 0)
+              ) {
                 return prev;
               }
               loadedRevisionRef.current[specKey] = remoteRev;
@@ -485,7 +551,7 @@ export default function App() {
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [isFirebaseAuthenticated, accessibleProjectCodesKey, currentUser.name, userProfile?.uid, syncConflict]);
+  }, [isFirebaseAuthenticated, accessibleProjectCodesKey, currentUser.name, userProfile?.uid]);
 
   // Shared custom DDIC subscription (DD02L / DD03L live sync across teammates)
   useEffect(() => {
@@ -951,287 +1017,135 @@ export default function App() {
   };
   const [mockDataTrigger, setMockDataTrigger] = useState<number>(0);
 
-  // Dual Screen Split Layout (상하, 좌우, 하상, 우좌) & Resizable Divider Ratio
-  const [splitLayout, setSplitLayout] = useState<DualSplitLayout>(() => {
-    try {
-      const saved = localStorage.getItem('sap_spec_dual_split_layout') as DualSplitLayout;
-      if (DUAL_SPLIT_CYCLE.includes(saved)) return saved;
-    } catch {
-      // ignore
-    }
-    return 'left-right';
+  const {
+    splitLayout,
+    setSplitLayout,
+    splitRatio,
+    setSplitRatio,
+    splitRatioRef,
+    isResizingSplit,
+    setIsResizingSplit,
+    splitContainerRef,
+    isVerticalSplit,
+    isReversedSplit,
+    cycleSplitLayout: handleCycleSplitLayout,
+    resetSplitRatio,
+  } = useSplitWorkspace(showWorkspaceToast);
+
+  useUserPreferencesSync({
+    isFirebaseAuthenticated,
+    uid: userProfile?.uid,
+    favoriteProgramIds,
+    setFavoriteProgramIdsState,
+    currentTheme,
+    setCurrentTheme,
+    splitLayout,
+    setSplitLayout,
+    splitRatio,
+    setSplitRatio,
+    splitRatioRef,
+    isResizingSplit,
   });
-  const isVerticalSplit = splitLayout === 'top-bottom' || splitLayout === 'bottom-top';
-  const isReversedSplit = splitLayout === 'bottom-top' || splitLayout === 'right-left';
 
-  const [splitRatio, setSplitRatio] = useState<number>(() => {
-    try {
-      const saved = Number(localStorage.getItem('sap_spec_dual_split_ratio'));
-      if (!isNaN(saved) && saved >= 20 && saved <= 80) return saved;
-    } catch {
-      // ignore
-    }
-    return 50;
-  });
-  const [isResizingSplit, setIsResizingSplit] = useState(false);
-  const splitContainerRef = useRef<HTMLDivElement | null>(null);
-  const splitRatioRef = useRef<number>(splitRatio);
-  splitRatioRef.current = splitRatio;
+  // Global keyboard shortcuts with ref-backed handler so listener binds once
+  const globalKeyDownRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  globalKeyDownRef.current = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    const isTextInput =
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      Boolean(target?.isContentEditable);
 
-  useEffect(() => {
-    if (!isResizingSplit) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!splitContainerRef.current) return;
-      const rect = splitContainerRef.current.getBoundingClientRect();
-      let nextRatio = 50;
-      if (!isVerticalSplit) {
-        if (rect.width <= 0) return;
-        nextRatio = ((e.clientX - rect.left) / rect.width) * 100;
-      } else {
-        if (rect.height <= 0) return;
-        nextRatio = ((e.clientY - rect.top) / rect.height) * 100;
-      }
-      const clamped = Math.min(80, Math.max(20, Math.round(nextRatio * 10) / 10));
-      splitRatioRef.current = clamped;
-      setSplitRatio(clamped);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingSplit(false);
-      document.body.style.cursor = '';
-      try {
-        localStorage.setItem('sap_spec_dual_split_ratio', String(splitRatioRef.current));
-      } catch {
-        // ignore
-      }
-    };
-
-    document.body.style.cursor = !isVerticalSplit ? 'col-resize' : 'row-resize';
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.body.style.cursor = '';
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingSplit, isVerticalSplit]);
-
-  const handleCycleSplitLayout = () => {
-    setSplitLayout((prev) => {
-      const idx = DUAL_SPLIT_CYCLE.indexOf(prev);
-      const next = DUAL_SPLIT_CYCLE[(idx + 1) % DUAL_SPLIT_CYCLE.length];
-      try {
-        localStorage.setItem('sap_spec_dual_split_layout', next);
-      } catch {
-        // ignore
-      }
-      const labels: Record<DualSplitLayout, string> = {
-        'top-bottom': 'Top / Bottom',
-        'left-right': 'Left / Right',
-        'bottom-top': 'Bottom / Top',
-        'right-left': 'Right / Left',
-      };
-      showWorkspaceToast(`Split layout: ${labels[next]}`);
-      return next;
-    });
-  };
-
-  // Cloud-backed user workspace preferences subscription (favorites, theme, split layout/ratio)
-  useEffect(() => {
-    prefsHydratedRef.current = false;
-    if (!isFirebaseAuthenticated || !userProfile?.uid) return;
-
-    const uid = userProfile.uid;
-    const unsubscribe = subscribeUserPreferences(uid, (remotePrefs) => {
-      if (!remotePrefs) {
-        prefsHydratedRef.current = true;
-        void syncUserPreferencesToFirestore({
-          favoriteProgramIds: getFavoriteProgramIds(uid),
-          sapGuiTheme: currentTheme,
-          splitLayout,
-          splitRatio: splitRatioRef.current,
-        }).catch(() => {});
-        return;
-      }
-
-      applyingRemotePrefsRef.current = true;
-      if (Array.isArray(remotePrefs.favoriteProgramIds)) {
-        const syncedFavs = setFavoriteProgramIds(uid, remotePrefs.favoriteProgramIds);
-        setFavoriteProgramIdsState(syncedFavs);
-      }
-      if (remotePrefs.sapGuiTheme && isValidSapGuiTheme(remotePrefs.sapGuiTheme)) {
-        setCurrentTheme(remotePrefs.sapGuiTheme);
-        saveSapTheme(remotePrefs.sapGuiTheme);
-      }
-      if (remotePrefs.splitLayout && DUAL_SPLIT_CYCLE.includes(remotePrefs.splitLayout)) {
-        setSplitLayout(remotePrefs.splitLayout);
-        try {
-          localStorage.setItem('sap_spec_dual_split_layout', remotePrefs.splitLayout);
-        } catch {
-          // ignore
-        }
-      }
-      if (
-        typeof remotePrefs.splitRatio === 'number' &&
-        remotePrefs.splitRatio >= 20 &&
-        remotePrefs.splitRatio <= 80
-      ) {
-        setSplitRatio(remotePrefs.splitRatio);
-        splitRatioRef.current = remotePrefs.splitRatio;
-        try {
-          localStorage.setItem('sap_spec_dual_split_ratio', String(remotePrefs.splitRatio));
-        } catch {
-          // ignore
-        }
-      }
-      prefsHydratedRef.current = true;
-      window.setTimeout(() => {
-        applyingRemotePrefsRef.current = false;
-      }, 0);
-    });
-
-    return () => {
-      unsubscribe();
-      prefsHydratedRef.current = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFirebaseAuthenticated, userProfile?.uid]);
-
-  // Persist local workspace preference updates back to Firestore (debounced, post-hydration)
-  useEffect(() => {
-    if (
-      !isFirebaseAuthenticated ||
-      !userProfile?.uid ||
-      !prefsHydratedRef.current ||
-      applyingRemotePrefsRef.current ||
-      isResizingSplit
-    ) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      setIsCommandPaletteOpen((prev) => !prev);
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      void syncUserPreferencesToFirestore({
-        favoriteProgramIds,
-        sapGuiTheme: currentTheme,
-        splitLayout,
-        splitRatio,
-      }).catch((err) => {
-        console.warn('User preferences sync notice:', err);
-      });
-    }, 450);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    isFirebaseAuthenticated,
-    userProfile?.uid,
-    favoriteProgramIds,
-    currentTheme,
-    splitLayout,
-    splitRatio,
-    isResizingSplit,
-  ]);
-
-  // Global keyboard shortcuts (Ctrl+K search, Ctrl+S snapshot, Alt+1..5 views, Alt+L layout, Ctrl+Z/Y undo/redo, ? help)
-  useEffect(() => {
-    const onGlobalKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const isTextInput =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        Boolean(target?.isContentEditable);
-
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if (isInSpecEditingMode) {
         e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
+        void handleQuickSnapshotSave();
+      }
+      return;
+    }
+
+    // View mode switching: Alt + 1..5
+    if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      if (e.key === '1') {
+        e.preventDefault();
+        setWorkspaceMode('split');
         return;
       }
-
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        if (isInSpecEditingMode) {
-          e.preventDefault();
-          void handleQuickSnapshotSave();
-        }
+      if (e.key === '2') {
+        e.preventDefault();
+        setWorkspaceMode('mockup_only');
         return;
       }
-
-      // View mode switching: Alt + 1..5
-      if (e.altKey && !e.ctrlKey && !e.metaKey) {
-        if (e.key === '1') {
-          e.preventDefault();
-          setWorkspaceMode('split');
-          return;
-        }
-        if (e.key === '2') {
-          e.preventDefault();
-          setWorkspaceMode('mockup_only');
-          return;
-        }
-        if (e.key === '3') {
-          e.preventDefault();
-          setWorkspaceMode('editor_only');
-          return;
-        }
-        if (e.key === '4') {
-          e.preventDefault();
-          setWorkspaceMode('abap_code');
-          return;
-        }
-        if (e.key === '5') {
-          e.preventDefault();
-          setWorkspaceMode('document');
-          return;
-        }
-        if (e.key.toLowerCase() === 'l' && workspaceMode === 'split') {
-          e.preventDefault();
-          handleCycleSplitLayout();
-          return;
-        }
-      }
-
-      if (isTextInput) return;
-
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        if (e.shiftKey) {
-          if (historyFuture.length > 0) {
-            e.preventDefault();
-            handleRedo();
-          }
-        } else if (historyPast.length > 0) {
-          e.preventDefault();
-          handleUndo();
-        }
+      if (e.key === '3') {
+        e.preventDefault();
+        setWorkspaceMode('editor_only');
         return;
       }
+      if (e.key === '4') {
+        e.preventDefault();
+        setWorkspaceMode('abap_code');
+        return;
+      }
+      if (e.key === '5') {
+        e.preventDefault();
+        setWorkspaceMode('document');
+        return;
+      }
+      if (e.key.toLowerCase() === 'l' && workspaceMode === 'split') {
+        e.preventDefault();
+        handleCycleSplitLayout();
+        return;
+      }
+    }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+    if (isTextInput) return;
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      if (e.shiftKey) {
         if (historyFuture.length > 0) {
           e.preventDefault();
           handleRedo();
         }
-        return;
-      }
-
-      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      } else if (historyPast.length > 0) {
         e.preventDefault();
-        if (workspaceMode === 'shortcuts') {
-          closeFullPageMode();
-        } else {
-          openFullPageMode('shortcuts');
-        }
+        handleUndo();
       }
-    };
+      return;
+    }
 
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      if (historyFuture.length > 0) {
+        e.preventDefault();
+        handleRedo();
+      }
+      return;
+    }
+
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (workspaceMode === 'shortcuts') {
+        closeFullPageMode();
+      } else {
+        openFullPageMode('shortcuts');
+      }
+    }
+  };
+
+  useEffect(() => {
+    const onGlobalKeyDown = (e: KeyboardEvent) => globalKeyDownRef.current(e);
     window.addEventListener('keydown', onGlobalKeyDown);
     return () => window.removeEventListener('keydown', onGlobalKeyDown);
-  });
+  }, []);
 
   // Create new blank specification (assigned to current non-COMMON project or TEMP)
   const handleNewSpec = (explicitProjectCode?: string) => {
-    const registeredAuthor = currentUser.name;
-
     const targetProject =
       explicitProjectCode && explicitProjectCode !== COMMON_PROJECT_CODE
         ? explicitProjectCode
@@ -1240,210 +1154,14 @@ export default function App() {
         : TEMP_PROJECT_CODE;
 
     const projectStandards = getProjectAbapStandards(targetProject);
-    const existingIds = new Set(allSavedSpecs.map((s) => s.program_id.toUpperCase()));
-    let suffix = 1;
-    let suggested = suggestCompliantIdsForProject(
-      `ZR_CUSTOM_${String(suffix).padStart(3, '0')}`,
-      `ZC${String(suffix).padStart(3, '0')}`,
-      'SD',
-      projectStandards
-    );
-    while (existingIds.has(suggested.program_id.toUpperCase())) {
-      suffix += 1;
-      suggested = suggestCompliantIdsForProject(
-        `ZR_CUSTOM_${String(suffix).padStart(3, '0')}`,
-        `ZC${String(suffix).padStart(3, '0')}`,
-        'SD',
-        projectStandards
-      );
-    }
-    const nextProgramId = suggested.program_id;
-    const nextTCode = suggested.tcode;
-
-    const blankSpec: ProgramSpec = {
-      id: `spec-custom-${Date.now()}`,
-      project_code: targetProject,
-      program_id: nextProgramId,
-      tcode: nextTCode,
-      title: 'New ALV Grid Report Program',
-      module: 'SD',
-      author: registeredAuthor,
-      author_id: currentUser.id,
-      created_date: new Date().toISOString().split('T')[0],
-      target_sap_release: 'SAP S/4HANA 2023',
-      program_type: 'REPORT',
-      abap_syntax_mode: projectStandards.default_syntax_mode,
-      message_class: projectStandards.message_class,
-      business_purpose: 'ALV report for querying business process data.',
-      data_extraction_logic: '1. Define selection criteria and DB extraction logic.',
-      selection_params: [
-        {
-          id: 'p_bukrs',
-          kind: 'PARAMETER',
-          name: 'P_BUKRS',
-          text: 'Company Code',
-          ref_table: 'T001',
-          ref_field: 'BUKRS',
-          datatype: 'CHAR',
-          length: 4,
-          obligatory: true,
-          default_val: '1000',
-          low: '1000',
-        },
-        {
-          id: 's_date',
-          kind: 'SELECT_OPTION',
-          name: 'S_DATE',
-          text: 'Posting Date',
-          datatype: 'DATS',
-          length: 10,
-          obligatory: true,
-          default_val: 'SY-DATUM',
-          low: '2026.10.01',
-          high: '2026.10.31',
-          sign: 'I',
-          option: 'BT',
-        },
-      ],
-      field_catalog: [
-        {
-          id: 'custom-f1',
-          col_pos: 1,
-          fieldname: 'ZICON',
-          coltext: 'Status',
-          datatype: 'CHAR',
-          outputlen: 5,
-          just: 'C',
-          key: true,
-          hotspot: false,
-          checkbox: false,
-          edit: false,
-          do_sum: false,
-          emphasize: '',
-        },
-        {
-          id: 'custom-f2',
-          col_pos: 2,
-          fieldname: 'DOC_NO',
-          coltext: 'Document No.',
-          datatype: 'CHAR',
-          outputlen: 12,
-          just: 'C',
-          key: true,
-          hotspot: true,
-          checkbox: false,
-          edit: false,
-          do_sum: false,
-          emphasize: '',
-          drilldown_tcode: 'VA03',
-        },
-        {
-          id: 'custom-f3',
-          col_pos: 3,
-          fieldname: 'DOC_DATE',
-          coltext: 'Posting Date',
-          datatype: 'DATS',
-          outputlen: 10,
-          just: 'C',
-          key: false,
-          hotspot: false,
-          checkbox: false,
-          edit: false,
-          do_sum: false,
-          emphasize: '',
-        },
-        {
-          id: 'custom-f4',
-          col_pos: 4,
-          fieldname: 'PARTNER_NAME',
-          coltext: 'Partner Name',
-          datatype: 'CHAR',
-          outputlen: 25,
-          just: 'L',
-          key: false,
-          hotspot: false,
-          checkbox: false,
-          edit: false,
-          do_sum: false,
-          emphasize: '',
-        },
-        {
-          id: 'custom-f5',
-          col_pos: 5,
-          fieldname: 'AMOUNT',
-          coltext: 'Amount',
-          datatype: 'CURR',
-          outputlen: 15,
-          just: 'R',
-          key: false,
-          hotspot: false,
-          checkbox: false,
-          edit: false,
-          do_sum: true,
-          emphasize: '',
-        },
-        {
-          id: 'custom-f6',
-          col_pos: 6,
-          fieldname: 'CURRENCY',
-          coltext: 'Currency',
-          datatype: 'CHAR',
-          outputlen: 5,
-          just: 'C',
-          key: false,
-          hotspot: false,
-          checkbox: false,
-          edit: false,
-          do_sum: false,
-          emphasize: '',
-        },
-      ],
-      layout: {
-        zebra: true,
-        grid_title: 'Custom ALV Report',
-        sel_mode: 'A',
-        cwidth_opt: true,
-        totals_only: false,
-        excp_fname: 'ZICON',
-        excp_led: true,
-        show_row_numbers: true,
-      },
-      custom_toolbar: [],
-      test_cases: [
-        {
-          id: 'tc-new-1',
-          scenario: 'Normal Data Query',
-          condition: 'Company Code = 1000',
-          expected: 'Grid renders rows correctly',
-        },
-      ],
-      mock_rows: [
-        {
-          ZICON: '1',
-          DOC_NO: 'DOC-2026-001',
-          DOC_DATE: '2026.10.10',
-          PARTNER_NAME: 'Samsung Electronics Suwon',
-          AMOUNT: 45000000,
-          CURRENCY: 'KRW',
-        },
-        {
-          ZICON: '2',
-          DOC_NO: 'DOC-2026-002',
-          DOC_DATE: '2026.10.15',
-          PARTNER_NAME: 'Hyundai Motor Namyang',
-          AMOUNT: 38200000,
-          CURRENCY: 'KRW',
-        },
-        {
-          ZICON: '3',
-          DOC_NO: 'DOC-2026-003',
-          DOC_DATE: '2026.10.22',
-          PARTNER_NAME: 'LG Energy Solution Ochang',
-          AMOUNT: 19800000,
-          CURRENCY: 'KRW',
-        },
-      ],
-    };
+    const blankSpec = createBlankProgramSpec({
+      targetProject,
+      author: currentUser.name,
+      authorId: currentUser.id,
+      existingProgramIds: allSavedSpecs.map((s) => s.program_id),
+      projectStandards,
+    });
+    const nextProgramId = blankSpec.program_id;
 
     applySpecChange(blankSpec, true);
     handleSelectProject(targetProject);
@@ -1666,6 +1384,7 @@ export default function App() {
           />
         )}
 
+        <Suspense fallback={<WorkspacePaneFallback />}>
         {workspaceMode === 'meeting_minutes' && (
           <MeetingMinutesPage
             currentUser={currentUser}
@@ -1822,15 +1541,7 @@ export default function App() {
                 e.preventDefault();
                 setIsResizingSplit(true);
               }}
-              onDoubleClick={() => {
-                setSplitRatio(50);
-                try {
-                  localStorage.setItem('sap_spec_dual_split_ratio', '50');
-                } catch {
-                  // ignore
-                }
-                showWorkspaceToast('Split ratio reset to 50% : 50%.');
-              }}
+              onDoubleClick={resetSplitRatio}
               className={`order-2 shrink-0 relative flex items-center justify-center group transition-colors ${
                 !isVerticalSplit
                   ? 'w-3 h-full cursor-col-resize'
@@ -1936,6 +1647,7 @@ export default function App() {
             />
           </div>
         )}
+        </Suspense>
         </main>
       </div>
 
@@ -1972,293 +1684,185 @@ export default function App() {
         </div>
       )}
 
-      {/* Program Templates Management Modal */}
-      <ProgramTemplateModal
-        isOpen={isTemplateModalOpen}
-        onClose={() => setIsTemplateModalOpen(false)}
-        currentSpec={currentSpec}
-        onSelectTemplate={(s) => {
-          const targetProj =
-            selectedProjectCode && selectedProjectCode !== COMMON_PROJECT_CODE
-              ? selectedProjectCode
-              : TEMP_PROJECT_CODE;
-          applySpecChange(
-            {
-              ...s,
-              project_code: targetProj,
-              is_system: false,
-            },
-            true
-          );
-          setIsTemplateModalOpen(false);
-          showWorkspaceToast(`Applied template '${s.title}' to [${targetProj}].`);
-        }}
-      />
+      <Suspense fallback={null}>
+        {isTemplateModalOpen && (
+          <ProgramTemplateModal
+            isOpen={true}
+            onClose={() => setIsTemplateModalOpen(false)}
+            currentSpec={currentSpec}
+            onSelectTemplate={(s) => {
+              const targetProj =
+                selectedProjectCode && selectedProjectCode !== COMMON_PROJECT_CODE
+                  ? selectedProjectCode
+                  : TEMP_PROJECT_CODE;
+              applySpecChange(
+                {
+                  ...s,
+                  project_code: targetProj,
+                  is_system: false,
+                },
+                true
+              );
+              setIsTemplateModalOpen(false);
+              showWorkspaceToast(`Applied template '${s.title}' to [${targetProj}].`);
+            }}
+          />
+        )}
 
-      {/* Copy Spec to Target Project Modal (from Overview / List) */}
-      <CopySpecModal
-        isOpen={copyingSpec !== null}
-        sourceSpec={copyingSpec}
-        defaultTargetProject={selectedProjectCode !== COMMON_PROJECT_CODE ? selectedProjectCode : TEMP_PROJECT_CODE}
-        remoteProjects={remoteProjects}
-        onClose={() => setCopyingSpec(null)}
-        onCopied={(newSpec) => {
-          markSpecPendingWrite(newSpec.program_id);
-          if (newSpec.id) markSpecPendingWrite(newSpec.id);
-          if (isFirebaseAuthenticated) {
-            const projObj = accessibleProjects.find(
-              (p) => p.code === (newSpec.project_code || TEMP_PROJECT_CODE)
-            );
-            syncSpecToFirestore(newSpec, projObj)
-              .then((res) => {
-                if (res && typeof res.revision === 'number') {
-                  loadedRevisionRef.current[newSpec.id || newSpec.program_id] = res.revision;
-                }
-              })
-              .catch((err) => {
-                console.warn('Firestore copied spec sync skipped:', err);
-              });
-          }
-          refreshAllSpecs();
-          handleOpenProgramFromProject(newSpec);
-          showWorkspaceToast(`Copied '${newSpec.program_id}' to [${newSpec.project_code}].`);
-        }}
-      />
+        {copyingSpec !== null && (
+          <CopySpecModal
+            isOpen={true}
+            sourceSpec={copyingSpec}
+            defaultTargetProject={selectedProjectCode !== COMMON_PROJECT_CODE ? selectedProjectCode : TEMP_PROJECT_CODE}
+            remoteProjects={remoteProjects}
+            onClose={() => setCopyingSpec(null)}
+            onCopied={(newSpec) => {
+              markSpecPendingWrite(newSpec.program_id);
+              if (newSpec.id) markSpecPendingWrite(newSpec.id);
+              if (isFirebaseAuthenticated) {
+                const projObj = accessibleProjects.find(
+                  (p) => p.code === (newSpec.project_code || TEMP_PROJECT_CODE)
+                );
+                syncSpecToFirestore(newSpec, projObj)
+                  .then((res) => {
+                    if (res && typeof res.revision === 'number') {
+                      loadedRevisionRef.current[newSpec.id || newSpec.program_id] = res.revision;
+                    }
+                  })
+                  .catch((err) => {
+                    console.warn('Firestore copied spec sync skipped:', err);
+                  });
+              }
+              refreshAllSpecs();
+              handleOpenProgramFromProject(newSpec);
+              showWorkspaceToast(`Copied '${newSpec.program_id}' to [${newSpec.project_code}].`);
+            }}
+          />
+        )}
 
-      {/* jsPDF Specification Export Modal */}
-      <PdfExportModal
-        isOpen={isPdfExportModalOpen}
-        onClose={() => setIsPdfExportModalOpen(false)}
-        spec={currentSpec}
-      />
+        {isPdfExportModalOpen && (
+          <PdfExportModal
+            isOpen={true}
+            onClose={() => setIsPdfExportModalOpen(false)}
+            spec={currentSpec}
+          />
+        )}
 
-      {/* Global Command Palette (Ctrl+K / Cmd+K) */}
-      <GlobalCommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        specs={accessibleCommandSpecs}
-        minutes={accessibleCommandMinutes}
-        onSelectSpec={(spec) => handleOpenProgramFromProject(spec)}
-        onSelectMinute={(minute) => {
-          setSelectedMinuteDetailId(minute.id);
-          if (minute.project_code) {
-            handleSelectProject(minute.project_code);
-          }
-          setWorkspaceMode('meeting_minutes');
-        }}
-        onSelectDdicTable={(tabname) => setDdicInspectTabname(tabname)}
-      />
+        {isCommandPaletteOpen && (
+          <GlobalCommandPalette
+            isOpen={true}
+            onClose={() => setIsCommandPaletteOpen(false)}
+            specs={accessibleCommandSpecs}
+            minutes={accessibleCommandMinutes}
+            onSelectSpec={(spec) => handleOpenProgramFromProject(spec)}
+            onSelectMinute={(minute) => {
+              setSelectedMinuteDetailId(minute.id);
+              if (minute.project_code) {
+                handleSelectProject(minute.project_code);
+              }
+              setWorkspaceMode('meeting_minutes');
+            }}
+            onSelectDdicTable={(tabname) => setDdicInspectTabname(tabname)}
+          />
+        )}
 
-      {/* DDIC Quick Inspector Modal triggered from Command Palette */}
-      {ddicInspectTabname !== null && (
-        <SapDdicManagerModal
-          key={ddicInspectTabname || 'ddic'}
-          isOpen={true}
-          initialTabname={ddicInspectTabname || undefined}
-          onClose={() => setDdicInspectTabname(null)}
+        {ddicInspectTabname !== null && (
+          <SapDdicManagerModal
+            key={ddicInspectTabname || 'ddic'}
+            isOpen={true}
+            initialTabname={ddicInspectTabname || undefined}
+            onClose={() => setDdicInspectTabname(null)}
+          />
+        )}
+      </Suspense>
+
+      {pendingNavigation && (
+        <PendingNavigationDialog
+          programId={currentSpec.program_id}
+          onKeepEditing={() => setPendingNavigation(null)}
+          onLeaveWithoutSnapshot={() => {
+            const target = pendingNavigation;
+            setPendingNavigation(null);
+            executePendingNavigation(target);
+          }}
+          onSaveSnapshotAndLeave={async () => {
+            const target = pendingNavigation;
+            await handleQuickSnapshotSave();
+            setPendingNavigation(null);
+            executePendingNavigation(target);
+          }}
         />
       )}
 
-      {/* Non-blocking Leave Confirmation Dialog when unsaved snapshot edits exist */}
-      {pendingNavigation && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="leave-confirm-title"
-          className="no-print fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-[1px] flex items-center justify-center p-4"
-        >
-          <div className="bg-white border border-slate-200 rounded-xl shadow-2xl max-w-md w-full p-5 space-y-4 text-slate-900">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div className="space-y-1">
-                <h3 id="leave-confirm-title" className="text-sm font-bold text-slate-900">
-                  {t('Leave without saving a revision snapshot?', '리비전 스냅샷을 저장하지 않고 이동하시겠습니까?')}
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {t(
-                    'Edits are auto-saved locally and to the cloud, but no version snapshot has been recorded yet for ',
-                    '편집 내용은 로컬과 클라우드에 자동 저장되지만, 다음 프로그램의 버전 스냅샷이 아직 기록되지 않았습니다: '
-                  )}
-                  <span className="font-mono font-semibold">{currentSpec.program_id}</span>.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setPendingNavigation(null)}
-                className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
-              >
-                {t('Keep Editing', '계속 편집')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const target = pendingNavigation;
-                  setPendingNavigation(null);
-                  executePendingNavigation(target);
-                }}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
-              >
-                {t('Leave Without Snapshot', '저장 없이 이동')}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const target = pendingNavigation;
-                  await handleQuickSnapshotSave();
-                  setPendingNavigation(null);
-                  executePendingNavigation(target);
-                }}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{t('Save Snapshot & Leave', '스냅샷 저장 후 이동')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Optimistic Concurrency Conflict Resolution Dialog */}
       {syncConflict && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="sync-conflict-title"
-          className="no-print fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-[1px] flex items-center justify-center p-4"
-        >
-          <div className="bg-white border border-rose-200 rounded-xl shadow-2xl max-w-lg w-full p-5 space-y-4 text-slate-900">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div className="space-y-1.5">
-                <h3 id="sync-conflict-title" className="text-sm font-bold text-slate-900">
-                  {t(
-                    `Sync Conflict Detected (${syncConflict.programId})`,
-                    `동시 편집 충돌 감지 (${syncConflict.programId})`
-                  )}
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {t(
-                    `${syncConflict.remoteEditor} saved a newer revision (rev ${syncConflict.remoteRevision}) while you were editing from rev ${syncConflict.expectedRevision}. Choose how to resolve:`,
-                    `편집 중이던 기준 버전(rev ${syncConflict.expectedRevision})보다 최신 서버 버전(rev ${syncConflict.remoteRevision})이 ${syncConflict.remoteEditor}님에 의해 먼저 저장되었습니다. 해결 방법을 선택하세요.`
-                  )}
-                </p>
-              </div>
-            </div>
+        <SyncConflictDialog
+          conflict={syncConflict}
+          onLoadRemote={() => {
+            const conflict = syncConflict;
+            setSyncConflict(null);
+            const specKey = conflict.remoteSpec.id || conflict.remoteSpec.program_id;
+            loadedRevisionRef.current[specKey] = conflict.remoteRevision;
+            markSpecPendingWrite(conflict.remoteSpec.program_id);
+            if (conflict.remoteSpec.id) markSpecPendingWrite(conflict.remoteSpec.id);
+            upsertWorkingSpecQuietly(conflict.remoteSpec);
+            refreshAllSpecs();
+            setCurrentSpec(conflict.remoteSpec);
+            setHasUnsavedChanges(false);
+            showWorkspaceToast(
+              t(
+                `Loaded latest remote version (rev ${conflict.remoteRevision}).`,
+                `서버 최신 버전(rev ${conflict.remoteRevision})을 불러왔습니다.`
+              )
+            );
+          }}
+          onBackupToTempAndLoadRemote={() => {
+            const conflict = syncConflict;
+            const cleanPid = `${conflict.localSpec.program_id}_CONFLICT`;
+            const backupSpec: ProgramSpec = {
+              ...JSON.parse(JSON.stringify(conflict.localSpec)),
+              id: `spec-conflict-${Date.now()}`,
+              project_code: TEMP_PROJECT_CODE,
+              program_id: cleanPid,
+              title: `${conflict.localSpec.title} (Conflict Backup)`,
+              author: currentUser.name,
+              author_id: currentUser.id,
+              revision: 1,
+              is_system: false,
+            };
+            markSpecPendingWrite(backupSpec.program_id);
+            markSpecPendingWrite(backupSpec.id);
+            upsertWorkingSpecQuietly(backupSpec);
+            if (isFirebaseAuthenticated) {
+              const tempProj = accessibleProjects.find((p) => p.code === TEMP_PROJECT_CODE);
+              syncSpecToFirestore(backupSpec, tempProj, { forceOverwrite: true }).catch(() => {});
+            }
 
-            <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  const conflict = syncConflict;
-                  setSyncConflict(null);
-                  const specKey = conflict.remoteSpec.id || conflict.remoteSpec.program_id;
-                  loadedRevisionRef.current[specKey] = conflict.remoteRevision;
-                  markSpecPendingWrite(conflict.remoteSpec.program_id);
-                  if (conflict.remoteSpec.id) markSpecPendingWrite(conflict.remoteSpec.id);
-                  upsertWorkingSpecQuietly(conflict.remoteSpec);
-                  refreshAllSpecs();
-                  setCurrentSpec(conflict.remoteSpec);
-                  setHasUnsavedChanges(false);
-                  showWorkspaceToast(
-                    t(
-                      `Loaded latest remote version (rev ${conflict.remoteRevision}).`,
-                      `서버 최신 버전(rev ${conflict.remoteRevision})을 불러왔습니다.`
-                    )
-                  );
-                }}
-                className="w-full px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>
-                  {t(
-                    `Load Remote Version (rev ${syncConflict.remoteRevision})`,
-                    `서버 최신 버전 불러오기 (rev ${syncConflict.remoteRevision})`
-                  )}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  const conflict = syncConflict;
-                  const cleanPid = `${conflict.localSpec.program_id}_CONFLICT`;
-                  const backupSpec: ProgramSpec = {
-                    ...JSON.parse(JSON.stringify(conflict.localSpec)),
-                    id: `spec-conflict-${Date.now()}`,
-                    project_code: TEMP_PROJECT_CODE,
-                    program_id: cleanPid,
-                    title: `${conflict.localSpec.title} (Conflict Backup)`,
-                    author: currentUser.name,
-                    author_id: currentUser.id,
-                    revision: 1,
-                    is_system: false,
-                  };
-                  markSpecPendingWrite(backupSpec.program_id);
-                  markSpecPendingWrite(backupSpec.id);
-                  upsertWorkingSpecQuietly(backupSpec);
-                  if (isFirebaseAuthenticated) {
-                    const tempProj = accessibleProjects.find((p) => p.code === TEMP_PROJECT_CODE);
-                    syncSpecToFirestore(backupSpec, tempProj, { forceOverwrite: true }).catch(() => {});
-                  }
-
-                  setSyncConflict(null);
-                  const specKey = conflict.remoteSpec.id || conflict.remoteSpec.program_id;
-                  loadedRevisionRef.current[specKey] = conflict.remoteRevision;
-                  upsertWorkingSpecQuietly(conflict.remoteSpec);
-                  refreshAllSpecs();
-                  setCurrentSpec(conflict.remoteSpec);
-                  setHasUnsavedChanges(false);
-                  showWorkspaceToast(
-                    t(
-                      `Backed up local edits to TEMP (${cleanPid}) & loaded remote version.`,
-                      `내 편집본을 TEMP(${cleanPid})에 백업하고 서버 최신 버전을 불러왔습니다.`
-                    )
-                  );
-                }}
-                className="w-full px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>
-                  {t(
-                    'Backup My Changes to TEMP & Load Remote Version',
-                    '내 변경사항을 TEMP에 백업 후 서버 버전 불러오기'
-                  )}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  const conflict = syncConflict;
-                  setSyncConflict(null);
-                  await executeFirestoreSpecSync(conflict.localSpec, undefined, true);
-                  showWorkspaceToast(
-                    t(
-                      `Overwrote remote spec '${conflict.programId}' with your changes.`,
-                      `'${conflict.programId}' 사양서를 내 변경사항으로 덮어썼습니다.`
-                    )
-                  );
-                }}
-                className="w-full px-3.5 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>
-                  {t(
-                    'Keep My Changes & Overwrite Remote',
-                    '내 변경사항 유지 및 서버에 덮어쓰기'
-                  )}
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
+            setSyncConflict(null);
+            const specKey = conflict.remoteSpec.id || conflict.remoteSpec.program_id;
+            loadedRevisionRef.current[specKey] = conflict.remoteRevision;
+            upsertWorkingSpecQuietly(conflict.remoteSpec);
+            refreshAllSpecs();
+            setCurrentSpec(conflict.remoteSpec);
+            setHasUnsavedChanges(false);
+            showWorkspaceToast(
+              t(
+                `Backed up local edits to TEMP (${cleanPid}) & loaded remote version.`,
+                `내 편집본을 TEMP(${cleanPid})에 백업하고 서버 최신 버전을 불러왔습니다.`
+              )
+            );
+          }}
+          onOverwriteRemote={async () => {
+            const conflict = syncConflict;
+            setSyncConflict(null);
+            await executeFirestoreSpecSync(conflict.localSpec, undefined, true);
+            showWorkspaceToast(
+              t(
+                `Overwrote remote spec '${conflict.programId}' with your changes.`,
+                `'${conflict.programId}' 사양서를 내 변경사항으로 덮어썼습니다.`
+              )
+            );
+          }}
+        />
       )}
     </div>
   );

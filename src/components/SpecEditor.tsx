@@ -800,10 +800,10 @@ export const SpecEditor: React.FC<SpecEditorProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     setOpenToolbarMenu(null);
                     try {
-                      const filename = exportSpecificationXlsx(spec);
+                      const filename = await exportSpecificationXlsx(spec);
                       onNotify?.(t(`Downloaded Excel (.xlsx) spec: ${filename}`, `Excel (.xlsx) 사양서 다운로드 완료: ${filename}`));
                     } catch (err) {
                       console.error('XLSX export error:', err);

@@ -8,7 +8,38 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
+      },
+    },
+    build: {
+      chunkSizeWarningLimit: 900,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: 'firebase-vendor',
+                test: /node_modules\/(firebase|@firebase)\//,
+                priority: 30,
+              },
+              {
+                name: 'charts-vendor',
+                test: /node_modules\/(recharts|d3-|victory-vendor)\//,
+                priority: 25,
+              },
+              {
+                name: 'react-vendor',
+                test: /node_modules\/(react|react-dom|scheduler)\//,
+                priority: 20,
+              },
+              {
+                name: 'ui-vendor',
+                test: /node_modules\/(lucide-react|motion|framer-motion)\//,
+                priority: 15,
+              },
+            ],
+          },
+        },
       },
     },
     server: {

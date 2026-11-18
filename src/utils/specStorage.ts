@@ -16,6 +16,19 @@ import {
 
 const STORAGE_KEY = 'sap_spec_programs_v4';
 
+interface SpecListCacheEntry {
+  raw: string;
+  items: SavedProgramSpecItem[];
+}
+
+let cachedSpecSnapshot: SpecListCacheEntry | null = null;
+
+function persistSpecList(items: SavedProgramSpecItem[]): void {
+  const serialized = JSON.stringify(items);
+  localStorage.setItem(STORAGE_KEY, serialized);
+  cachedSpecSnapshot = { raw: serialized, items };
+}
+
 export interface SavedProgramSpecItem {
   program_id: string;
   project_code: string;
@@ -179,19 +192,24 @@ export const getSavedSpecList = (): SavedProgramSpecItem[] => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       const initial = getInitialSeedSpecs();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+      persistSpecList(initial);
       return initial;
+    }
+    if (cachedSpecSnapshot && cachedSpecSnapshot.raw === raw) {
+      return cachedSpecSnapshot.items;
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
       const { normalized, changed } = normalizeSavedItems(parsed);
       if (changed) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        persistSpecList(normalized);
+      } else {
+        cachedSpecSnapshot = { raw, items: normalized };
       }
       return normalized;
     }
     const initial = getInitialSeedSpecs();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    persistSpecList(initial);
     return initial;
   } catch (err) {
     console.error('Failed to load saved specs from localStorage', err);
@@ -276,7 +294,7 @@ export const upsertWorkingSpecQuietly = (spec: ProgramSpec): boolean => {
     }
     markSpecPendingWrite(cleanProgramId);
     if (updatedSpec.id) markSpecPendingWrite(updatedSpec.id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+    persistSpecList(updatedList);
     return true;
   } catch {
     // ignore storage quota errors during quiet auto-sync
@@ -371,7 +389,7 @@ export const saveSpecToStorage = (
 
     markSpecPendingWrite(cleanProgramId);
     if (updatedSpec.id) markSpecPendingWrite(updatedSpec.id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+    persistSpecList(updatedList);
     return { success: true, savedItem: itemToSave };
   } catch (err) {
     console.error('Failed to save spec to localStorage', err);
@@ -494,7 +512,7 @@ export const copySpecInStorage = (
   try {
     markSpecPendingWrite(cleanNewId);
     if (newSpec.id) markSpecPendingWrite(newSpec.id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+    persistSpecList(updatedList);
     return {
       success: true,
       newSpec,
@@ -532,7 +550,7 @@ export const reassignSpecsProjectToTemp = (deletedProjectCode: string): void => 
   });
   if (changed) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      persistSpecList(updated);
     } catch {
       // ignore
     }
@@ -689,7 +707,7 @@ export const reconcileProjectSpecsFromRemote = (
   }
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextItems));
+    persistSpecList(nextItems);
   } catch {
     // ignore storage quota errors
   }
@@ -743,7 +761,7 @@ export const deleteSpecFromStorage = (
   clearSpecPendingWrite(cleanId);
   if (target.spec?.id) clearSpecPendingWrite(target.spec.id);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+    persistSpecList(updatedList);
     return { success: true, list: updatedList, deletedItem: target };
   } catch (err) {
     console.error('Failed to delete spec from localStorage', err);
